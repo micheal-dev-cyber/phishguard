@@ -10,7 +10,7 @@ except Exception:
     OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-AI_MODEL = "meta-llama/llama-3.3-70b-instruct:free"
+AI_MODEL = "openrouter/auto"
 
 
 def ai_analyze_email(email_text: str, detection_results: dict) -> str:
@@ -106,21 +106,31 @@ Be professional, specific, and actionable. Write as if this report will be sent 
             f"{OPENROUTER_BASE_URL}/chat/completions",
             headers=headers,
             json=payload,
-            timeout=30
+            timeout=45
         )
 
+        if response.status_code == 429:
+            return (
+                "AI service is busy (rate limit). "
+                "Wait 30 seconds and try again. "
+                "This is normal on free tier."
+            )
+
+        if response.status_code == 402:
+            return "AI service requires credits. Go to openrouter.ai and add free credits."
+
         if response.status_code != 200:
-            return f"AI service returned error {response.status_code}. Check your API key in Streamlit secrets."
+            return f"AI service error {response.status_code}. Try again in a moment."
 
         data = response.json()
 
         if "choices" not in data:
-            return f"Unexpected API response: {str(data)[:200]}"
+            return f"Unexpected response from AI: {str(data)[:200]}"
 
         return data["choices"][0]["message"]["content"]
 
     except requests.exceptions.Timeout:
-        return "AI analysis timed out. Please try again."
+        return "AI analysis timed out after 45 seconds. Please try again."
     except requests.exceptions.ConnectionError:
         return "Could not connect to AI service. Check your internet connection."
     except Exception as e:
