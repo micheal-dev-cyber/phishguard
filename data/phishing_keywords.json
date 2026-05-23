@@ -1,0 +1,26 @@
+{
+  "urgency": [
+    "act now", "urgent", "immediate action", "expires today",
+    "limited time", "24 hours", "account suspended", "verify immediately",
+    "last warning", "final notice", "don't delay", "respond immediately"
+  ],
+  "threats": [
+    "your account will be closed", "legal action", "suspended",
+    "unauthorized access", "we detected", "security breach",
+    "your account has been compromised", "unusual activity"
+  ],
+  "requests": [
+    "confirm your password", "enter your credentials", "verify your identity",
+    "update your payment", "provide your social security",
+    "click the link below", "login to confirm", "validate your account"
+  ],
+  "rewards": [
+    "you have been selected", "congratulations", "winner",
+    "claim your prize", "free gift", "you won", "bonus reward",
+    "exclusive offer", "$1000", "cash prize"
+  ],
+  "impersonation": [
+    "paypal", "amazon", "microsoft", "apple", "google", "irs",
+    "bank of america", "wells fargo", "chase", "netflix", "fedex", "dhl"
+  ]
+}
