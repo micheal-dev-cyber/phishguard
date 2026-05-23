@@ -1,4 +1,4 @@
-import streamlit as st
+content = '''import streamlit as st
 import plotly.graph_objects as go
 from src.detector import analyze_email
 from src.database import init_db, save_analysis, get_history
@@ -57,8 +57,8 @@ st.markdown("""
 
 init_db()
 
-st.markdown("<h1 style='color:#60a5fa; font-size:2rem; margin-bottom:0'>🛡️ PhishGuard AI</h1>", unsafe_allow_html=True)
-st.markdown("<p style='color:#94a3b8; margin-top:2px'>AI-Powered Phishing & Threat Detection Platform</p>", unsafe_allow_html=True)
+st.markdown("<h1 style=\'color:#60a5fa; font-size:2rem; margin-bottom:0\'>🛡️ PhishGuard AI</h1>", unsafe_allow_html=True)
+st.markdown("<p style=\'color:#94a3b8; margin-top:2px\'>AI-Powered Phishing & Threat Detection Platform</p>", unsafe_allow_html=True)
 st.divider()
 
 tab1, tab2 = st.tabs(["🔍 Analyze Email", "📊 History"])
@@ -146,26 +146,26 @@ with tab1:
         st.divider()
 
         if results["keyword_matches"]:
-            st.markdown("<div class='section-title'>🎯 Phishing Indicators</div>", unsafe_allow_html=True)
+            st.markdown("<div class=\'section-title\'>🎯 Phishing Indicators</div>", unsafe_allow_html=True)
             for category, keywords in results["keyword_matches"].items():
                 with st.expander(f"**{category.upper()}** — {len(keywords)} match(es)"):
-                    tags = " ".join([f"<span class='tag'>{kw}</span>" for kw in keywords])
+                    tags = " ".join([f"<span class=\'tag\'>{kw}</span>" for kw in keywords])
                     st.markdown(tags, unsafe_allow_html=True)
 
         if results["suspicious_urls"]:
-            st.markdown("<div class='section-title'>🔗 Suspicious URLs Detected</div>", unsafe_allow_html=True)
+            st.markdown("<div class=\'section-title\'>🔗 Suspicious URLs Detected</div>", unsafe_allow_html=True)
             for item in results["suspicious_urls"]:
-                st.markdown(f"<div class='url-box'>🚨 {item['url']}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div class=\'url-box\'>🚨 {item[\'url\']}</div>", unsafe_allow_html=True)
         elif results["urls_found"]:
-            st.markdown("<div class='section-title'>🔗 URLs Found (no threats)</div>", unsafe_allow_html=True)
+            st.markdown("<div class=\'section-title\'>🔗 URLs Found (no threats)</div>", unsafe_allow_html=True)
             for url in results["urls_found"]:
-                st.markdown(f"<div class='safe-url-box'>🔗 {url}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div class=\'safe-url-box\'>🔗 {url}</div>", unsafe_allow_html=True)
 
         if results["has_attachments"]:
             st.warning("📎 **Attachment detected** — Do NOT open files from unverified senders.")
 
         st.divider()
-        st.markdown("<div class='section-title'>📋 Security Verdict</div>", unsafe_allow_html=True)
+        st.markdown("<div class=\'section-title\'>📋 Security Verdict</div>", unsafe_allow_html=True)
 
         if score >= 75:
             st.error("🔴 **CRITICAL THREAT** — Strong phishing indicators detected. Do not click any links, do not reply. Report to your IT security team immediately.")
@@ -177,7 +177,7 @@ with tab1:
             st.success("🟢 **LOW RISK** — No major phishing indicators found. Stay vigilant.")
 
         st.divider()
-        st.markdown("<div class='section-title'>📄 Export Report</div>", unsafe_allow_html=True)
+        st.markdown("<div class=\'section-title\'>📄 Export Report</div>", unsafe_allow_html=True)
 
         col_ai, col_pdf = st.columns(2)
 
@@ -198,14 +198,14 @@ with tab1:
             st.download_button(
                 label="📥 Download PDF Report",
                 data=pdf_bytes,
-                file_name=f"phishguard_report_{results['severity'].lower()}.pdf",
+                file_name=f"phishguard_report_{results[\'severity\'].lower()}.pdf",
                 mime="application/pdf",
                 use_container_width=True,
                 type="primary"
             )
 
         if "ai_report" in st.session_state:
-            st.markdown("<div class='section-title'>🤖 AI Security Analysis</div>", unsafe_allow_html=True)
+            st.markdown("<div class=\'section-title\'>🤖 AI Security Analysis</div>", unsafe_allow_html=True)
             st.markdown(st.session_state["ai_report"])
 
 with tab2:
@@ -245,4 +245,11 @@ with tab2:
                 col_a.metric("Risk Score", score)
                 col_b.metric("Keyword Hits", kw_hits)
                 col_c.metric("Suspicious URLs", susp_urls)
-                st.markdown(f"<div class='url-box' style='color:#94a3b8'>📧 {preview}...</div>", unsafe_allow_html=True)
+                st.markdown(f"<div class=\'url-box\' style=\'color:#94a3b8\'>📧 {preview}...</div>", unsafe_allow_html=True)
+'''
+
+with open("app.py", "w", encoding="utf-8") as f:
+    f.write(content)
+
+print("✅ app.py written successfully!")
+print(f"Total characters: {len(content)}")
