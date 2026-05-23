@@ -10,7 +10,7 @@ except Exception:
     OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-AI_MODEL = "meta-llama/llama-3.1-8b-instruct:free"
+AI_MODEL = "meta-llama/llama-3.3-70b-instruct:free"
 
 
 def ai_analyze_email(email_text: str, detection_results: dict) -> str:
