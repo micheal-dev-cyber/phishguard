@@ -3,6 +3,7 @@ import plotly.graph_objects as go
 from src.detector import analyze_email
 from src.database import init_db, save_analysis, get_history
 from src.report_generator import generate_pdf_report
+from src.auth import check_password, logout
 
 st.set_page_config(
     page_title="PhishGuard AI",
@@ -55,10 +56,25 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# ── Auth gate ──────────────────────────────────────────────────────────────────
+if not check_password():
+    st.stop()
+
+# ── Init ───────────────────────────────────────────────────────────────────────
 init_db()
 
-st.markdown("<h1 style='color:#60a5fa; font-size:2rem; margin-bottom:0'>🛡️ PhishGuard AI</h1>", unsafe_allow_html=True)
-st.markdown("<p style='color:#94a3b8; margin-top:2px'>AI-Powered Phishing & Threat Detection Platform</p>", unsafe_allow_html=True)
+# ── Header ─────────────────────────────────────────────────────────────────────
+col_title, col_user = st.columns([4, 1])
+with col_title:
+    st.markdown("<h1 style='color:#60a5fa; font-size:2rem; margin-bottom:0'>🛡️ PhishGuard AI</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='color:#94a3b8; margin-top:2px'>AI-Powered Phishing & Threat Detection Platform</p>", unsafe_allow_html=True)
+with col_user:
+    st.markdown("<br>", unsafe_allow_html=True)
+    username = st.session_state.get("username", "user")
+    st.markdown(f"<p style='color:#94a3b8; text-align:right'>👤 {username}</p>", unsafe_allow_html=True)
+    if st.button("Logout", use_container_width=True):
+        logout()
+
 st.divider()
 
 tab1, tab2 = st.tabs(["🔍 Analyze Email", "📊 History"])
@@ -94,6 +110,7 @@ with tab1:
                 save_analysis(results, email_text)
             st.session_state["results"] = results
             st.session_state["email_text"] = email_text
+            st.session_state.pop("ai_report", None)
 
     if "results" in st.session_state:
         results = st.session_state["results"]
@@ -177,7 +194,7 @@ with tab1:
             st.success("🟢 **LOW RISK** — No major phishing indicators found. Stay vigilant.")
 
         st.divider()
-        st.markdown("<div class='section-title'>📄 Export Report</div>", unsafe_allow_html=True)
+        st.markdown("<div class='section-title'>📄 Export & AI Analysis</div>", unsafe_allow_html=True)
 
         col_ai, col_pdf = st.columns(2)
 
@@ -224,7 +241,7 @@ with tab2:
             text=scores, textposition="outside"
         ))
         fig2.update_layout(
-            title="Risk Scores — Last 20 Analyses",
+            title="Risk Scores - Last 20 Analyses",
             yaxis_range=[0, 110],
             paper_bgcolor="rgba(0,0,0,0)",
             plot_bgcolor="rgba(0,0,0,0)",
@@ -240,7 +257,7 @@ with tab2:
 
         for i, row in enumerate(history):
             timestamp, score, severity, kw_hits, susp_urls, preview = row
-            with st.expander(f"**{severity}** — Score {score}/100 — {timestamp[:16]}"):
+            with st.expander(f"**{severity}** - Score {score}/100 - {timestamp[:16]}"):
                 col_a, col_b, col_c = st.columns(3)
                 col_a.metric("Risk Score", score)
                 col_b.metric("Keyword Hits", kw_hits)
