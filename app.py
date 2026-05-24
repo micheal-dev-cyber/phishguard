@@ -1,4 +1,5 @@
 import streamlit as st
+from src.osint import run_osint
 import plotly.graph_objects as go
 import plotly.express as px
 from src.detector import analyze_email
@@ -122,17 +123,24 @@ with tab1:
                 results = analyze_email(email_text)
                 save_analysis(results, email_text)
 
-            vt_results = []
-            vt_summary = {}
+            vt_results  = []
+            vt_summary  = {}
+            osint_data  = {}
+
             if enable_vt and results["urls_found"]:
                 with st.spinner("Checking URLs against VirusTotal..."):
                     vt_results = check_multiple_urls(results["urls_found"])
                     vt_summary = get_threat_summary(vt_results)
 
+            if enable_vt:
+                with st.spinner("Running OSINT investigation on sender and domains..."):
+                    osint_data = run_osint(email_text)
+
             st.session_state["results"]    = results
             st.session_state["email_text"] = email_text
             st.session_state["vt_results"] = vt_results
             st.session_state["vt_summary"] = vt_summary
+            st.session_state["osint_data"] = osint_data
             st.session_state.pop("ai_report", None)
 
     if "results" in st.session_state:
@@ -224,7 +232,79 @@ with tab1:
 
                 if vt_link and status != "error":
                     st.markdown(f"<a href='{vt_link}' target='_blank' style='font-size:11px;color:#60a5fa'>View on VirusTotal →</a>", unsafe_allow_html=True)
+        
+                    osint_data = st.session_state.get("osint_data", {})
+        if osint_data and osint_data.get("domain_results"):
+            st.markdown("<div class='section-title'>🔎 OSINT Investigation</div>", unsafe_allow_html=True)
 
+            if osint_data.get("sender"):
+                st.markdown(f"**Sender:** `{osint_data['sender']}`")
+
+            osint_risk = osint_data.get("osint_risk_score", 0)
+            if osint_risk >= 75:
+                st.error(f"🔴 OSINT Risk Score: {osint_risk}/100 — High confidence threat")
+            elif osint_risk >= 50:
+                st.warning(f"🟠 OSINT Risk Score: {osint_risk}/100 — Suspicious infrastructure")
+            elif osint_risk >= 25:
+                st.warning(f"🟡 OSINT Risk Score: {osint_risk}/100 — Some suspicious indicators")
+            else:
+                st.success(f"🟢 OSINT Risk Score: {osint_risk}/100 — No major concerns")
+
+            for domain_result in osint_data["domain_results"]:
+                domain    = domain_result["domain"]
+                d_score   = domain_result["risk_score"]
+                country   = domain_result.get("country", "Unknown")
+                org       = domain_result.get("org", "Unknown")
+                age       = domain_result.get("domain_age_days")
+                created   = domain_result.get("creation_date", "Unknown")
+                ip        = domain_result.get("ip", "Unknown")
+                indicators = domain_result.get("risk_indicators", [])
+
+                color = "#ff4444" if d_score >= 75 else "#ff8800" if d_score >= 50 else "#ffaa00" if d_score >= 25 else "#44aa44"
+
+                with st.expander(f"🌐 **{domain}** — Risk: {d_score}/100"):
+                    col_d1, col_d2, col_d3 = st.columns(3)
+                    col_d1.metric("Risk Score", f"{d_score}/100")
+                    col_d2.metric("Country", country)
+                    col_d3.metric("Domain Age", f"{age} days" if age else "Unknown")
+
+                    st.markdown(f"""
+                    <div style='background:#111827;border:1px solid #1e3a5f;
+                        border-radius:8px;padding:12px;margin:8px 0;
+                        font-size:13px'>
+                        <b style='color:#94a3b8'>IP Address:</b>
+                        <span style='color:#e2e8f0'> {ip}</span><br>
+                        <b style='color:#94a3b8'>Organization:</b>
+                        <span style='color:#e2e8f0'> {org}</span><br>
+                        <b style='color:#94a3b8'>Created:</b>
+                        <span style='color:#e2e8f0'> {created}</span>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                    if indicators:
+                        st.markdown("**⚠️ Risk Indicators:**")
+                        for ind in indicators:
+                            st.markdown(f"- {ind}")
+
+            if osint_data.get("ip_results"):
+                st.markdown("**🖥️ IP Investigation:**")
+                for ip_result in osint_data["ip_results"]:
+                    ip      = ip_result["ip"]
+                    country = ip_result.get("country", "Unknown")
+                    org     = ip_result.get("org", "Unknown")
+                    ip_inds = ip_result.get("risk_indicators", [])
+                    ip_score = ip_result.get("risk_score", 0)
+
+                    st.markdown(f"""
+                    <div style='background:#111827;border:1px solid #1e3a5f;
+                        border-radius:8px;padding:12px;margin:4px 0;
+                        font-size:13px'>
+                        🖥️ <b>{ip}</b> — {country} — {org}
+                        {f"<br>⚠️ " + "<br>⚠️ ".join(ip_inds) if ip_inds else ""}
+                    </div>
+                    """, unsafe_allow_html=True)
+
+        if results["has_attachments"]:
         if results["has_attachments"]:
             st.warning("📎 **Attachment detected** — Do NOT open files from unverified senders.")
 
