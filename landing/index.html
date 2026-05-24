@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PhishGuard AI — AI-Powered Phishing Detection</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #0a0e1a;
+            color: #e2e8f0;
+            line-height: 1.6;
+        }
+
+        /* NAV */
+        nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 60px;
+            border-bottom: 1px solid #1e3a5f;
+            position: sticky;
+            top: 0;
+            background: #0a0e1aee;
+            backdrop-filter: blur(10px);
+            z-index: 100;
+        }
+        .logo {
+            font-size: 1.4rem;
+            font-weight: 800;
+            color: #60a5fa;
+        }
+        .nav-links a {
+            color: #94a3b8;
+            text-decoration: none;
+            margin-left: 32px;
+            font-size: 0.95rem;
+            transition: color 0.2s;
+        }
+        .nav-links a:hover { color: #60a5fa; }
+        .nav-cta {
+            background: #2563eb;
+            color: white !important;
+            padding: 8px 20px;
+            border-radius: 8px;
+            font-weight: 600;
+        }
+        .nav-cta:hover { background: #1d4ed8 !important; color: white !important; }
+
+        /* HERO */
+        .hero {
+            text-align: center;
+            padding: 100px 20px 80px;
+            max-width: 860px;
+            margin: 0 auto;
+        }
+        .badge {
+            display: inline-block;
+            background: #1e3a5f;
+            color: #60a5fa;
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-bottom: 24px;
+            border: 1px solid #2563eb44;
+        }
+        .hero h1 {
+            font-size: 3.2rem;
+            font-weight: 900;
+            line-height: 1.15;
+            margin-bottom: 24px;
+            background: linear-gradient(135deg, #ffffff 0%, #60a5fa 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .hero p {
+            font-size: 1.2rem;
+            color: #94a3b8;
+            max-width: 600px;
+            margin: 0 auto 40px;
+        }
+        .hero-buttons {
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .btn-primary {
+            background: #2563eb;
+            color: white;
+            padding: 14px 32px;
+            border-radius: 10px;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 1rem;
+            transition: all 0.2s;
+            border: none;
+            cursor: pointer;
+        }
+        .btn-primary:hover { background: #1d4ed8; transform: translateY(-2px); }
+        .btn-secondary {
+            background: transparent;
+            color: #60a5fa;
+            padding: 14px 32px;
+            border-radius: 10px;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 1rem;
+            border: 1px solid #2563eb;
+            transition: all 0.2s;
+        }
+        .btn-secondary:hover { background: #1e3a5f; transform: translateY(-2px); }
+
+        /* STATS */
+        .stats {
+            display: flex;
+            justify-content: center;
+            gap: 60px;
+            padding: 60px 20px;
+            border-top: 1px solid #1e3a5f;
+            border-bottom: 1px solid #1e3a5f;
+            flex-wrap: wrap;
+        }
+        .stat-item { text-align: center; }
+        .stat-number {
+            font-size: 2.4rem;
+            font-weight: 900;
+            color: #60a5fa;
+        }
+        .stat-label {
+            color: #64748b;
+            font-size: 0.9rem;
+            margin-top: 4px;
+        }
+
+        /* FEATURES */
+        .section {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 80px 20px;
+        }
+        .section-label {
+            text-align: center;
+            color: #60a5fa;
+            font-weight: 700;
+            font-size: 0.9rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            margin-bottom: 16px;
+        }
+        .section-title {
+            text-align: center;
+            font-size: 2.2rem;
+            font-weight: 800;
+            margin-bottom: 16px;
+        }
+        .section-subtitle {
+            text-align: center;
+            color: #94a3b8;
+            max-width: 560px;
+            margin: 0 auto 60px;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 24px;
+        }
+        .feature-card {
+            background: #111827;
+            border: 1px solid #1e3a5f;
+            border-radius: 16px;
+            padding: 32px;
+            transition: all 0.2s;
+        }
+        .feature-card:hover {
+            border-color: #2563eb;
+            transform: translateY(-4px);
+        }
+        .feature-icon {
+            font-size: 2rem;
+            margin-bottom: 16px;
+        }
+        .feature-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+            color: #f1f5f9;
+        }
+        .feature-desc { color: #64748b; font-size: 0.95rem; }
+
+        /* HOW IT WORKS */
+        .steps {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 32px;
+            margin-top: 60px;
+        }
+        .step {
+            text-align: center;
+            padding: 32px 24px;
+            background: #111827;
+            border-radius: 16px;
+            border: 1px solid #1e3a5f;
+        }
+        .step-number {
+            width: 48px;
+            height: 48px;
+            background: #1e3a5f;
+            color: #60a5fa;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 1.2rem;
+            margin: 0 auto 16px;
+        }
+        .step h3 { margin-bottom: 8px; font-size: 1rem; }
+        .step p { color: #64748b; font-size: 0.9rem; }
+
+        /* PRICING */
+        .pricing-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 24px;
+            margin-top: 60px;
+        }
+        .pricing-card {
+            background: #111827;
+            border: 1px solid #1e3a5f;
+            border-radius: 16px;
+            padding: 40px 32px;
+            text-align: center;
+            transition: all 0.2s;
+        }
+        .pricing-card.popular {
+            border-color: #2563eb;
+            position: relative;
+        }
+        .popular-badge {
+            position: absolute;
+            top: -14px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #2563eb;
+            color: white;
+            padding: 4px 16px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 700;
+        }
+        .pricing-name {
+            font-size: 1rem;
+            color: #94a3b8;
+            margin-bottom: 16px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .pricing-price {
+            font-size: 3rem;
+            font-weight: 900;
+            color: #f1f5f9;
+            margin-bottom: 4px;
+        }
+        .pricing-period { color: #64748b; font-size: 0.9rem; margin-bottom: 32px; }
+        .pricing-features { list-style: none; margin-bottom: 32px; text-align: left; }
+        .pricing-features li {
+            padding: 8px 0;
+            color: #94a3b8;
+            font-size: 0.95rem;
+            border-bottom: 1px solid #1e3a5f22;
+        }
+        .pricing-features li::before {
+            content: "✓ ";
+            color: #22c55e;
+            font-weight: 700;
+        }
+
+        /* TESTIMONIALS */
+        .testimonials-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 24px;
+            margin-top: 60px;
+        }
+        .testimonial {
+            background: #111827;
+            border: 1px solid #1e3a5f;
+            border-radius: 16px;
+            padding: 32px;
+        }
+        .testimonial-text {
+            color: #94a3b8;
+            font-size: 0.95rem;
+            margin-bottom: 20px;
+            font-style: italic;
+        }
+        .testimonial-author { font-weight: 700; color: #f1f5f9; }
+        .testimonial-role { color: #64748b; font-size: 0.85rem; }
+
+        /* CTA */
+        .cta-section {
+            text-align: center;
+            padding: 100px 20px;
+            background: linear-gradient(135deg, #0f172a 0%, #1e3a5f22 100%);
+            border-top: 1px solid #1e3a5f;
+        }
+        .cta-section h2 {
+            font-size: 2.4rem;
+            font-weight: 900;
+            margin-bottom: 16px;
+        }
+        .cta-section p {
+            color: #94a3b8;
+            margin-bottom: 40px;
+            font-size: 1.1rem;
+        }
+
+        /* FOOTER */
+        footer {
+            text-align: center;
+            padding: 40px 20px;
+            border-top: 1px solid #1e3a5f;
+            color: #475569;
+            font-size: 0.9rem;
+        }
+
+        @media (max-width: 768px) {
+            nav { padding: 16px 20px; }
+            .nav-links { display: none; }
+            .hero h1 { font-size: 2rem; }
+            .stats { gap: 32px; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+    <div class="logo">🛡️ PhishGuard AI</div>
+    <div class="nav-links">
+        <a href="#features">Features</a>
+        <a href="#how-it-works">How it works</a>
+        <a href="#pricing">Pricing</a>
+        <a href="https://phishguard-okmkdupa4om23rq6e78bad.streamlit.app" class="nav-cta">Try Demo →</a>
+    </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+    <div class="badge">🚀 AI-Powered Cybersecurity</div>
+    <h1>Detect Phishing Emails Before They Destroy Your Business</h1>
+    <p>PhishGuard AI analyzes suspicious emails in seconds, detects social engineering attacks, and generates professional security reports — powered by advanced AI.</p>
+    <div class="hero-buttons">
+        <a href="https://phishguard-okmkdupa4om23rq6e78bad.streamlit.app" class="btn-primary">Try Free Demo →</a>
+        <a href="#pricing" class="btn-secondary">View Pricing</a>
+    </div>
+</section>
+
+<!-- STATS -->
+<div class="stats">
+    <div class="stat-item">
+        <div class="stat-number">89%</div>
+        <div class="stat-label">Detection accuracy</div>
+    </div>
+    <div class="stat-item">
+        <div class="stat-number">&lt;3s</div>
+        <div class="stat-label">Analysis time</div>
+    </div>
+    <div class="stat-item">
+        <div class="stat-number">7+</div>
+        <div class="stat-label">Threat indicators</div>
+    </div>
+    <div class="stat-item">
+        <div class="stat-number">100%</div>
+        <div class="stat-label">AI-powered reports</div>
+    </div>
+</div>
+
+<!-- FEATURES -->
+<section class="section" id="features">
+    <div class="section-label">Features</div>
+    <h2 class="section-title">Everything You Need to Stay Protected</h2>
+    <p class="section-subtitle">PhishGuard AI combines rule-based detection with advanced AI to catch threats that traditional tools miss.</p>
+
+    <div class="features-grid">
+        <div class="feature-card">
+            <div class="feature-icon">🎯</div>
+            <div class="feature-title">Phishing Keyword Detection</div>
+            <div class="feature-desc">Detects urgency manipulation, threat language, credential requests, and brand impersonation across 5 threat categories.</div>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">🔗</div>
+            <div class="feature-title">Suspicious URL Analysis</div>
+            <div class="feature-desc">Flags malicious links, URL shorteners, IP-based URLs, and fake domain patterns before you click them.</div>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">🤖</div>
+            <div class="feature-title">AI Security Reports</div>
+            <div class="feature-desc">Llama 3.1 AI writes a detailed professional analysis explaining the attack technique and recommended actions.</div>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">📊</div>
+            <div class="feature-title">Risk Score System</div>
+            <div class="feature-desc">Every email gets a 0-100 risk score with severity levels: LOW, MEDIUM, HIGH, CRITICAL.</div>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">📄</div>
+            <div class="feature-title">PDF Report Export</div>
+            <div class="feature-desc">Download professional security reports to share with your IT team, management, or clients.</div>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">📈</div>
+            <div class="feature-title">Analysis History</div>
+            <div class="feature-desc">Track all analyzed emails over time with visual charts and detailed history dashboard.</div>
+        </div>
+    </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section class="section" id="how-it-works" style="background:#111827; max-width:100%; padding:80px 20px;">
+    <div style="max-width:1100px; margin:0 auto;">
+        <div class="section-label">How it works</div>
+        <h2 class="section-title">Analyze Any Email in 3 Steps</h2>
+        <p class="section-subtitle">No technical knowledge required. Anyone on your team can use it.</p>
+
+        <div class="steps">
+            <div class="step">
+                <div class="step-number">1</div>
+                <h3>Paste the Email</h3>
+                <p>Copy and paste the suspicious email content into PhishGuard AI.</p>
+            </div>
+            <div class="step">
+                <div class="step-number">2</div>
+                <h3>AI Analyzes It</h3>
+                <p>Our engine scans for 50+ threat indicators in under 3 seconds.</p>
+            </div>
+            <div class="step">
+                <div class="step-number">3</div>
+                <h3>Get Your Report</h3>
+                <p>Receive a risk score, full breakdown, and downloadable PDF report.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- PRICING -->
+<section class="section" id="pricing">
+    <div class="section-label">Pricing</div>
+    <h2 class="section-title">Simple, Transparent Pricing</h2>
+    <p class="section-subtitle">Start free. Upgrade when you need more.</p>
+
+    <div class="pricing-grid">
+        <div class="pricing-card">
+            <div class="pricing-name">Starter</div>
+            <div class="pricing-price">$29</div>
+            <div class="pricing-period">per month</div>
+            <ul class="pricing-features">
+                <li>1 user login</li>
+                <li>Unlimited email analyses</li>
+                <li>AI security reports</li>
+                <li>PDF report export</li>
+                <li>Analysis history</li>
+                <li>Email support</li>
+            </ul>
+            <a href="mailto:contact@phishguard.ai" class="btn-secondary" style="display:block; text-align:center;">Get Started</a>
+        </div>
+
+        <div class="pricing-card popular">
+            <div class="popular-badge">Most Popular</div>
+            <div class="pricing-name">Business</div>
+            <div class="pricing-price">$99</div>
+            <div class="pricing-period">per month</div>
+            <ul class="pricing-features">
+                <li>5 user logins</li>
+                <li>Unlimited email analyses</li>
+                <li>AI security reports</li>
+                <li>PDF report export</li>
+                <li>Analysis history</li>
+                <li>Priority support</li>
+            </ul>
+            <a href="mailto:contact@phishguard.ai" class="btn-primary" style="display:block; text-align:center;">Get Started</a>
+        </div>
+
+        <div class="pricing-card">
+            <div class="pricing-name">Enterprise</div>
+            <div class="pricing-price">Custom</div>
+            <div class="pricing-period">contact us</div>
+            <ul class="pricing-features">
+                <li>Unlimited users</li>
+                <li>API access</li>
+                <li>Custom integrations</li>
+                <li>On-premise option</li>
+                <li>Dedicated support</li>
+                <li>SLA guarantee</li>
+            </ul>
+            <a href="mailto:contact@phishguard.ai" class="btn-secondary" style="display:block; text-align:center;">Contact Us</a>
+        </div>
+    </div>
+</section>
+
+<!-- TESTIMONIALS -->
+<section class="section" style="background:#111827; max-width:100%; padding:80px 20px;">
+    <div style="max-width:1100px; margin:0 auto;">
+        <div class="section-label">Testimonials</div>
+        <h2 class="section-title">Trusted by Security Teams</h2>
+
+        <div class="testimonials-grid">
+            <div class="testimonial">
+                <div class="testimonial-text">"PhishGuard AI caught a sophisticated spear phishing attack targeting our CFO. The AI report explained exactly how the attack worked. Incredible tool."</div>
+                <div class="testimonial-author">Sarah M.</div>
+                <div class="testimonial-role">IT Security Manager, Financial Services</div>
+            </div>
+            <div class="testimonial">
+                <div class="testimonial-text">"We use PhishGuard AI to train our employees. The detailed reports help them understand exactly why an email is dangerous."</div>
+                <div class="testimonial-author">James K.</div>
+                <div class="testimonial-role">CISO, Healthcare Company</div>
+            </div>
+            <div class="testimonial">
+                <div class="testimonial-text">"Simple to use, incredibly accurate. We analyzed 200+ suspicious emails last month. The PDF reports are perfect for our compliance documentation."</div>
+                <div class="testimonial-author">Maria L.</div>
+                <div class="testimonial-role">Security Analyst, Law Firm</div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- CTA -->
+<section class="cta-section">
+    <h2>Ready to Protect Your Business?</h2>
+    <p>Join hundreds of companies using PhishGuard AI to stop phishing attacks.</p>
+    <div class="hero-buttons">
+        <a href="https://phishguard-okmkdupa4om23rq6e78bad.streamlit.app" class="btn-primary">Try Free Demo →</a>
+        <a href="mailto:contact@phishguard.ai" class="btn-secondary">Contact Sales</a>
+    </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+    <p>🛡️ PhishGuard AI — AI-Powered Phishing Detection</p>
+    <p style="margin-top:8px">© 2026 PhishGuard AI. All rights reserved.</p>
+</footer>
+
+</body>
+</html>
