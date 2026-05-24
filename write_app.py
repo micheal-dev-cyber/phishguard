@@ -4,6 +4,7 @@ from src.detector import analyze_email
 from src.database import init_db, save_analysis, get_history
 from src.report_generator import generate_pdf_report
 from src.auth import check_password, logout
+from src.threat_intel import check_multiple_urls, get_threat_summary
 
 st.set_page_config(
     page_title="PhishGuard AI",
@@ -56,14 +57,11 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ── Auth gate ──────────────────────────────────────────────────────────────────
 if not check_password():
     st.stop()
 
-# ── Init ───────────────────────────────────────────────────────────────────────
 init_db()
 
-# ── Header ─────────────────────────────────────────────────────────────────────
 col_title, col_user = st.columns([4, 1])
 with col_title:
     st.markdown("<h1 style=\'color:#60a5fa; font-size:2rem; margin-bottom:0\'>🛡️ PhishGuard AI</h1>", unsafe_allow_html=True)
@@ -96,6 +94,7 @@ with tab1:
         st.checkbox("Analyze URLs", value=True)
         st.checkbox("Keyword Detection", value=True)
         st.checkbox("Social Engineering", value=True)
+        enable_vt = st.checkbox("Threat Intelligence (VirusTotal)", value=True)
         st.markdown("")
         analyze_btn = st.button("🔍 Analyze Email", use_container_width=True, type="primary")
         st.markdown("")
@@ -108,20 +107,33 @@ with tab1:
             with st.spinner("Scanning for threats..."):
                 results = analyze_email(email_text)
                 save_analysis(results, email_text)
-            st.session_state["results"] = results
+
+            vt_results = []
+            vt_summary = {}
+
+            if enable_vt and results["urls_found"]:
+                with st.spinner("Checking URLs against VirusTotal threat database..."):
+                    vt_results = check_multiple_urls(results["urls_found"])
+                    vt_summary = get_threat_summary(vt_results)
+
+            st.session_state["results"]    = results
             st.session_state["email_text"] = email_text
+            st.session_state["vt_results"] = vt_results
+            st.session_state["vt_summary"] = vt_summary
             st.session_state.pop("ai_report", None)
 
     if "results" in st.session_state:
-        results = st.session_state["results"]
+        results        = st.session_state["results"]
         email_text_saved = st.session_state["email_text"]
+        vt_results     = st.session_state.get("vt_results", [])
+        vt_summary     = st.session_state.get("vt_summary", {})
 
         st.divider()
         st.markdown("## 📊 Analysis Results")
 
-        score = results["risk_score"]
+        score    = results["risk_score"]
         severity = results["severity"]
-        color = results["severity_color"]
+        color    = results["severity_color"]
 
         col_gauge, col_m1, col_m2, col_m3 = st.columns([1.2, 1, 1, 1])
 
@@ -174,28 +186,80 @@ with tab1:
             for item in results["suspicious_urls"]:
                 st.markdown(f"<div class=\'url-box\'>🚨 {item[\'url\']}</div>", unsafe_allow_html=True)
         elif results["urls_found"]:
-            st.markdown("<div class=\'section-title\'>🔗 URLs Found (no threats)</div>", unsafe_allow_html=True)
+            st.markdown("<div class=\'section-title\'>🔗 URLs Found (no pattern threats)</div>", unsafe_allow_html=True)
             for url in results["urls_found"]:
                 st.markdown(f"<div class=\'safe-url-box\'>🔗 {url}</div>", unsafe_allow_html=True)
+
+        if vt_results:
+            st.markdown("<div class=\'section-title\'>🌐 Threat Intelligence (VirusTotal)</div>", unsafe_allow_html=True)
+            for vt in vt_results:
+                status  = vt.get("status", "error")
+                url     = vt.get("url", "")
+                mal     = vt.get("malicious", 0)
+                sus     = vt.get("suspicious", 0)
+                total   = vt.get("total_vendors", 0)
+                threats = vt.get("threat_names", [])
+                vt_link = vt.get("vt_link", "")
+
+                if status == "malicious":
+                    st.markdown(f"""
+                    <div class=\'url-box\'>
+                        🔴 <b>MALICIOUS</b> — {url[:70]}<br>
+                        <span style=\'font-size:12px\'>
+                            {mal} of {total} vendors flagged as malicious
+                            {f" | {', '.join(threats)}" if threats else ""}
+                        </span>
+                    </div>
+                    """, unsafe_allow_html=True)
+                elif status == "suspicious":
+                    st.markdown(f"""
+                    <div style=\'background:#2a1a0a;border:1px solid #ff8800;
+                        border-radius:8px;padding:10px 14px;margin:4px 0\'>
+                        🟠 <b>SUSPICIOUS</b> — {url[:70]}<br>
+                        <span style=\'font-size:12px;color:#ff8800\'>
+                            {mal} malicious, {sus} suspicious out of {total} vendors
+                        </span>
+                    </div>
+                    """, unsafe_allow_html=True)
+                elif status == "clean":
+                    st.markdown(f"""
+                    <div class=\'safe-url-box\'>
+                        🟢 <b>CLEAN</b> — {url[:70]}<br>
+                        <span style=\'font-size:12px\'>No threats from {total} vendors</span>
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.markdown(f"""
+                    <div style=\'background:#111827;border:1px solid #1e3a5f;
+                        border-radius:8px;padding:10px 14px;margin:4px 0;
+                        font-size:12px;color:#64748b\'>
+                        ⚪ Could not check: {url[:70]}
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                if vt_link and status != "error":
+                    st.markdown(
+                        f"<a href=\'{vt_link}\' target=\'_blank\' "
+                        f"style=\'font-size:11px;color:#60a5fa;margin-left:4px\'>"
+                        f"View full report on VirusTotal →</a>",
+                        unsafe_allow_html=True
+                    )
 
         if results["has_attachments"]:
             st.warning("📎 **Attachment detected** — Do NOT open files from unverified senders.")
 
-        # Header analysis
         header = results.get("header_analysis", {})
         if header.get("findings"):
             st.markdown("<div class=\'section-title\'>📨 Email Header Analysis</div>", unsafe_allow_html=True)
             for finding in header["findings"]:
                 st.error(f"🚨 {finding}")
 
-        # Attachment analysis
         attach = results.get("attachment_analysis", {})
         if attach.get("findings"):
             st.markdown("<div class=\'section-title\'>📎 Attachment Analysis</div>", unsafe_allow_html=True)
             for finding in attach["findings"]:
                 st.error(f"🚨 {finding}")
 
-        # Language analysis
         lang = results.get("language_analysis", {})
         if lang.get("findings"):
             st.markdown("<div class=\'section-title\'>🧠 Language & Manipulation Analysis</div>", unsafe_allow_html=True)
@@ -253,8 +317,8 @@ with tab2:
     if not history:
         st.info("No analyses yet. Go to the Analyze tab and scan your first email.")
     else:
-        scores = [row[1] for row in history]
-        labels = [f"#{i+1}" for i in range(len(history))]
+        scores     = [row[1] for row in history]
+        labels     = [f"#{i+1}" for i in range(len(history))]
         colors_bar = ["#ff4444" if s >= 75 else "#ff8800" if s >= 50 else "#ffaa00" if s >= 25 else "#44aa44" for s in scores]
 
         fig2 = go.Figure(go.Bar(
@@ -290,3 +354,4 @@ with open("app.py", "w", encoding="utf-8") as f:
     f.write(content)
 
 print("app.py written successfully!")
+print(f"Total chars: {len(content)}")
