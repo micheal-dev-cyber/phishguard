@@ -181,6 +181,27 @@ with tab1:
         if results["has_attachments"]:
             st.warning("📎 **Attachment detected** — Do NOT open files from unverified senders.")
 
+        # Header analysis
+        header = results.get("header_analysis", {})
+        if header.get("findings"):
+            st.markdown("<div class='section-title'>📨 Email Header Analysis</div>", unsafe_allow_html=True)
+            for finding in header["findings"]:
+                st.error(f"🚨 {finding}")
+
+        # Attachment analysis
+        attach = results.get("attachment_analysis", {})
+        if attach.get("findings"):
+            st.markdown("<div class='section-title'>📎 Attachment Analysis</div>", unsafe_allow_html=True)
+            for finding in attach["findings"]:
+                st.error(f"🚨 {finding}")
+
+        # Language analysis
+        lang = results.get("language_analysis", {})
+        if lang.get("findings"):
+            st.markdown("<div class='section-title'>🧠 Language & Manipulation Analysis</div>", unsafe_allow_html=True)
+            for finding in lang["findings"]:
+                st.warning(f"⚠️ {finding}")
+
         st.divider()
         st.markdown("<div class='section-title'>📋 Security Verdict</div>", unsafe_allow_html=True)
 

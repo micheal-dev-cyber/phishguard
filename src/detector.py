@@ -2,33 +2,103 @@ import json
 import re
 from pathlib import Path
 
-# Load keywords from JSON
+# Load keywords
 KEYWORDS_PATH = Path(__file__).parent.parent / "data" / "phishing_keywords.json"
 with open(KEYWORDS_PATH, "r") as f:
     PHISHING_KEYWORDS = json.load(f)
 
 # Suspicious URL patterns
 SUSPICIOUS_URL_PATTERNS = [
-    r'http://(?!https)',                    # HTTP not HTTPS
-    r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', # IP address URLs
-    r'bit\.ly|tinyurl|t\.co|ow\.ly',       # URL shorteners
-    r'[a-z0-9]{20,}\.',                    # Very long random subdomains
-    r'paypal\.(?!com)',                     # Fake PayPal domains
-    r'amazon\.(?!com|co\.|ca|de|fr)',      # Fake Amazon domains
-    r'secure-.*\.com',                     # "secure-" prefix scam
-    r'login-.*\.com',                      # "login-" prefix scam
-    r'verify-.*\.com',                     # "verify-" prefix scam
+    r'http://(?!https)',
+    r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}',
+    r'bit\.ly|tinyurl|t\.co|ow\.ly|goo\.gl|short\.io',
+    r'[a-z0-9]{20,}\.',
+    r'paypal\.(?!com)',
+    r'amazon\.(?!com|co\.|ca|de|fr)',
+    r'secure-.*\.com',
+    r'login-.*\.com',
+    r'verify-.*\.com',
+    r'update-.*\.com',
+    r'account-.*\.com',
+    r'banking-.*\.com',
+]
+
+# Malicious attachment extensions
+MALICIOUS_EXTENSIONS = [
+    '.exe', '.bat', '.cmd', '.scr', '.pif', '.com',
+    '.vbs', '.vbe', '.js', '.jse', '.wsf', '.wsh',
+    '.ps1', '.psm1', '.psd1', '.msi', '.dll', '.reg',
+    '.hta', '.cpl', '.inf', '.lnk',
+]
+
+MACRO_EXTENSIONS = [
+    '.docm', '.xlsm', '.pptm', '.dotm', '.xltm',
+    '.xlam', '.ppam', '.potm', '.ppsm',
+]
+
+DOUBLE_EXTENSION_PATTERN = r'\.[a-zA-Z]{2,4}\.(exe|bat|cmd|scr|pif|vbs|js|ps1)$'
+
+# Fake sender patterns
+FAKE_SENDER_PATTERNS = [
+    r'@.*paypal.*\.(?!com)',
+    r'@.*amazon.*\.(?!com)',
+    r'@.*microsoft.*\.(?!com)',
+    r'@.*apple.*\.(?!com)',
+    r'@.*google.*\.(?!com)',
+    r'@.*netflix.*\.(?!com)',
+    r'@.*irs.*\.(?!gov)',
+    r'@.*fedex.*\.(?!com)',
+    r'noreply.*@(?!.*\.(com|org|gov|edu)$)',
+    r'support.*@(?!.*\.(com|org|gov|edu)$)',
+    r'security.*@(?!.*\.(com|org|gov|edu)$)',
+]
+
+# Language manipulation patterns
+URGENCY_PATTERNS = [
+    r'\b(immediately|urgent|asap|right now|right away)\b',
+    r'\b(\d+\s*hours?|\d+\s*minutes?|\d+\s*days?)\b',
+    r'\b(expire[sd]?|expiring|deadline|due today)\b',
+    r'\b(last chance|final notice|final warning|last warning)\b',
+    r'\b(act now|respond now|reply now|click now)\b',
+]
+
+FEAR_PATTERNS = [
+    r'\b(suspended|terminated|closed|blocked|locked|disabled)\b',
+    r'\b(unauthorized|illegal|fraudulent|suspicious activity)\b',
+    r'\b(legal action|law enforcement|police|lawsuit|court)\b',
+    r'\b(compromised|hacked|breached|violated|stolen)\b',
+    r'\b(penalty|fine|charge|fee|debt)\b',
+]
+
+GRAMMAR_PATTERNS = [
+    r'\b(kindly|do the needful|revert back|prepone)\b',
+    r'\b(dear (sir|madam|customer|user|friend|valued))\b',
+    r'\b(we are (writing|contacting|reaching) to (inform|notify|alert))\b',
+    r'\b(your (account|profile|access) (have|has been|will be))\b',
 ]
 
 
+# ── Extraction functions ───────────────────────────────────────────────────────
+
 def extract_urls(text: str) -> list:
-    """Extract all URLs from email text."""
     url_pattern = r'https?://[^\s<>"{}|\\^`\[\]]+'
     return re.findall(url_pattern, text, re.IGNORECASE)
 
 
-def check_urls(urls: list) -> dict:
-    """Analyze URLs for suspicious patterns."""
+def extract_emails(text: str) -> list:
+    email_pattern = r'[\w\.-]+@[\w\.-]+\.\w+'
+    return re.findall(email_pattern, text, re.IGNORECASE)
+
+
+def extract_attachments(text: str) -> list:
+    attachment_pattern = r'\b[\w\-]+(\.[a-zA-Z]{2,5}){1,3}\b'
+    candidates = re.findall(r'\b[\w\-]+(\.[\w]{2,5})+\b', text)
+    return candidates
+
+
+# ── Detection functions ────────────────────────────────────────────────────────
+
+def check_urls(urls: list) -> list:
     suspicious = []
     for url in urls:
         flags = []
@@ -40,41 +110,213 @@ def check_urls(urls: list) -> dict:
     return suspicious
 
 
-def scan_keywords(text: str) -> dict:
-    """Scan text for phishing keyword categories."""
+def scan_keywords(text: str) -> tuple:
     text_lower = text.lower()
     results = {}
     total_hits = 0
-
     for category, keywords in PHISHING_KEYWORDS.items():
         hits = [kw for kw in keywords if kw in text_lower]
         if hits:
             results[category] = hits
             total_hits += len(hits)
-
     return results, total_hits
 
 
+def analyze_headers(text: str) -> dict:
+    """Detect fake senders, domain spoofing, reply-to mismatches."""
+    findings = []
+    risk_score = 0
+
+    emails_found = extract_emails(text)
+
+    # Check for fake sender domains
+    for email in emails_found:
+        for pattern in FAKE_SENDER_PATTERNS:
+            if re.search(pattern, email, re.IGNORECASE):
+                findings.append(f"Suspicious sender domain: {email}")
+                risk_score += 10
+
+    # Check reply-to mismatch
+    from_match = re.search(r'from:\s*([\w\.-]+@[\w\.-]+)', text, re.IGNORECASE)
+    reply_match = re.search(r'reply-to:\s*([\w\.-]+@[\w\.-]+)', text, re.IGNORECASE)
+
+    if from_match and reply_match:
+        from_domain = from_match.group(1).split('@')[1]
+        reply_domain = reply_match.group(1).split('@')[1]
+        if from_domain != reply_domain:
+            findings.append(
+                f"Reply-To mismatch: From={from_domain} vs Reply-To={reply_domain}"
+            )
+            risk_score += 20
+
+    # Check for display name spoofing
+    display_spoof = re.search(
+        r'(paypal|amazon|microsoft|apple|google|netflix|irs|fedex)\s*<[^>]+@(?!paypal|amazon|microsoft|apple|google|netflix|irs|fedex)',
+        text, re.IGNORECASE
+    )
+    if display_spoof:
+        findings.append(f"Display name spoofing detected: {display_spoof.group()[:60]}")
+        risk_score += 25
+
+    # Free email provider sending as corporate
+    free_providers = ['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com']
+    for email in emails_found:
+        domain = email.split('@')[-1].lower()
+        if domain in free_providers:
+            if any(brand in text.lower() for brand in
+                   ['paypal', 'amazon', 'microsoft', 'apple', 'bank', 'irs']):
+                findings.append(
+                    f"Free email provider ({domain}) impersonating a brand"
+                )
+                risk_score += 15
+
+    return {
+        "findings": findings,
+        "risk_score": min(risk_score, 40),
+        "emails_found": emails_found,
+    }
+
+
+def analyze_attachments(text: str) -> dict:
+    """Detect malicious attachment types and patterns."""
+    findings = []
+    risk_score = 0
+    detected = []
+
+    text_lower = text.lower()
+
+    # Check malicious extensions
+    for ext in MALICIOUS_EXTENSIONS:
+        if ext in text_lower:
+            findings.append(f"Dangerous file type detected: {ext}")
+            detected.append(ext)
+            risk_score += 20
+
+    # Check macro-enabled documents
+    for ext in MACRO_EXTENSIONS:
+        if ext in text_lower:
+            findings.append(f"Macro-enabled document detected: {ext}")
+            detected.append(ext)
+            risk_score += 15
+
+    # Check double extensions
+    if re.search(DOUBLE_EXTENSION_PATTERN, text, re.IGNORECASE):
+        findings.append("Double extension detected (e.g. invoice.pdf.exe)")
+        risk_score += 25
+
+    # Check for attachment language
+    attachment_words = [
+        'attachment', 'attached', 'see attached', 'open the file',
+        'download the file', 'enclosed', 'find attached',
+        'open document', 'view attachment', 'invoice attached',
+        'document attached', 'file attached'
+    ]
+    attachment_language = [w for w in attachment_words if w in text_lower]
+    if attachment_language:
+        findings.append(f"Attachment language detected: {', '.join(attachment_language[:3])}")
+        risk_score += 8
+
+    return {
+        "findings": findings,
+        "risk_score": min(risk_score, 40),
+        "detected_extensions": detected,
+        "has_attachment_language": len(attachment_language) > 0
+        if 'attachment_language' in dir() else False,
+    }
+
+
+def analyze_language(text: str) -> dict:
+    """Detect manipulation language, urgency, fear, grammar issues."""
+    findings = []
+    risk_score = 0
+    text_lower = text.lower()
+
+    # Urgency patterns
+    urgency_hits = []
+    for pattern in URGENCY_PATTERNS:
+        matches = re.findall(pattern, text_lower)
+        if matches:
+            urgency_hits.extend(matches if isinstance(matches[0], str) else
+                                [m[0] for m in matches])
+
+    if urgency_hits:
+        findings.append(f"Urgency manipulation: {', '.join(set(str(h) for h in urgency_hits[:4]))}")
+        risk_score += min(len(urgency_hits) * 5, 20)
+
+    # Fear patterns
+    fear_hits = []
+    for pattern in FEAR_PATTERNS:
+        matches = re.findall(pattern, text_lower)
+        if matches:
+            fear_hits.extend(matches if isinstance(matches[0], str) else
+                             [m[0] for m in matches])
+
+    if fear_hits:
+        findings.append(f"Fear tactics: {', '.join(set(str(h) for h in fear_hits[:4]))}")
+        risk_score += min(len(fear_hits) * 5, 20)
+
+    # Grammar patterns (common in translated phishing)
+    grammar_hits = []
+    for pattern in GRAMMAR_PATTERNS:
+        if re.search(pattern, text_lower):
+            grammar_hits.append(pattern)
+
+    if grammar_hits:
+        findings.append(f"Suspicious grammar patterns detected ({len(grammar_hits)} matches)")
+        risk_score += min(len(grammar_hits) * 5, 15)
+
+    # Excessive capitalization
+    words = text.split()
+    if len(words) > 10:
+        caps_ratio = sum(1 for w in words if w.isupper() and len(w) > 2) / len(words)
+        if caps_ratio > 0.15:
+            findings.append(f"Excessive capitalization ({int(caps_ratio*100)}% of words)")
+            risk_score += 10
+
+    # Excessive punctuation
+    exclamation_count = text.count('!')
+    if exclamation_count > 3:
+        findings.append(f"Excessive exclamation marks ({exclamation_count} found)")
+        risk_score += 8
+
+    # Too many numbers (fake order IDs, case numbers)
+    number_pattern = re.findall(r'\b\d{6,}\b', text)
+    if len(number_pattern) > 3:
+        findings.append(f"Multiple fake reference numbers detected ({len(number_pattern)} found)")
+        risk_score += 8
+
+    return {
+        "findings": findings,
+        "risk_score": min(risk_score, 40),
+        "urgency_count": len(urgency_hits),
+        "fear_count": len(fear_hits),
+        "grammar_issues": len(grammar_hits),
+    }
+
+
+def detect_attachments(text: str) -> bool:
+    attachment_keywords = [
+        "attachment", "attached", "see the file", "open the document",
+        "download", ".zip", ".exe", ".pdf", ".doc", "invoice attached"
+    ]
+    return any(kw in text.lower() for kw in attachment_keywords)
+
+
 def calculate_risk_score(keyword_hits: int, url_count: int,
-                          suspicious_urls: int, has_attachments: bool) -> dict:
-    """Calculate a 0-100 risk score."""
+                          suspicious_urls: int, has_attachments: bool,
+                          header_score: int, attachment_score: int,
+                          language_score: int) -> dict:
+
     score = 0
-
-    # Keyword scoring
-    score += min(keyword_hits * 8, 40)  # max 40 points from keywords
-
-    # URL scoring
-    score += min(suspicious_urls * 15, 30)  # max 30 points from bad URLs
-    score += min(url_count * 2, 10)          # max 10 points from URL count
-
-    # Attachment flag
-    if has_attachments:
-        score += 15
-
-    # Cap at 100
+    score += min(keyword_hits * 6, 30)
+    score += min(suspicious_urls * 12, 25)
+    score += min(url_count * 2, 8)
+    score += 10 if has_attachments else 0
+    score += min(header_score, 20)
+    score += min(attachment_score, 15)
+    score += min(language_score, 15)
     score = min(score, 100)
 
-    # Severity label
     if score >= 75:
         severity = "CRITICAL"
         color = "#FF0000"
@@ -88,42 +330,44 @@ def calculate_risk_score(keyword_hits: int, url_count: int,
         severity = "LOW"
         color = "#00AA00"
 
-    return {
-        "score": score,
-        "severity": severity,
-        "color": color
-    }
-
-
-def detect_attachments(text: str) -> bool:
-    """Detect if email mentions attachments."""
-    attachment_keywords = [
-        "attachment", "attached", "see the file", "open the document",
-        "download", ".zip", ".exe", ".pdf", ".doc", "invoice attached"
-    ]
-    return any(kw in text.lower() for kw in attachment_keywords)
+    return {"score": score, "severity": severity, "color": color}
 
 
 def analyze_email(email_text: str) -> dict:
-    """Main function — full phishing analysis."""
-    
+    """Main analysis function — runs all detection engines."""
+
     urls = extract_urls(email_text)
     suspicious_urls = check_urls(urls)
     keyword_matches, total_hits = scan_keywords(email_text)
     has_attachments = detect_attachments(email_text)
+
+    # New engines
+    header_analysis    = analyze_headers(email_text)
+    attachment_analysis = analyze_attachments(email_text)
+    language_analysis  = analyze_language(email_text)
+
     risk = calculate_risk_score(
-        total_hits, len(urls), len(suspicious_urls), has_attachments
+        total_hits,
+        len(urls),
+        len(suspicious_urls),
+        has_attachments,
+        header_analysis["risk_score"],
+        attachment_analysis["risk_score"],
+        language_analysis["risk_score"],
     )
 
     return {
-        "risk_score": risk["score"],
-        "severity": risk["severity"],
-        "severity_color": risk["color"],
-        "keyword_matches": keyword_matches,
-        "total_keyword_hits": total_hits,
-        "urls_found": urls,
-        "suspicious_urls": suspicious_urls,
-        "has_attachments": has_attachments,
-        "url_count": len(urls),
-        "suspicious_url_count": len(suspicious_urls),
+        "risk_score":            risk["score"],
+        "severity":              risk["severity"],
+        "severity_color":        risk["color"],
+        "keyword_matches":       keyword_matches,
+        "total_keyword_hits":    total_hits,
+        "urls_found":            urls,
+        "suspicious_urls":       suspicious_urls,
+        "has_attachments":       has_attachments,
+        "url_count":             len(urls),
+        "suspicious_url_count":  len(suspicious_urls),
+        "header_analysis":       header_analysis,
+        "attachment_analysis":   attachment_analysis,
+        "language_analysis":     language_analysis,
     }
