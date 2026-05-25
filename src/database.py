@@ -2,8 +2,10 @@ import sqlite3
 import hashlib
 from datetime import datetime
 from pathlib import Path
+import os
 
-DB_PATH = Path(__file__).parent.parent / "data" / "phishguard.db"
+# Streamlit Cloud uses /tmp for writable storage
+DB_PATH = os.path.join("/tmp", "phishguard.db")
 
 def init_db():
     """Initialize database tables for metrics telemetry and user provisioning."""
