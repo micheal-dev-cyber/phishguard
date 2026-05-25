@@ -11,4 +11,7 @@ except Exception:
     OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-AI_MODEL = "mistralai/mistral-7b-instruct:free"
+# config.py
+
+# Replace the old model with this:
+AI_MODEL = "meta-llama/llama-3-8b-instruct:free"
