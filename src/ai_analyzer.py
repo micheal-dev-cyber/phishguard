@@ -1,26 +1,18 @@
 # src/ai_analyzer.py
-import sys
-import os
-from pathlib import Path
-
-# Add the root directory to sys.path so 'config' can be found
-sys.path.append(str(Path(__file__).parent.parent))
-
-from config import GOOGLE_API_KEY
+import streamlit as st
 import google.generativeai as genai
-
-# ... rest of your code ...
-
-# Now this import will work
-from config import GOOGLE_API_KEY
 
 def generate_ai_report(email_text, rule_findings=None):
     """Generates an incident response report using Google Gemini."""
     
-    # Configure the client
-    genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+    # 1. Fetch API key directly from Streamlit secrets
+    api_key = st.secrets.get("GOOGLE_API_KEY")
     
-    # Use Gemini Flash (fast and perfect for this)
+    if not api_key:
+        return "❌ AI Error: GOOGLE_API_KEY is not configured in Streamlit Secrets."
+    
+    # 2. Configure Gemini
+    genai.configure(api_key=api_key)
     model = genai.GenerativeModel('gemini-1.5-flash')
     
     context_injection = f"Our local static analyzer already flagged these vulnerabilities: {', '.join(rule_findings)}.\n" if rule_findings else ""
