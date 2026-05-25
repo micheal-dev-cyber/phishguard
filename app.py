@@ -5,23 +5,19 @@ import pandas as pd
 import csv
 import io
 
-# 1. Initialize Database
+# Import project modules
 from src.database import init_db, save_analysis, get_history
-init_db() 
-
-# 2. Import modules
 from src.detector import analyze_email
+from src.ai_analyzer import generate_ai_report
 from src.report_generator import generate_pdf_report
 from src.auth import check_password, logout
 from src.threat_intel import check_multiple_urls, get_threat_summary
 from src.osint import run_osint
 from src.admin import get_stats, get_all_analyses, get_recent_threats, get_daily_counts
 from src.header_parser import parse_email_headers
-from src.ai_analyzer import generate_ai_report
 
-# --- Page Configuration ---
-st.set_page_config(page_title="PhishGuard AI", page_icon="🛡️", layout="wide")
-# ... (rest of your existing app.py code)
+# Initialize Database
+init_db()
 
 # --- Page Configuration ---
 st.set_page_config(
