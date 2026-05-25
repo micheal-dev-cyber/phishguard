@@ -1,6 +1,21 @@
 # src/ai_analyzer.py
 import streamlit as st
 import google.generativeai as genai
+import time
+import google.generativeai as genai
+
+def generate_ai_report_with_retry(email_text, rule_findings=None, retries=3):
+    """Generates an incident response report with exponential backoff."""
+    for attempt in range(retries):
+        try:
+            # Your existing generation logic here
+            return response.text
+        except Exception as e:
+            if "429" in str(e):
+                wait_time = (2 ** attempt) * 5  # Wait 5s, 10s, 20s...
+                time.sleep(wait_time)
+                continue
+            return f"❌ Gemini API Error: {str(e)}"
 
 def generate_ai_report(email_text, rule_findings=None):
     """Generates an incident response report using Google Gemini."""
