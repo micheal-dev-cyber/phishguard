@@ -1,6 +1,14 @@
 import google.generativeai as genai
 import os
-from config import GOOGLE_API_KEY # Ensure you add this key to your .env/secrets
+import sys
+import os
+from pathlib import Path
+
+# Add the project root (parent of 'src') to the system path
+sys.path.append(str(Path(__file__).parent.parent))
+
+# Now this import will work
+from config import GOOGLE_API_KEY
 
 def generate_ai_report(email_text, rule_findings=None):
     """Generates an incident response report using Google Gemini."""
