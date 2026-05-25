@@ -1,27 +1,11 @@
-# src/ai_analyzer.py
-import streamlit as st
-from src.ai_analyzer import generate_ai_report
-# ... your other imports
-from config import GOOGLE_API_KEY
-import google.generativeai as genai
-
-import sys
-import os
-from pathlib import Path
-
-# Explicitly add the project root to the system path
-sys.path.append(str(Path(__file__).parent))
-
-# Now you can safely import from your src folder
-from src.ai_analyzer import generate_ai_report
-
+# app.py
 import streamlit as st
 import plotly.graph_objects as go
 import pandas as pd
 import csv
 import io
 
-# 1. Initialize Database (Must happen before other imports use it)
+# 1. Initialize Database
 from src.database import init_db, save_analysis, get_history
 init_db() 
 
@@ -33,7 +17,11 @@ from src.threat_intel import check_multiple_urls, get_threat_summary
 from src.osint import run_osint
 from src.admin import get_stats, get_all_analyses, get_recent_threats, get_daily_counts
 from src.header_parser import parse_email_headers
-from src.ai_analyzer import generate_ai_report  # <-- Dynamic AI Import
+from src.ai_analyzer import generate_ai_report
+
+# --- Page Configuration ---
+st.set_page_config(page_title="PhishGuard AI", page_icon="🛡️", layout="wide")
+# ... (rest of your existing app.py code)
 
 # --- Page Configuration ---
 st.set_page_config(
