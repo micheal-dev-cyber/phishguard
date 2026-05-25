@@ -1,8 +1,8 @@
 import sqlite3
-from pathlib import Path
 from datetime import datetime, timedelta
+import os
 
-DB_PATH = Path(__file__).parent.parent / "data" / "phishguard.db"
+DB_PATH = os.path.join("/tmp", "phishguard.db")
 
 
 def get_all_analyses(limit: int = 100) -> list:
