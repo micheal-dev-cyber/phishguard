@@ -4,8 +4,18 @@ from datetime import datetime
 from pathlib import Path
 import os
 
-# Streamlit Cloud uses /tmp for writable storage
-DB_PATH = os.path.join("/tmp", "phishguard.db")
+# Create a 'data' folder in your project root to store the DB safely
+# __file__ gets the current path (src/database.py), so we go up one level to the root
+PROJECT_ROOT = Path(__file__).parent.parent
+DATA_DIR = PROJECT_ROOT / "data"
+DATA_DIR.mkdir(exist_ok=True) # Creates the folder if it doesn't exist
+
+DB_PATH = os.path.join(DATA_DIR, "phishguard.db")
+
+def init_db():
+    """Initialize database tables for metrics telemetry and user provisioning."""
+    conn = sqlite3.connect(DB_PATH)
+# ... [Keep the rest of your init_db and other functions exactly the same] ...
 
 def init_db():
     """Initialize database tables for metrics telemetry and user provisioning."""
