@@ -109,6 +109,8 @@
             transition: all 0.2s ease;
             display: inline-block;
             box-shadow: 0 4px 14px rgba(37, 99, 235, 0.4);
+            border: none;
+            cursor: pointer;
         }
 
         .cta-btn:hover {
@@ -225,6 +227,35 @@
             color: var(--accent-cyan);
         }
     </style>
+
+    <script src="https://cdn.paddle.com/paddle/v2/paddle.js"></script>
+    <script type="text/javascript">
+        // 1. CHOOSE YOUR ENVIRONMENT: Change "sandbox" to "production" when going live
+        Paddle.Environment.set("sandbox");
+
+        // 2. INITIALIZE WITH CLIENT TOKEN: Paste your Client-Side Token from Paddle Dashboard > Developer Tools > Authentication
+        Paddle.Initialize({ 
+            token: "test_your_client_token_here" 
+        });
+
+        // 3. LAUNCH OVERLAY CHECKOUT INTERFACE
+        function openCheckoutWindow() {
+            Paddle.Checkout.open({
+                settings: {
+                    displayMode: "overlay",
+                    theme: "dark",
+                    locale: "en"
+                },
+                items: [
+                    {
+                        // 4. PASTE YOUR PRICE ID HERE: Found under Catalog > Prices (e.g. pri_01h...)
+                        priceId: "pri_your_price_id_here", 
+                        quantity: 1
+                    }
+                ]
+            });
+        }
+    </script>
 </head>
 <body>
 
@@ -239,7 +270,7 @@
             <p class="lead">
                 An 8-layer heuristic engine, localized Natural Language Processing, and direct OSINT cross-validation designed to intercept, triage, and defuse malicious vectors before compromise.
             </p>
-            <a href="#pricing" class="cta-btn">Deploy Security Profile</a>
+            <button onclick="openCheckoutWindow();" class="cta-btn">Deploy Security Profile</button>
         </section>
 
         <section class="grid">
@@ -274,7 +305,7 @@
                     <li>Secure Local SQL Multi-Tenant Account Storage</li>
                 </ul>
                 
-                <a href="https://checkout.paddle.com/buy?price=pri_01ksdbn1vt3k4ws1dd6w34k153" class="cta-btn" style="width: 80%; text-align: center;">Subscribe Now</a>
+                <button onclick="openCheckoutWindow();" class="cta-btn" style="width: 100%; text-align: center;">Subscribe Now</button>
             </div>
         </section>
     </div>
