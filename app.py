@@ -108,12 +108,14 @@ with tab1:
                 ai_report_markdown = generate_ai_report(email_text, rule_findings=findings)
                 
             # Step C: Save to database
+            # Step C: Save to database
             save_analysis(
                 risk_score=result.get("risk_score", 0),
                 severity=result.get("severity", "Low"),
                 keyword_hits=len(findings),
                 suspicious_urls=len(urls),
-                email_preview=email_text[:100] + "..."
+                email_preview=email_text[:100] + "...",
+                ai_report=ai_report_markdown  # <--- WE MISSED THIS LINE!
             )
             
             st.success("Complete System Analysis Generated!")
