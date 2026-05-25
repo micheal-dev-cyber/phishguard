@@ -11,3 +11,4 @@ __pycache__/
 *.pyc
 reports/*.pdf
 .DS_Store
+data/*.db
