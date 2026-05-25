@@ -90,7 +90,95 @@ is_admin = username == "admin"
 if is_admin:
     tab1, tab2, tab3 = st.tabs(["🔍 Analyze Email", "📊 History", "⚙️ Admin Dashboard"])
 else:
-    tab1, tab2 = st.tabs(["🔍 Analyze Email", "📊 History"])
+    tab1, tab2, tab3, tab4 = st.tabs(["🔍 Analyze", "📨 Header Parser", "📊 History", "⚙️ Admin"])
+
+with tab2:
+    st.markdown("## 📨 Email Header Analyzer")
+    st.markdown("<p style='color:#94a3b8'>Paste the full raw headers from any suspicious email to perform deep authentication analysis.</p>", unsafe_allow_html=True)
+
+    st.markdown("""
+    <div style='background:#0f172a;border:1px solid #1e3a5f;border-radius:8px;padding:12px;margin-bottom:16px;font-size:13px;color:#94a3b8'>
+    <b style='color:#60a5fa'>How to get raw headers:</b><br>
+    • <b>Gmail:</b> Open email → 3 dots menu → Show original → Copy all<br>
+    • <b>Outlook:</b> File → Properties → Internet headers → Copy all<br>
+    • <b>Apple Mail:</b> View → Message → All Headers → Copy
+    </div>
+    """, unsafe_allow_html=True)
+
+    raw_headers = st.text_area(
+        "Paste raw email headers here:",
+        height=200,
+        placeholder="Received: from mail.example.com...\nFrom: sender@domain.com\nAuthentication-Results: ...",
+        key="header_input"
+    )
+
+    if st.button("🔍 Analyze Headers", type="primary", use_container_width=True):
+        if raw_headers.strip():
+            from src.header_parser import parse_email_headers
+            with st.spinner("Parsing headers..."):
+                h = parse_email_headers(raw_headers)
+
+            # Auth summary cards
+            st.markdown("### 🔐 Authentication Results")
+            cols = st.columns(3)
+            for i, auth in enumerate(h["auth_summary"]):
+                color = "#16a34a" if auth["result"] == "PASS" else "#dc2626" if auth["result"] == "FAIL" else "#d97706"
+                cols[i].markdown(f"""
+                <div style='background:#111827;border:2px solid {color};border-radius:10px;padding:16px;text-align:center'>
+                    <div style='font-size:2rem'>{auth["icon"]}</div>
+                    <div style='font-size:1.1rem;font-weight:bold;color:{color}'>{auth["protocol"]}</div>
+                    <div style='color:#e2e8f0;font-size:0.9rem'>{auth["result"]}</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            # Risk score
+            hscore = h["risk_score"]
+            if hscore >= 75:
+                st.error(f"🔴 **Header Risk Score: {hscore}/100 — CRITICAL**")
+            elif hscore >= 50:
+                st.error(f"🟠 **Header Risk Score: {hscore}/100 — HIGH RISK**")
+            elif hscore >= 25:
+                st.warning(f"🟡 **Header Risk Score: {hscore}/100 — SUSPICIOUS**")
+            else:
+                st.success(f"🟢 **Header Risk Score: {hscore}/100 — CLEAN**")
+
+            st.divider()
+
+            # Findings
+            if h["findings"]:
+                st.markdown("### 🚨 Security Findings")
+                for f in h["findings"]:
+                    st.markdown(f"- {f}")
+
+            st.divider()
+
+            # Sender info
+            st.markdown("### 📬 Sender Information")
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown(f"**From:** `{h['from'] or 'N/A'}`")
+                st.markdown(f"**Reply-To:** `{h['reply_to'] or 'N/A'}`")
+                st.markdown(f"**Return-Path:** `{h['return_path'] or 'N/A'}`")
+            with col2:
+                st.markdown(f"**Date:** `{h['date'] or 'N/A'}`")
+                st.markdown(f"**Message-ID:** `{h['message_id'][:60] if h['message_id'] else 'N/A'}`")
+                st.markdown(f"**Originating IP:** `{h['x_originating_ip'] or 'N/A'}`")
+
+            # Routing hops
+            if h["received_hops"]:
+                st.divider()
+                st.markdown(f"### 🌐 Email Routing ({len(h['received_hops'])} hops)")
+                for i, hop in enumerate(h["received_hops"]):
+                    with st.expander(f"Hop {i+1} — {hop['from_host'] or 'unknown'} → {hop['by_host'] or 'unknown'}"):
+                        if hop["ip"]:
+                            st.markdown(f"**IP:** `{hop['ip']}`")
+                        if hop["timestamp"]:
+                            st.markdown(f"**Time:** `{hop['timestamp']}`")
+                        st.code(hop["raw"], language=None)
+        else:
+            st.warning("Please paste some email headers first.")
 
 with tab1:
     col_left, col_right = st.columns([2, 1])
