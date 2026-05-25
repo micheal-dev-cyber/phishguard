@@ -1,11 +1,15 @@
-import google.generativeai as genai
-import os
+# src/ai_analyzer.py
 import sys
 import os
 from pathlib import Path
 
-# Add the project root (parent of 'src') to the system path
+# Add the root directory to sys.path so 'config' can be found
 sys.path.append(str(Path(__file__).parent.parent))
+
+from config import GOOGLE_API_KEY
+import google.generativeai as genai
+
+# ... rest of your code ...
 
 # Now this import will work
 from config import GOOGLE_API_KEY
