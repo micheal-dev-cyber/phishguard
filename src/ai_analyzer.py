@@ -1,19 +1,19 @@
+# src/ai_analyzer.py
 import streamlit as st
 import google.generativeai as genai
 
 def generate_ai_report(email_text, rule_findings=None):
     """Generates an incident response report using Google Gemini."""
     
-    # Securely fetch key from Streamlit Secrets
     api_key = st.secrets.get("GOOGLE_API_KEY")
     
     if not api_key:
-        return "❌ AI Error: GOOGLE_API_KEY not found in Streamlit Secrets."
+        return "❌ AI Error: GOOGLE_API_KEY is not configured in Streamlit Secrets."
     
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel('gemini-1.5-flash')
     
-    context_injection = f"Static analyzer flagged: {', '.join(rule_findings)}.\n" if rule_findings else ""
+    context_injection = f"Our local static analyzer already flagged these vulnerabilities: {', '.join(rule_findings)}.\n" if rule_findings else ""
     
     prompt = f"""
     You are an expert SecOps Incident Responder. Analyze this email:
