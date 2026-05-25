@@ -12,6 +12,5 @@ except Exception:
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 # config.py
-
-# Replace the old model with this:
-AI_MODEL = "meta-llama/llama-3-8b-instruct:free"
+# Use the official canonical model ID
+AI_MODEL = "meta-llama/llama-3-8b-instruct"
