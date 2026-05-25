@@ -1,3 +1,17 @@
+# src/ai_analyzer.py
+from config import GOOGLE_API_KEY
+import google.generativeai as genai
+
+import sys
+import os
+from pathlib import Path
+
+# Explicitly add the project root to the system path
+sys.path.append(str(Path(__file__).parent))
+
+# Now you can safely import from your src folder
+from src.ai_analyzer import generate_ai_report
+
 import streamlit as st
 import plotly.graph_objects as go
 import pandas as pd
