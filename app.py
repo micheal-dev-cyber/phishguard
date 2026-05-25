@@ -1,13 +1,12 @@
 import streamlit as st
-from src.osint import run_osint
 import plotly.graph_objects as go
-import plotly.express as px
 from src.detector import analyze_email
 from src.database import init_db, save_analysis, get_history
 from src.report_generator import generate_pdf_report
 from src.auth import check_password, logout
 from src.threat_intel import check_multiple_urls, get_threat_summary
-from src.admin import get_stats, get_all_analyses, get_recent_threats, get_daily_counts, get_severity_trend
+from src.osint import run_osint
+from src.admin import get_stats, get_all_analyses, get_recent_threats, get_daily_counts
 
 st.set_page_config(
     page_title="PhishGuard AI",
@@ -109,7 +108,7 @@ with tab1:
         st.checkbox("Analyze URLs", value=True)
         st.checkbox("Keyword Detection", value=True)
         st.checkbox("Social Engineering", value=True)
-        enable_vt = st.checkbox("Threat Intelligence (VirusTotal)", value=True)
+        enable_vt = st.checkbox("Threat Intelligence + OSINT", value=True)
         st.markdown("")
         analyze_btn = st.button("🔍 Analyze Email", use_container_width=True, type="primary")
         st.markdown("")
@@ -123,9 +122,9 @@ with tab1:
                 results = analyze_email(email_text)
                 save_analysis(results, email_text)
 
-            vt_results  = []
-            vt_summary  = {}
-            osint_data  = {}
+            vt_results = []
+            vt_summary = {}
+            osint_data = {}
 
             if enable_vt and results["urls_found"]:
                 with st.spinner("Checking URLs against VirusTotal..."):
@@ -147,6 +146,7 @@ with tab1:
         results          = st.session_state["results"]
         email_text_saved = st.session_state["email_text"]
         vt_results       = st.session_state.get("vt_results", [])
+        osint_data       = st.session_state.get("osint_data", {})
 
         st.divider()
         st.markdown("## 📊 Analysis Results")
@@ -232,8 +232,7 @@ with tab1:
 
                 if vt_link and status != "error":
                     st.markdown(f"<a href='{vt_link}' target='_blank' style='font-size:11px;color:#60a5fa'>View on VirusTotal →</a>", unsafe_allow_html=True)
-        
-                    osint_data = st.session_state.get("osint_data", {})
+
         if osint_data and osint_data.get("domain_results"):
             st.markdown("<div class='section-title'>🔎 OSINT Investigation</div>", unsafe_allow_html=True)
 
@@ -242,25 +241,23 @@ with tab1:
 
             osint_risk = osint_data.get("osint_risk_score", 0)
             if osint_risk >= 75:
-                st.error(f"🔴 OSINT Risk Score: {osint_risk}/100 — High confidence threat")
+                st.error(f"🔴 OSINT Risk Score: {osint_risk}/100 — High confidence threat infrastructure")
             elif osint_risk >= 50:
-                st.warning(f"🟠 OSINT Risk Score: {osint_risk}/100 — Suspicious infrastructure")
+                st.warning(f"🟠 OSINT Risk Score: {osint_risk}/100 — Suspicious infrastructure detected")
             elif osint_risk >= 25:
-                st.warning(f"🟡 OSINT Risk Score: {osint_risk}/100 — Some suspicious indicators")
+                st.warning(f"🟡 OSINT Risk Score: {osint_risk}/100 — Some suspicious indicators found")
             else:
-                st.success(f"🟢 OSINT Risk Score: {osint_risk}/100 — No major concerns")
+                st.success(f"🟢 OSINT Risk Score: {osint_risk}/100 — No major infrastructure concerns")
 
             for domain_result in osint_data["domain_results"]:
-                domain    = domain_result["domain"]
-                d_score   = domain_result["risk_score"]
-                country   = domain_result.get("country", "Unknown")
-                org       = domain_result.get("org", "Unknown")
-                age       = domain_result.get("domain_age_days")
-                created   = domain_result.get("creation_date", "Unknown")
-                ip        = domain_result.get("ip", "Unknown")
+                domain     = domain_result["domain"]
+                d_score    = domain_result["risk_score"]
+                country    = domain_result.get("country", "Unknown")
+                org        = domain_result.get("org", "Unknown")
+                age        = domain_result.get("domain_age_days")
+                created    = domain_result.get("creation_date", "Unknown")
+                ip         = domain_result.get("ip", "Unknown")
                 indicators = domain_result.get("risk_indicators", [])
-
-                color = "#ff4444" if d_score >= 75 else "#ff8800" if d_score >= 50 else "#ffaa00" if d_score >= 25 else "#44aa44"
 
                 with st.expander(f"🌐 **{domain}** — Risk: {d_score}/100"):
                     col_d1, col_d2, col_d3 = st.columns(3)
@@ -270,8 +267,7 @@ with tab1:
 
                     st.markdown(f"""
                     <div style='background:#111827;border:1px solid #1e3a5f;
-                        border-radius:8px;padding:12px;margin:8px 0;
-                        font-size:13px'>
+                        border-radius:8px;padding:12px;margin:8px 0;font-size:13px'>
                         <b style='color:#94a3b8'>IP Address:</b>
                         <span style='color:#e2e8f0'> {ip}</span><br>
                         <b style='color:#94a3b8'>Organization:</b>
@@ -289,22 +285,18 @@ with tab1:
             if osint_data.get("ip_results"):
                 st.markdown("**🖥️ IP Investigation:**")
                 for ip_result in osint_data["ip_results"]:
-                    ip      = ip_result["ip"]
-                    country = ip_result.get("country", "Unknown")
-                    org     = ip_result.get("org", "Unknown")
-                    ip_inds = ip_result.get("risk_indicators", [])
-                    ip_score = ip_result.get("risk_score", 0)
-
+                    ip       = ip_result["ip"]
+                    country  = ip_result.get("country", "Unknown")
+                    org      = ip_result.get("org", "Unknown")
+                    ip_inds  = ip_result.get("risk_indicators", [])
                     st.markdown(f"""
                     <div style='background:#111827;border:1px solid #1e3a5f;
-                        border-radius:8px;padding:12px;margin:4px 0;
-                        font-size:13px'>
+                        border-radius:8px;padding:12px;margin:4px 0;font-size:13px'>
                         🖥️ <b>{ip}</b> — {country} — {org}
-                        {f"<br>⚠️ " + "<br>⚠️ ".join(ip_inds) if ip_inds else ""}
+                        {"<br>⚠️ " + "<br>⚠️ ".join(ip_inds) if ip_inds else ""}
                     </div>
                     """, unsafe_allow_html=True)
 
-        if results["has_attachments"]:
         if results["has_attachments"]:
             st.warning("📎 **Attachment detected** — Do NOT open files from unverified senders.")
 
@@ -417,50 +409,31 @@ if is_admin:
 
         col1, col2, col3, col4 = st.columns(4)
         with col1:
-            st.markdown(f"""
-            <div class='stat-card'>
-                <div style='font-size:2rem;font-weight:900;color:#60a5fa'>{stats["total_analyses"]}</div>
-                <div style='color:#64748b;font-size:0.85rem'>Total Analyses</div>
-            </div>""", unsafe_allow_html=True)
+            st.markdown(f"<div class='stat-card'><div style='font-size:2rem;font-weight:900;color:#60a5fa'>{stats['total_analyses']}</div><div style='color:#64748b;font-size:0.85rem'>Total Analyses</div></div>", unsafe_allow_html=True)
         with col2:
-            st.markdown(f"""
-            <div class='stat-card'>
-                <div style='font-size:2rem;font-weight:900;color:#22c55e'>{stats["today_analyses"]}</div>
-                <div style='color:#64748b;font-size:0.85rem'>Today</div>
-            </div>""", unsafe_allow_html=True)
+            st.markdown(f"<div class='stat-card'><div style='font-size:2rem;font-weight:900;color:#22c55e'>{stats['today_analyses']}</div><div style='color:#64748b;font-size:0.85rem'>Today</div></div>", unsafe_allow_html=True)
         with col3:
-            st.markdown(f"""
-            <div class='stat-card'>
-                <div style='font-size:2rem;font-weight:900;color:#ff4444'>{stats["critical_count"]}</div>
-                <div style='color:#64748b;font-size:0.85rem'>Critical Threats</div>
-            </div>""", unsafe_allow_html=True)
+            st.markdown(f"<div class='stat-card'><div style='font-size:2rem;font-weight:900;color:#ff4444'>{stats['critical_count']}</div><div style='color:#64748b;font-size:0.85rem'>Critical Threats</div></div>", unsafe_allow_html=True)
         with col4:
-            st.markdown(f"""
-            <div class='stat-card'>
-                <div style='font-size:2rem;font-weight:900;color:#ffaa00'>{stats["avg_risk_score"]}</div>
-                <div style='color:#64748b;font-size:0.85rem'>Avg Risk Score</div>
-            </div>""", unsafe_allow_html=True)
+            st.markdown(f"<div class='stat-card'><div style='font-size:2rem;font-weight:900;color:#ffaa00'>{stats['avg_risk_score']}</div><div style='color:#64748b;font-size:0.85rem'>Avg Risk Score</div></div>", unsafe_allow_html=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
 
         col_chart1, col_chart2 = st.columns(2)
 
         with col_chart1:
-            daily = get_daily_counts(14)
+            daily  = get_daily_counts(14)
             dates  = [d["date"] for d in daily]
             counts = [d["count"] for d in daily]
-
             fig3 = go.Figure(go.Bar(
-                x=dates, y=counts,
-                marker_color="#2563eb",
+                x=dates, y=counts, marker_color="#2563eb",
                 text=counts, textposition="outside"
             ))
             fig3.update_layout(
                 title="Analyses per Day (Last 14 Days)",
                 paper_bgcolor="rgba(0,0,0,0)",
                 plot_bgcolor="rgba(0,0,0,0)",
-                font_color="#e2e8f0",
-                height=300,
+                font_color="#e2e8f0", height=300,
                 margin=dict(t=40, b=20, l=20, r=20)
             )
             fig3.update_xaxes(showgrid=False, tickangle=45)
@@ -470,12 +443,7 @@ if is_admin:
         with col_chart2:
             severity_data = stats["severity_counts"]
             if severity_data:
-                sev_colors = {
-                    "CRITICAL": "#ff4444",
-                    "HIGH":     "#ff8800",
-                    "MEDIUM":   "#ffaa00",
-                    "LOW":      "#44aa44"
-                }
+                sev_colors = {"CRITICAL": "#ff4444", "HIGH": "#ff8800", "MEDIUM": "#ffaa00", "LOW": "#44aa44"}
                 fig4 = go.Figure(go.Pie(
                     labels=list(severity_data.keys()),
                     values=list(severity_data.values()),
@@ -485,8 +453,7 @@ if is_admin:
                 fig4.update_layout(
                     title="Severity Distribution",
                     paper_bgcolor="rgba(0,0,0,0)",
-                    font_color="#e2e8f0",
-                    height=300,
+                    font_color="#e2e8f0", height=300,
                     margin=dict(t=40, b=20, l=20, r=20)
                 )
                 st.plotly_chart(fig4, use_container_width=True)
@@ -500,7 +467,6 @@ if is_admin:
         else:
             for row in threats:
                 timestamp, score, severity, kw_hits, susp_urls, preview = row
-                color = "#ff4444" if severity == "CRITICAL" else "#ff8800"
                 with st.expander(f"**{severity}** — Score {score}/100 — {timestamp[:16]}"):
                     col_a, col_b, col_c = st.columns(3)
                     col_a.metric("Risk Score", score)
@@ -510,12 +476,12 @@ if is_admin:
 
         st.divider()
         st.markdown("### 👥 Client Management")
-        st.info("To add or remove clients, update the passwords section in Streamlit Cloud secrets.")
+        st.info("To add or remove clients update the passwords section in Streamlit Cloud secrets.")
         st.code("""
 [passwords]
-admin    = "your_admin_password"
-client1  = "client1_password"
-client2  = "client2_password"
+admin   = "your_admin_password"
+client1 = "client1_password"
+client2 = "client2_password"
         """, language="toml")
 
         col_refresh, col_export = st.columns(2)
