@@ -1,122 +1,74 @@
+# src/ai_analyzer.py
 import requests
-import os
+import json
+from config import OPENROUTER_API_KEY, OPENROUTER_BASE_URL, AI_MODEL
 
-try:
-    import streamlit as st
-    GROQ_API_KEY = st.secrets.get("GROQ_API_KEY", os.getenv("GROQ_API_KEY", ""))
-except Exception:
-    GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-
-GROQ_BASE_URL = "https://api.groq.com/openai/v1"
-AI_MODEL = "llama-3.1-8b-instant"
-
-
-def ai_analyze_email(email_text: str, detection_results: dict) -> str:
-
-    if not GROQ_API_KEY:
-        return "AI analysis unavailable — add GROQ_API_KEY to Streamlit secrets."
-
-    keyword_summary = ""
-    for category, keywords in detection_results.get("keyword_matches", {}).items():
-        keyword_summary += f"- {category.upper()}: {', '.join(keywords)}\n"
-
-    url_summary = ""
-    if detection_results.get("suspicious_urls"):
-        for item in detection_results["suspicious_urls"]:
-            url_summary += f"- {item['url']}\n"
-    else:
-        url_summary = "None detected"
-
-    prompt = f"""You are a senior cybersecurity analyst specializing in phishing detection.
-
-Automated scanner results:
-- RISK SCORE: {detection_results['risk_score']}/100
-- SEVERITY: {detection_results['severity']}
-- KEYWORD HITS: {detection_results['total_keyword_hits']}
-- SUSPICIOUS URLS: {detection_results['suspicious_url_count']}
-- ATTACHMENTS: {detection_results['has_attachments']}
-
-KEYWORDS TRIGGERED:
-{keyword_summary if keyword_summary else "None"}
-
-SUSPICIOUS URLS:
-{url_summary}
-
-EMAIL CONTENT:
-\"\"\"
-{email_text[:1500]}
-\"\"\"
-
-Write a professional security report with these exact sections:
-
-## Executive Summary
-2-3 sentences on threat level and attack vector.
-
-## Attack Technique
-Name the specific technique and explain how it works.
-
-## Key Threat Indicators
-List each suspicious element and explain why it is dangerous.
-
-## Social Engineering Analysis
-Explain the psychological manipulation tactics used.
-
-## Potential Impact
-What happens if the victim follows the instructions?
-
-## Recommended Actions
-Numbered list of steps to take right now.
-
-## Confidence Level
-HIGH / MEDIUM / LOW and why.
-
-Be professional, specific, and actionable."""
+def generate_ai_report(email_text, rule_findings=None):
+    """
+    Dispatches threat text and local heuristic findings to Mistral via OpenRouter.
+    Returns a clean, structured incident response report.
+    """
+    if not OPENROUTER_API_KEY:
+        return "⚠️ AI Warning: No OpenRouter API key found. Please configure your .env file or Streamlit deployment secrets."
 
     headers = {
-        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json",
+        "HTTP-Referer": "https://phishguard.ai", 
+        "X-Title": "PhishGuard Enterprise AI"
     }
+
+    # Pass rule findings along to give the AI context on what we already found
+    context_injection = ""
+    if rule_findings:
+        context_injection = f"Our local static analyzer already flagged these vulnerabilities: {', '.join(rule_findings)}.\n"
+
+    prompt = f"""
+You are an expert SecOps Incident Responder handling corporate mail security. 
+Analyze this untrusted email content for social engineering, spear-phishing, or financial coercion patterns.
+
+{context_injection}
+---
+RAW EMAIL BODY/CONTEXT:
+{email_text}
+---
+
+Generate an analytical investigation profile structured exactly with these headers:
+### 🔍 EXECUTIVE RISK BREAKDOWN
+(Provide 2 clear, authoritative sentences on the core exploit intention)
+
+### ⚠️ PSYCHOLOGICAL & TECHNICAL TACTICS
+(Provide bullet points focusing on urgency vectors, credential harvesting setups, or authority fabrications)
+
+### 🛡️ SECURE MITIGATION ACTIONS
+(Provide bullet points listing immediate protective instructions for the target operator or internal IT administration)
+
+Be objective, cold, and professional. Avoid conversational filler or introductory remarks.
+"""
 
     payload = {
         "model": AI_MODEL,
         "messages": [
-            {
-                "role": "system",
-                "content": "You are an expert cybersecurity analyst. Write clear, professional security reports."
-            },
-            {
-                "role": "user",
-                "content": prompt
-            }
-        ],
-        "max_tokens": 1000,
-        "temperature": 0.2,
+            {"role": "system", "content": "You are a senior, pragmatic security operations analyst."},
+            {"role": "user", "content": prompt}
+        ]
     }
 
     try:
         response = requests.post(
-            f"{GROQ_BASE_URL}/chat/completions",
+            f"{OPENROUTER_BASE_URL}/chat/completions",
             headers=headers,
-            json=payload,
-            timeout=30
+            data=json.dumps(payload),
+            timeout=15
         )
-
-        if response.status_code == 429:
-            return "AI service is busy. Wait 30 seconds and try again."
-
-        if response.status_code != 200:
-            return f"AI service error {response.status_code}: {response.text[:200]}"
-
-        data = response.json()
-
-        if "choices" not in data:
-            return f"Unexpected response: {str(data)[:200]}"
-
-        return data["choices"][0]["message"]["content"]
-
+        
+        if response.status_code == 200:
+            response_json = response.json()
+            return response_json['choices'][0]['message']['content'].strip()
+        else:
+            return f"❌ OpenRouter API Error: [{response.status_code}] - {response.text}"
+            
     except requests.exceptions.Timeout:
-        return "AI analysis timed out. Please try again."
-    except requests.exceptions.ConnectionError:
-        return "Could not connect to AI service."
+        return "❌ Threat Engine Timeout: The remote OpenRouter connection timed out."
     except Exception as e:
-        return f"AI analysis failed: {str(e)}"
+        return f"❌ Critical Engine Exception: {str(e)}"

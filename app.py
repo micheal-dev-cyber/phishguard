@@ -16,6 +16,7 @@ from src.threat_intel import check_multiple_urls, get_threat_summary
 from src.osint import run_osint
 from src.admin import get_stats, get_all_analyses, get_recent_threats, get_daily_counts
 from src.header_parser import parse_email_headers
+from src.ai_analyzer import generate_ai_report  # <-- Dynamic AI Import
 
 # --- Page Configuration ---
 st.set_page_config(
@@ -46,11 +47,17 @@ st.markdown("""
         padding: 10px;
         margin: 5px 0;
     }
+    .ai-container {
+        background: #0f172a;
+        border: 1px solid #334155;
+        border-radius: 8px;
+        padding: 20px;
+        margin-top: 15px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
 # --- Authentication Gate ---
-# This will render the login/activate screen if the user is not authenticated.
 if not check_password():
     st.stop()
 
@@ -90,37 +97,50 @@ with tab1:
         if not email_text.strip():
             st.warning("Please paste some text to analyze.")
         else:
+            # Step A: Run structural static analysis
             with st.spinner("Analyzing threat vectors..."):
                 result = analyze_email(email_text)
+                findings = result.get("findings", [])
+                urls = result.get("urls", [])
+
+            # Step B: Trigger the Mistral LLM Brain 🧠
+            with st.spinner("🤖 Consulting Mistral Threat Engine..."):
+                ai_report_markdown = generate_ai_report(email_text, rule_findings=findings)
                 
-                # Save to database
-                save_analysis(
-                    risk_score=result.get("risk_score", 0),
-                    severity=result.get("severity", "Low"),
-                    keyword_hits=len(result.get("findings", [])),
-                    suspicious_urls=len(result.get("urls", [])),
-                    email_preview=email_text[:100] + "..."
-                )
-                
-                st.success("Analysis Complete!")
-                
-                # Metrics
-                col1, col2, col3 = st.columns(3)
-                col1.metric("Risk Score", f"{result.get('risk_score', 0)}/100")
-                col2.metric("Severity", result.get('severity', 'Low'))
-                col3.metric("Flags Detected", len(result.get("findings", [])))
-                
-                # URLs Display
-                if result.get("urls"):
-                    st.markdown("### 🔗 Suspicious URLs Detected")
-                    for url in result.get("urls", []):
+            # Step C: Save to database
+            save_analysis(
+                risk_score=result.get("risk_score", 0),
+                severity=result.get("severity", "Low"),
+                keyword_hits=len(findings),
+                suspicious_urls=len(urls),
+                email_preview=email_text[:100] + "..."
+            )
+            
+            st.success("Complete System Analysis Generated!")
+            
+            # Metrics UI Layout
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Risk Score", f"{result.get('risk_score', 0)}/100")
+            col2.metric("Severity", result.get('severity', 'Low'))
+            col3.metric("Flags Detected", len(findings))
+            
+            # Left/Right Layout for Findings vs AI Report
+            layout_left, layout_right = st.columns([1, 2])
+            
+            with layout_left:
+                if urls:
+                    st.markdown("#### 🔗 Extracted Links")
+                    for url in urls:
                         st.markdown(f"<div class='url-box'>{url}</div>", unsafe_allow_html=True)
                 
-                # Findings Display
-                if result.get("findings"):
-                    st.markdown("### ⚠️ Threat Findings")
-                    for finding in result.get("findings", []):
+                if findings:
+                    st.markdown("#### ⚠️ Heuristic Detections")
+                    for finding in findings:
                         st.markdown(f"- {finding}")
+                        
+            with layout_right:
+                st.markdown("#### 🤖 Deep Learning SecOps Report")
+                st.markdown(f"<div class='ai-container'>{ai_report_markdown}</div>", unsafe_allow_html=True)
 
 # ==========================================
 # TAB 2: HISTORY
@@ -202,7 +222,7 @@ with tab4:
             with st.spinner("Parsing routing hops and verifying signatures..."):
                 headers_result = parse_email_headers(raw_headers)
                 
-                # 1. Summary Metrics
+                # Summary Metrics
                 st.markdown("### 🛡️ Authentication Summary")
                 c1, c2, c3, c4 = st.columns(4)
                 c1.metric("Risk Score", f"{headers_result['risk_score']}/100")
@@ -214,13 +234,13 @@ with tab4:
                         f"{auth['icon']} {auth['result']}"
                     )
                 
-                # 2. Key Findings
+                # Key Findings
                 if headers_result["findings"]:
                     st.markdown("### ⚠️ Security Findings")
                     for f in headers_result["findings"]:
                         st.markdown(f"- {f}")
                 
-                # 3. Routing Hops (Expandable)
+                # Routing Hops
                 with st.expander("🌐 View Network Routing Hops", expanded=False):
                     if not headers_result["received_hops"]:
                         st.info("No clear routing hops detected.")
