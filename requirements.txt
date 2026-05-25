@@ -4,3 +4,4 @@ requests
 plotly
 fpdf2
 dnspython
+google-generativeai
