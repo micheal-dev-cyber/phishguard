@@ -1,4 +1,7 @@
 # src/ai_analyzer.py
+import streamlit as st
+from src.ai_analyzer import generate_ai_report
+# ... your other imports
 from config import GOOGLE_API_KEY
 import google.generativeai as genai
 
