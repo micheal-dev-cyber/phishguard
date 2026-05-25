@@ -1,7 +1,8 @@
 import streamlit as st
 import plotly.graph_objects as go
 from src.detector import analyze_email
-from src.database import init_db, save_analysis, get_history
+from src.database import init_db, save_analysis, get_history, verify_user_login, register_premium_user
+init_db()  # ← must be here, before anything else runs
 from src.report_generator import generate_pdf_report
 from src.auth import check_password, logout
 from src.threat_intel import check_multiple_urls, get_threat_summary
@@ -66,10 +67,10 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+init_db()
+
 if not check_password():
     st.stop()
-
-init_db()
 
 col_title, col_user = st.columns([4, 1])
 with col_title:
