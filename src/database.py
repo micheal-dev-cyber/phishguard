@@ -62,16 +62,14 @@ def init_db():
     conn.commit()
     conn.close()
 
-def save_analysis(results: dict, email_text: str, ai_report: str = ""):
-    """Logs historical scanning metrics data for user telemetry dashboards."""
+def save_analysis(risk_score, severity, keyword_hits, suspicious_urls, email_preview, ai_report=""):
+    """Saves a scan result to the database, including the AI SecOps report."""
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    preview = email_text[:100].replace("\n", " ") + "..."
     c.execute("""
         INSERT INTO analyses (timestamp, risk_score, severity, keyword_hits, suspicious_urls, email_preview, ai_report)
         VALUES (?, ?, ?, ?, ?, ?, ?)
-    """, (datetime.now().isoformat(), results.get("risk_score", 0), results.get("severity", "LOW"),
-          results.get("total_keyword_hits", 0), results.get("suspicious_url_count", 0), preview, ai_report))
+    """, (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), risk_score, severity, keyword_hits, suspicious_urls, email_preview, ai_report))
     conn.commit()
     conn.close()
 
