@@ -88,7 +88,8 @@ else:
 with tab1:
     q = check_quota(username, plan)
     if q["over_limit"] and plan != "enterprise":
-        st.error(f"🚫 Monthly limit reached ({q[\'limit\']} analyses). Upgrade your plan to continue.")
+        limit_val = q['limit']
+        st.error(f"🚫 Monthly limit reached ({limit_val} analyses). Upgrade your plan to continue.")
         st.stop()
 
     col_left, col_right = st.columns([2, 1])
