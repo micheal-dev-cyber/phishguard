@@ -5,10 +5,9 @@ import re
 import openai
 
 # ─────────────────────────────────────────────
-# SAFE CLIENT INITIALIZATION
+# SAFE CLIENT INITIALIZATION (Prevents boot crashes)
 # ─────────────────────────────────────────────
-def _get_openai_client():
-    """Safely fetches OpenAI client only if API key environment variable exists."""
+def _get_client():
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
         return None
@@ -16,7 +15,6 @@ def _get_openai_client():
         return openai.OpenAI(api_key=api_key)
     except Exception:
         return None
-
 
 # ─────────────────────────────────────────────
 # HEURISTIC FALLBACKS (no API key / API down)
@@ -94,8 +92,9 @@ def _url_heuristic_fallback(url: str, host: str, error_msg: str = "") -> dict:
 # ─────────────────────────────────────────────
 
 def analyze_email(subject: str, body: str, sender: str) -> dict:
-    if not os.getenv("OPENAI_API_KEY"):
-        return _email_heuristic_fallback(subject, body, sender)
+    client = _get_client()
+    if not client:
+        return _email_heuristic_fallback(subject, body, sender, "OpenAI API Key missing")
 
     prompt = f"""Perform a highly rigorous Cyber Threat Analysis on this incoming email for enterprise security protection.
 
@@ -149,8 +148,9 @@ def analyze_url(url: str) -> dict:
     except Exception:
         host = url.lower()
 
-    if not os.getenv("OPENAI_API_KEY"):
-        return _url_heuristic_fallback(url, host)
+    client = _get_client()
+    if not client:
+        return _url_heuristic_fallback(url, host, "OpenAI API Key missing")
 
     prompt = f"""Review this suspicious URL from an enterprise firewall inspection.
 
@@ -192,38 +192,20 @@ Return ONLY a valid JSON object:
 # ─────────────────────────────────────────────
 
 def copilot_chat(messages: list) -> str:
-    """
-    messages: list of {"role": "user"|"assistant", "content": str}
-    """
-    if not os.getenv("OPENAI_API_KEY"):
+    client = _get_client()
+    if not client:
         last = messages[-1]["content"].lower() if messages else ""
         if any(w in last for w in ["spf", "dkim", "dmarc", "header"]):
             return """### 🛡️ Email Authentication (SPF, DKIM, DMARC)
 - **SPF**: Lists authorized IPs that can send mail for your domain.
 - **DKIM**: Adds a cryptographic signature to verify the message wasn't tampered.
-- **DMARC**: Policy that tells receivers what to do when SPF/DKIM fail (reject, quarantine, or monitor).
+- **DMARC**: Policy that tells receivers what to do when SPF/DKIM fail.
 
 *PhishGuard Tip*: Emails missing all three records should automatically trigger elevated threat scores."""
-        if any(w in last for w in ["typosquat", "domain", "spoof", "brand"]):
-            return """### 🌐 Typosquatting & Domain Spoofing
-Attackers register domains visually similar to trusted brands (e.g. `paypa1.com`, `micros0ft-login.net`).
+        return """### 👋 PhishGuard AI Copilot (Fallback Mode)
+I can help you understand email headers, typosquatting, and mitigation rules. *(Connect OPENAI_API_KEY for dynamic contextual chat).*"""
 
-**Common tricks:**
-- Character substitution: `l` → `1`, `o` → `0`, `m` → `rn`
-- Subdomain abuse: `paypal.com.verify.attacker.com` — real domain is `attacker.com`
-- Homograph attacks: Cyrillic letters that look identical to Latin ones"""
-        return """### 👋 PhishGuard AI Copilot
-I can help you with:
-- Reading email headers (SPF, DKIM, DMARC)
-- Identifying social engineering tactics
-- Understanding typosquatting and domain spoofing
-- Formulating remediation strategies
-
-Try asking: *"Explain SPF and DKIM"* or *"What is typosquatting?"*"""
-
-    system_prompt = """You are PhishGuard AI Copilot — a senior enterprise cyber defense assistant, malware analyst, and phishing intelligence expert.
-Help analysts understand cybersecurity, phishing techniques, SPF/DKIM/DMARC flags, typosquatting, social engineering, and email/URL threat identification.
-Be professional, precise, and educational. Use Markdown formatting. Only discuss cybersecurity topics."""
+    system_prompt = "You are PhishGuard AI Copilot — a senior enterprise cyber defense assistant. Use Markdown formatting."
 
     try:
         response = client.chat.completions.create(
@@ -234,7 +216,7 @@ Be professional, precise, and educational. Use Markdown formatting. Only discuss
         )
         return response.choices[0].message.content
     except Exception as e:
-        return f"*Copilot error: {e}. Tip: Always verify the raw sender domain and hover over suspect links before clicking.*"
+        return f"*Copilot connection error: {e}*"
 
 
 # ─────────────────────────────────────────────
@@ -245,118 +227,50 @@ SIMULATION_FALLBACKS = {
     "bank-scam": {
         "subject": "Action Required: Suspicious transactions detected on your Chase VISA",
         "sender": "chase-security-verification@chase-service-billing.cc",
-        "body": """Dear Valued Cardmember,
-
-We detected an unusual login attempt from IP 185.220.101.99 (St. Petersburg, Russia).
-To prevent immediate account termination, verify your identity within 2 hours:
-
-http://chase-verification-account-secure.cc/verify-webscr
-
-Do not reply to this email.
-Chase Fraud Protection Team""",
-        "clues": [
-            "Urgency tactic: 2-hour deadline triggers panic response",
-            "Typosquatted domain: chase-service-billing.cc ≠ chase.com",
-            "HTTP (not HTTPS) link — no SSL encryption",
-            "IP address 185.220.101.99 linked to known threat actor infrastructure"
-        ],
-        "remediation": "Never follow bank links from emails. Verify directly at chase.com or call the number on your card."
+        "body": "Dear Valued Cardmember,\n\nWe detected an unusual login attempt from IP 185.220.101.99. Verify your identity within 2 hours:\n\nhttp://chase-verification-account-secure.cc/verify-webscr",
+        "clues": ["Urgency tactic: 2-hour deadline triggers panic response", "Typosquatted domain: chase-service-billing.cc", "Insecure HTTP protocol link"],
+        "remediation": "Never follow financial management links from emails. Navigate to the authentic domain directly."
     },
     "crypto-scam": {
         "subject": "URGENT: MetaMask Wallet Upgrade Required — Risk of Token Loss",
         "sender": "accounts-no-reply@metamask-support-portal.cc",
-        "body": """Dear MetaMask User,
-
-Due to Ethereum Core Upgrade v2.041, you must migrate your wallet.
-Failure before May 31 will permanently lock your ERC-20 and ERC-721 tokens.
-
-Enter your 12-word seed phrase to sync:
-https://metamask-wallet-reverify.ru/restore
-
-Security Team, MetaMask""",
-        "clues": [
-            "Requesting seed phrase — MetaMask NEVER does this",
-            "Russian .ru domain — MetaMask uses metamask.io",
-            "Fear of token loss used as social engineering trigger",
-            "No personalized greeting — mass phishing template"
-        ],
-        "remediation": "Never share your seed phrase with anyone. Legitimate web3 services cannot request it."
+        "body": "Dear MetaMask User,\n\nEnter your 12-word seed phrase to sync:\nhttps://metamask-wallet-reverify.ru/restore",
+        "clues": ["Requesting private seed phrases", "Suspicious TLD tracking registry (.ru)"],
+        "remediation": "Legitimate non-custodial wallets will never ask for your seed recovery phrase."
     },
     "fake-hr": {
         "subject": "Confidential: Q2 Performance Bonus Adjustments",
         "sender": "internal-reporting@corporation-benefits-payroll.net",
-        "body": """Dear Colleague,
-
-Please review the updated performance calculations and employee bonuses for Q2.
-Some adjustments apply retroactively next pay cycle.
-
-Review here:
-http://internal-hr-benefits-portal.online/salary-ledger
-
-HR Operations Department""",
-        "clues": [
-            "Salary curiosity used as social engineering bait",
-            ".online domain pretending to be internal corporate system",
-            "Generic greeting — not personalized"
-        ],
-        "remediation": "Report unsolicited HR spreadsheet links to IT security. Verify via official internal portals only."
+        "body": "Dear Colleague,\n\nPlease review your retroactive pay cycle adjustments here:\nhttp://internal-hr-benefits-portal.online/salary-ledger",
+        "clues": ["Salary curiosity financial trap bait", "External .online landing space matching internal terminology"],
+        "remediation": "Verify corporate financial adjustments strictly over voice or validated intranet solutions."
     },
     "fake-delivery": {
         "subject": "DHL: Outstanding customs fee for Parcel #402910",
         "sender": "dhl-packet-alert@dhl-tracking-system.cc",
-        "body": """Dear Customer,
-
-Your parcel #402910 has an outstanding customs balance of €1.85.
-We cannot dispatch until payment is resolved.
-
-Pay here:
-http://dhl-packet-status-tracking-office.info/secure-update
-
-DHL Express Customer Care""",
-        "clues": [
-            "Small fee (€1.85) designed to bypass skepticism",
-            "Generic 'Dear Customer' greeting",
-            ".info domain used as fake billing gateway"
-        ],
-        "remediation": "Never pay delivery fees from email links. Track parcels directly at dhl.com."
+        "body": "Dear Customer,\n\nYour parcel cannot dispatch until payment of €1.85 is complete:\nhttp://dhl-packet-status-tracking-office.info/secure-update",
+        "clues": ["Baiting user with microtransaction friction fee", "Fake tracking layout architecture"],
+        "remediation": "Track international courier accounts through the primary app environment only."
     }
 }
 
 def simulate_phishing(scenario_type: str) -> dict:
-    if not os.getenv("OPENAI_API_KEY"):
+    client = _get_client()
+    if not client:
         return SIMULATION_FALLBACKS.get(scenario_type, SIMULATION_FALLBACKS["bank-scam"])
 
-    prompt = f"""Generate a highly realistic educational mock phishing email for scenario: '{scenario_type}'.
-This is strictly for corporate cybersecurity awareness training.
-
-Return ONLY a valid JSON object:
-{{
-  "subject": "Deceptive subject line bypassing standard cognitive defenses",
-  "sender": "Simulated deceptive address e.g. update@paypa1-support.cc",
-  "body": "Complete realistic mock email body with social engineering, links, urgency, and instructions",
-  "clues": [
-    "Clue 1: specific suspicious indicator inside the email",
-    "Clue 2: typosquatted sender domain analysis",
-    "Clue 3: social engineering emotion manipulation trigger",
-    "Clue 4: technical anomaly in URL or formatting"
-  ],
-  "remediation": "Actionable guidance on why this was a trap and how to block it"
-}}"""
-
+    prompt = f"Generate an educational mock phishing email JSON for scenario: '{scenario_type}'."
     try:
         response = client.chat.completions.create(
             model="gpt-4o",
-            messages=[
-                {"role": "system", "content": "You are a cybersecurity trainer creating realistic phishing simulations for employee awareness. Respond with valid JSON only."},
-                {"role": "user", "content": prompt}
-            ],
+            messages=[{"role": "system", "content": "Respond with valid JSON containing keys 'subject', 'sender', 'body', 'clues' (list), and 'remediation'."}, {"role": "user", "content": prompt}],
             temperature=0.7,
             max_tokens=1000
         )
         raw = response.choices[0].message.content.strip()
         raw = re.sub(r'^```json|^```|```$', '', raw, flags=re.MULTILINE).strip()
         return json.loads(raw)
-    except Exception as e:
+    except Exception:
         return SIMULATION_FALLBACKS.get(scenario_type, SIMULATION_FALLBACKS["bank-scam"])
 
 
@@ -365,47 +279,21 @@ Return ONLY a valid JSON object:
 # ─────────────────────────────────────────────
 
 def analyze_screenshot(image_base64: str, mime_type: str = "image/png") -> dict:
-    fallback = {
-        "isPhishing": True,
-        "score": 85,
-        "severity": "HIGH",
-        "brandTarget": "Unknown",
-        "detectedTextOcr": "Unable to extract text — AI vision unavailable",
-        "visualAnomalies": ["AI vision not configured — manual review required"],
-        "detailedVerdict": "Screenshot analysis requires OpenAI API key with GPT-4o vision enabled.",
-        "remediation": "Configure OPENAI_API_KEY to enable visual phishing detection."
-    }
+    client = _get_client()
+    if not client:
+        return {
+            "isPhishing": True, "score": 85, "severity": "HIGH", "brandTarget": "Unknown",
+            "detectedTextOcr": "AI vision unavailable — Missing API Key",
+            "visualAnomalies": ["AI vision missing configuration — manual override applied"],
+            "detailedVerdict": "Visual scanner pipeline requires structural setup validation.",
+            "remediation": "Add an OPENAI_API_KEY environment configuration value to map UI triggers safely."
+        }
 
-    if not os.getenv("OPENAI_API_KEY"):
-        return fallback
-
-    prompt = """Analyze this screenshot for cybersecurity inspection.
-This may be a suspected login page, phishing email render, bank alert, or credential harvest form.
-
-Perform OCR to transcribe any visible text.
-Assess for: brand typosquatting, fake login forms, anomalous UI elements, low-quality logos, credential harvesting traps.
-
-Return ONLY a valid JSON object:
-{
-  "isPhishing": boolean,
-  "score": integer (0-100),
-  "severity": "CRITICAL" | "HIGH" | "MEDIUM" | "LOW",
-  "brandTarget": "brand being impersonated e.g. Microsoft, PayPal, Netflix, or Generic Suspicious",
-  "detectedTextOcr": "complete transcribed text from the image",
-  "visualAnomalies": ["anomaly 1", "anomaly 2", "anomaly 3"],
-  "detailedVerdict": "cyber analyst explanation of the threat",
-  "remediation": "steps to prevent and respond to this threat"
-}"""
-
+    prompt = "Analyze this screenshot layout for visual spoofing or brand mimicry threats. Respond with strict JSON matching keys: isPhishing, score, severity, brandTarget, detectedTextOcr, visualAnomalies, detailedVerdict, remediation."
     try:
         response = client.chat.completions.create(
             model="gpt-4o",
-            messages=[
-                {"role": "user", "content": [
-                    {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{image_base64}"}},
-                    {"type": "text", "text": prompt}
-                ]}
-            ],
+            messages=[{"role": "user", "content": [{"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{image_base64}"}}, {"type": "text", "text": prompt}]}],
             temperature=0.1,
             max_tokens=1000
         )
@@ -413,5 +301,26 @@ Return ONLY a valid JSON object:
         raw = re.sub(r'^```json|^```|```$', '', raw, flags=re.MULTILINE).strip()
         return json.loads(raw)
     except Exception as e:
-        fallback["detailedVerdict"] = f"Vision analysis error: {e}"
-        return fallback
+        return {"isPhishing": False, "score": 0, "severity": "LOW", "brandTarget": "N/A", "detectedTextOcr": f"Error: {e}"}
+
+# ─────────────────────────────────────────────
+# MISSING BRIDGE BRIDGE FUNCTION (FIXES IMPORTER)
+# ─────────────────────────────────────────────
+def generate_ai_report(email_text, rule_findings=None):
+    """Compiles a beautifully formatted markdown security report for the main UI panel."""
+    analysis = analyze_email("Incident Scan", email_text, "External Source Channel")
+    
+    report = f"""### 🔍 EXECUTIVE RISK BREAKDOWN
+- **Phishing Probability Assessment:** {"⚠️ CRITICAL THREAT FLAG" if analysis.get('isPhishing') else "✅ Low Suspicion Indicators"}
+- **Threat Vector Score:** `{analysis.get('score', 0)} / 100` ({analysis.get('severity', 'LOW')})
+- **Analysis Summary:** {analysis.get('analysisSummary', 'Static heuristic scan completed.')}
+
+### ⚠️ PSYCHOLOGICAL & TECHNICAL TACTICS
+"""
+    for indicator in analysis.get('indicators', []):
+        report += f"- {indicator}\n"
+    if "senderAssessment" in analysis:
+        report += f"- {analysis['senderAssessment']}\n"
+        
+    report += f"\n### 🛡️ SECURE MITIGATION ACTIONS\n{analysis.get('remediationPlan', 'Quarantine message headers and evaluate embedded links manually.')}"
+    return report
