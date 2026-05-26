@@ -343,13 +343,13 @@ with tab7:
     
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.markdown(f"<div class='stat-card'><div style='font-size:2rem;font-weight:900;color:#60a5fa'>{stats['total_analyses']}</div><div style='color:#64748b;font-size:0.85rem'>Total Analyses</div></div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='stat-card'><div style='font-size:2rem;font-weight:900;color:#60a5fa'>{stats.get('total_analyses', 0)}</div><div style='color:#64748b;font-size:0.85rem'>Total Analyses</div></div>", unsafe_allow_html=True)
     with col2:
-        st.markdown(f"<div class='stat-card'><div style='font-size:2rem;font-weight:900;color:#22c55e'>{stats['today_analyses']}</div><div style='color:#64748b;font-size:0.85rem'>Scans Today</div></div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='stat-card'><div style='font-size:2rem;font-weight:900;color:#22c55e'>{stats.get('today_analyses', 0)}</div><div style='color:#64748b;font-size:0.85rem'>Scans Today</div></div>", unsafe_allow_html=True)
     with col3:
-        st.markdown(f"<div class='stat-card'><div style='font-size:2rem;font-weight:900;color:#ff4444'>{stats['critical_count']}</div><div style='color:#64748b;font-size:0.85rem'>Critical Threats</div></div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='stat-card'><div style='font-size:2rem;font-weight:900;color:#ff4444'>{stats.get('critical_count', 0)}</div><div style='color:#64748b;font-size:0.85rem'>Critical Threats</div></div>", unsafe_allow_html=True)
     with col4:
-        st.markdown(f"<div class='stat-card'><div style='font-size:2rem;font-weight:900;color:#ffaa00'>{stats['avg_risk_score']}</div><div style='color:#64748b;font-size:0.85rem'>Avg Risk Score</div></div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='stat-card'><div style='font-size:2rem;font-weight:900;color:#ffaa00'>{stats.get('avg_risk_score', 0)}</div><div style='color:#64748b;font-size:0.85rem'>Avg Risk Score</div></div>", unsafe_allow_html=True)
     
     st.markdown("<br>", unsafe_allow_html=True)
     
@@ -402,7 +402,7 @@ with tab7:
         st.plotly_chart(fig3, use_container_width=True)
         
     with col_chart2:
-        severity_data = stats["severity_counts"]
+        severity_data = stats.get("severity_counts", {})
         if severity_data:
             sev_colors = {"CRITICAL": "#ff4444", "HIGH": "#ff8800", "MEDIUM": "#ffaa00", "LOW": "#44aa44"}
             fig4 = go.Figure(go.Pie(
