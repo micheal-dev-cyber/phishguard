@@ -1,6 +1,7 @@
 # app.py
 import streamlit as st
 import plotly.graph_objects as go
+import plotly.express as px  # Added to prevent missing name map errors
 import pandas as pd
 import csv
 import io
@@ -55,6 +56,13 @@ st.markdown("""
         padding: 20px;
         margin-top: 15px;
     }
+    .stat-card {
+        background: #1e293b;
+        border: 1px solid #334155;
+        border-radius: 8px;
+        padding: 15px;
+        text-align: center;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -79,7 +87,7 @@ with st.sidebar:
 st.title("🛡️ PhishGuard AI")
 st.markdown("Commercial Threat Intelligence & Header Analysis Platform")
 
-# --- Define the 4 Main Tabs ---
+# --- Define the 7 Main Tabs ---
 tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "🔍 Analyze", 
     "📨 Header Parser", 
@@ -90,6 +98,100 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "⚙️ Admin"
 ])
 
+# ==========================================
+# TAB 1: ANALYZE EMAIL
+# ==========================================
+with tab1:
+    st.markdown("### 🔍 Scan Suspicious Content")
+    email_text = st.text_area("Paste the email content or suspicious URLs here:", height=200)
+    
+    if st.button("🚀 Run AI Analysis", type="primary", use_container_width=True):
+        if not email_text.strip():
+            st.warning("Please paste some text to analyze.")
+        else:
+            with st.spinner("Analyzing threat vectors..."):
+                result = static_analyze_email(email_text)
+                findings = result.get("findings", [])
+                urls = result.get("urls", [])
+
+            with st.spinner("🤖 Consulting Threat Engine..."):
+                ai_report_markdown = generate_ai_report(email_text, rule_findings=findings)
+                
+            save_analysis(
+                risk_score=result.get("risk_score", 0),
+                severity=result.get("severity", "Low"),
+                keyword_hits=len(findings),
+                suspicious_urls=len(urls),
+                email_preview=email_text[:100] + "...",
+                ai_report=ai_report_markdown
+            )
+            
+            st.success("Complete System Analysis Generated!")
+            
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Risk Score", f"{result.get('risk_score', 0)}/100")
+            col2.metric("Severity", result.get('severity', 'Low'))
+            col3.metric("Flags Detected", len(findings))
+            
+            layout_left, layout_right = st.columns([1, 2])
+            with layout_left:
+                if urls:
+                    st.markdown("#### 🔗 Extracted Links")
+                    for url in urls:
+                        st.markdown(f"<div class='url-box'>{url}</div>", unsafe_allow_html=True)
+                if findings:
+                    st.markdown("#### ⚠️ Heuristic Detections")
+                    for finding in findings:
+                        st.markdown(f"- {finding}")
+                        
+            with layout_right:
+                st.markdown("#### 🤖 Deep Learning SecOps Report")
+                st.markdown(f"<div class='ai-container'>{ai_report_markdown}</div>", unsafe_allow_html=True)
+
+# ==========================================
+# TAB 2: EMAIL HEADER ANALYZER
+# ==========================================
+with tab2:
+    st.markdown("### 📨 Email Header Analyzer")
+    st.markdown("Paste the full raw headers from any suspicious email to perform deep authentication analysis.")
+    
+    st.info("""
+    **How to get raw headers:**
+    • **Gmail:** Open email → 3 dots menu → Show original → Copy all
+    • **Outlook:** File → Properties → Internet headers → Copy all
+    """)
+    
+    raw_headers = st.text_area("Paste raw email headers here:", height=250, key="headers_area")
+    
+    if st.button("Analyze Headers", type="primary", use_container_width=True):
+        if not raw_headers.strip():
+            st.warning("Please paste email headers first.")
+        else:
+            with st.spinner("Parsing routing hops and verifying signatures..."):
+                headers_result = parse_email_headers(raw_headers)
+                
+                st.markdown("### 🛡️ Authentication Summary")
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("Risk Score", f"{headers_result['risk_score']}/100")
+                
+                auth_cols = [c2, c3, c4]
+                for idx, auth in enumerate(headers_result["auth_summary"]):
+                    if idx < len(auth_cols):
+                        auth_cols[idx].metric(auth["protocol"], f"{auth['icon']} {auth['result']}")
+                
+                if headers_result["findings"]:
+                    st.markdown("### ⚠️ Security Findings")
+                    for f in headers_result["findings"]:
+                        st.markdown(f"- {f}")
+                
+                with st.expander("🌐 View Network Routing Hops", expanded=False):
+                    if not headers_result["received_hops"]:
+                        st.info("No clear routing hops detected.")
+                    else:
+                        for idx, hop in enumerate(headers_result["received_hops"]):
+                            st.markdown(f"**Hop {idx + 1}:** `{hop['ip']}`")
+                            st.code(hop['raw'], language="text")
+
 # ── TAB 3: AI COPILOT ──────────────────────────────────────────
 with tab3:
     st.markdown("## 🤖 PhishGuard AI Copilot")
@@ -99,7 +201,6 @@ with tab3:
         st.session_state.copilot_messages = []
 
     for msg in st.session_state.copilot_messages:
-        role_icon = "🧑" if msg["role"] == "user" else "🤖"
         with st.chat_message(msg["role"]):
             st.markdown(f"{msg['content']}")
 
@@ -110,11 +211,9 @@ with tab3:
             st.markdown(user_input)
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
-                from src.ai_analyzer import copilot_chat
                 reply = copilot_chat(st.session_state.copilot_messages)
             st.markdown(reply)
         st.session_state.copilot_messages.append({"role": "assistant", "content": reply})
-
 
 # ── TAB 4: PHISHING SIMULATOR ──────────────────────────────────
 with tab4:
@@ -128,10 +227,7 @@ with tab4:
     """, unsafe_allow_html=True)
 
     scenario = st.selectbox("Choose a phishing scenario:", [
-        "bank-scam",
-        "crypto-scam", 
-        "fake-hr",
-        "fake-delivery"
+        "bank-scam", "crypto-scam", "fake-hr", "fake-delivery"
     ], format_func=lambda x: {
         "bank-scam": "🏦 Bank / Credit Card Scam",
         "crypto-scam": "₿ Crypto / Web3 Wallet Scam",
@@ -141,7 +237,6 @@ with tab4:
 
     if st.button("🎯 Generate Phishing Simulation", type="primary", use_container_width=True):
         with st.spinner("Generating realistic phishing email..."):
-            from src.ai_analyzer import simulate_phishing
             sim = simulate_phishing(scenario)
 
         st.markdown("### 📧 Simulated Phishing Email")
@@ -165,17 +260,12 @@ with tab4:
         st.markdown("### ✅ Remediation")
         st.success(sim.get("remediation", ""))
 
-
 # ── TAB 5: SCREENSHOT SCANNER ──────────────────────────────────
 with tab5:
     st.markdown("## 🖼️ Screenshot Phishing Scanner")
-    st.markdown("<p style='color:#94a3b8'>Upload a screenshot of a suspicious login page, email, or alert. AI will analyze it for phishing indicators.</p>", unsafe_allow_html=True)
+    st.markdown("<p style='color:#94a3b8'>Upload a screenshot of a suspicious login page or alert.</p>", unsafe_allow_html=True)
 
-    uploaded_img = st.file_uploader(
-        "Upload screenshot (PNG, JPG, WEBP)",
-        type=["png", "jpg", "jpeg", "webp"],
-        key="screenshot_uploader"
-    )
+    uploaded_img = st.file_uploader("Upload screenshot (PNG, JPG, WEBP)", type=["png", "jpg", "jpeg", "webp"], key="screenshot_uploader")
 
     if uploaded_img:
         import base64
@@ -186,18 +276,13 @@ with tab5:
 
         if st.button("🔍 Scan Screenshot for Phishing", type="primary", use_container_width=True):
             with st.spinner("Running AI vision analysis..."):
-                from src.ai_analyzer import analyze_screenshot
                 result = analyze_screenshot(img_b64, mime_type)
 
             vscore = result.get("score", 0)
-            if vscore >= 75:
-                st.error(f"🔴 **Visual Risk Score: {vscore}/100 — CRITICAL THREAT**")
-            elif vscore >= 50:
-                st.error(f"🟠 **Visual Risk Score: {vscore}/100 — HIGH RISK**")
-            elif vscore >= 25:
-                st.warning(f"🟡 **Visual Risk Score: {vscore}/100 — SUSPICIOUS**")
-            else:
-                st.success(f"🟢 **Visual Risk Score: {vscore}/100 — CLEAN**")
+            if vscore >= 75: st.error(f"🔴 **Visual Risk Score: {vscore}/100 — CRITICAL THREAT**")
+            elif vscore >= 50: st.error(f"🟠 **Visual Risk Score: {vscore}/100 — HIGH RISK**")
+            elif vscore >= 25: st.warning(f"🟡 **Visual Risk Score: {vscore}/100 — SUSPICIOUS**")
+            else: st.success(f"🟢 **Visual Risk Score: {vscore}/100 — CLEAN**")
 
             st.divider()
             col1, col2 = st.columns(2)
@@ -223,124 +308,10 @@ with tab5:
                 st.markdown("### 🧠 AI Verdict")
                 st.info(result["detailedVerdict"])
 
-            if result.get("remediation"):
-                st.divider()
-                st.markdown("### ✅ Remediation")
-                st.success(result["remediation"])
-
 # ==========================================
-# TAB 1: ANALYZE EMAIL
+# TAB 6: HISTORY
 # ==========================================
-with tab1:
-    st.markdown("### 🔍 Scan Suspicious Content")
-    email_text = st.text_area("Paste the email content or suspicious URLs here:", height=200)
-    
-    if st.button("🚀 Run AI Analysis", type="primary", use_container_width=True):
-        if not email_text.strip():
-            st.warning("Please paste some text to analyze.")
-        else:
-            # Step A: Run structural static analysis
-            with st.spinner("Analyzing threat vectors..."):
-                result = analyze_email(email_text)
-                findings = result.get("findings", [])
-                urls = result.get("urls", [])
-
-            # Step B: Trigger the Mistral LLM Brain 🧠
-            with st.spinner("🤖 Consulting Mistral Threat Engine..."):
-                ai_report_markdown = generate_ai_report(email_text, rule_findings=findings)
-                
-            # Step C: Save to database
-            # Step C: Save to database
-            save_analysis(
-                risk_score=result.get("risk_score", 0),
-                severity=result.get("severity", "Low"),
-                keyword_hits=len(findings),
-                suspicious_urls=len(urls),
-                email_preview=email_text[:100] + "...",
-                ai_report=ai_report_markdown  # <--- WE MISSED THIS LINE!
-            )
-            
-            st.success("Complete System Analysis Generated!")
-            
-            # Metrics UI Layout
-            col1, col2, col3 = st.columns(3)
-            col1.metric("Risk Score", f"{result.get('risk_score', 0)}/100")
-            col2.metric("Severity", result.get('severity', 'Low'))
-            col3.metric("Flags Detected", len(findings))
-            
-            # Left/Right Layout for Findings vs AI Report
-            layout_left, layout_right = st.columns([1, 2])
-            
-            with layout_left:
-                if urls:
-                    st.markdown("#### 🔗 Extracted Links")
-                    for url in urls:
-                        st.markdown(f"<div class='url-box'>{url}</div>", unsafe_allow_html=True)
-                
-                if findings:
-                    st.markdown("#### ⚠️ Heuristic Detections")
-                    for finding in findings:
-                        st.markdown(f"- {finding}")
-                        
-            with layout_right:
-                st.markdown("#### 🤖 Deep Learning SecOps Report")
-                st.markdown(f"<div class='ai-container'>{ai_report_markdown}</div>", unsafe_allow_html=True)
-
-
-# ==========================================
-# TAB 4: EMAIL HEADER ANALYZER
-# ==========================================
-with tab4:
-    st.markdown("### 📨 Email Header Analyzer")
-    st.markdown("Paste the full raw headers from any suspicious email to perform deep authentication analysis.")
-    
-    st.info("""
-    **How to get raw headers:**
-    • **Gmail:** Open email → 3 dots menu → Show original → Copy all
-    • **Outlook:** File → Properties → Internet headers → Copy all
-    • **Apple Mail:** View → Message → All Headers → Copy
-    """)
-    
-    raw_headers = st.text_area("Paste raw email headers here:", height=250)
-    
-    if st.button("Analyze Headers", type="primary", use_container_width=True):
-        if not raw_headers.strip():
-            st.warning("Please paste email headers first.")
-        else:
-            with st.spinner("Parsing routing hops and verifying signatures..."):
-                headers_result = parse_email_headers(raw_headers)
-                
-                # Summary Metrics
-                st.markdown("### 🛡️ Authentication Summary")
-                c1, c2, c3, c4 = st.columns(4)
-                c1.metric("Risk Score", f"{headers_result['risk_score']}/100")
-                
-                auth_cols = [c2, c3, c4]
-                for idx, auth in enumerate(headers_result["auth_summary"]):
-                    auth_cols[idx].metric(
-                        auth["protocol"], 
-                        f"{auth['icon']} {auth['result']}"
-                    )
-                
-                # Key Findings
-                if headers_result["findings"]:
-                    st.markdown("### ⚠️ Security Findings")
-                    for f in headers_result["findings"]:
-                        st.markdown(f"- {f}")
-                
-                # Routing Hops
-                with st.expander("🌐 View Network Routing Hops", expanded=False):
-                    if not headers_result["received_hops"]:
-                        st.info("No clear routing hops detected.")
-                    else:
-                        for idx, hop in enumerate(headers_result["received_hops"]):
-                            st.markdown(f"**Hop {idx + 1}:** `{hop['ip']}`")
-                            st.code(hop['raw'], language="text")
-
-# ==========================================
-# TAB 2: HISTORY
-# ==========================================
-with tab2:
+with tab6:
     st.markdown("### 📊 Recent Analyses")
     recent = get_recent_threats(10)
     
@@ -348,8 +319,11 @@ with tab2:
         st.info("No analyses yet. Go to the Analyze tab and scan your first email.")
     else:
         for row in recent:
-            timestamp, severity, preview = row
-            color = "red" if severity in ["High", "Critical"] else "orange" if severity == "Medium" else "green"
+            if len(row) >= 3:
+                timestamp, severity, preview = row[0], row[1], row[2]
+            else:
+                timestamp, severity, preview = "Unknown time", "Unknown", "No content preview"
+            color = "red" if severity in ["High", "Critical", "CRITICAL", "HIGH"] else "orange" if severity in ["Medium", "MEDIUM"] else "green"
             st.markdown(
                 f"<div style='border-left: 4px solid {color}; padding-left: 10px; margin-bottom: 10px;'>"
                 f"<small>{timestamp} | <b>{severity}</b></small><br/>"
@@ -358,128 +332,112 @@ with tab2:
             )
 
 # ==========================================
-# TAB 3: ADMIN DASHBOARD
+# TAB 7: ADMIN DASHBOARD
 # ==========================================
-with tab3:
-            st.markdown("## ⚙️ Advanced SOC Dashboard")
-            st.markdown("<p style='color:#94a3b8'>Global Threat Telemetry & Client Management</p>", unsafe_allow_html=True)
-            st.divider()
+with tab7:
+    st.markdown("## ⚙️ Advanced SOC Dashboard")
+    st.markdown("<p style='color:#94a3b8'>Global Threat Telemetry & Client Management</p>", unsafe_allow_html=True)
+    st.divider()
+    
+    stats = get_stats()
+    
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.markdown(f"<div class='stat-card'><div style='font-size:2rem;font-weight:900;color:#60a5fa'>{stats['total_analyses']}</div><div style='color:#64748b;font-size:0.85rem'>Total Analyses</div></div>", unsafe_allow_html=True)
+    with col2:
+        st.markdown(f"<div class='stat-card'><div style='font-size:2rem;font-weight:900;color:#22c55e'>{stats['today_analyses']}</div><div style='color:#64748b;font-size:0.85rem'>Scans Today</div></div>", unsafe_allow_html=True)
+    with col3:
+        st.markdown(f"<div class='stat-card'><div style='font-size:2rem;font-weight:900;color:#ff4444'>{stats['critical_count']}</div><div style='color:#64748b;font-size:0.85rem'>Critical Threats</div></div>", unsafe_allow_html=True)
+    with col4:
+        st.markdown(f"<div class='stat-card'><div style='font-size:2rem;font-weight:900;color:#ffaa00'>{stats['avg_risk_score']}</div><div style='color:#64748b;font-size:0.85rem'>Avg Risk Score</div></div>", unsafe_allow_html=True)
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    col_map, col_radar = st.columns([2, 1])
+    with col_map:
+        st.markdown("### 🌍 Live Global Threat Map")
+        from src.admin import get_threat_map_data, get_attack_vectors
+        map_data = get_threat_map_data()
+        df_map = pd.DataFrame(map_data)
+        
+        if not df_map.empty:
+            fig_map = px.scatter_geo(
+                df_map, lat="lat", lon="lon", size="threats", color="threats",
+                hover_name="city", hover_data=["country"],
+                color_continuous_scale="Reds", size_max=25, projection="natural earth"
+            )
+            fig_map.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)",
+                geo=dict(bgcolor='rgba(0,0,0,0)', lakecolor='#0f172a', landcolor='#1e293b', showcountries=True, bordercolor='#334155'),
+                margin=dict(l=0, r=0, t=0, b=0), height=350
+            )
+            st.plotly_chart(fig_map, use_container_width=True)
+        else:
+            st.info("No geospatial map data compiled yet.")
+        
+    with col_radar:
+        st.markdown("### 🎯 Attack Vectors")
+        vectors = get_attack_vectors()
+        fig_radar = go.Figure(data=go.Scatterpolar(
+            r=list(vectors.values()), theta=list(vectors.keys()), fill='toself',
+            line_color='#ef4444', fillcolor='rgba(239, 68, 68, 0.2)'
+        ))
+        fig_radar.update_layout(
+            polar=dict(radialaxis=dict(visible=False, range=[0, 100]), bgcolor='rgba(0,0,0,0)'),
+            paper_bgcolor="rgba(0,0,0,0)", font_color="#e2e8f0",
+            margin=dict(l=20, r=20, t=20, b=20), height=350
+        )
+        st.plotly_chart(fig_radar, use_container_width=True)
+        
+    st.divider()
+    
+    col_chart1, col_chart2 = st.columns(2)
+    with col_chart1:
+        daily = get_daily_counts(14)
+        fig3 = go.Figure(go.Bar(
+            x=[d["date"] for d in daily], y=[d["count"] for d in daily],
+            marker_color="#2563eb", text=[d["count"] for d in daily], textposition="outside"
+        ))
+        fig3.update_layout(title="Analyses per Day (Last 14 Days)", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#e2e8f0", height=300)
+        st.plotly_chart(fig3, use_container_width=True)
+        
+    with col_chart2:
+        severity_data = stats["severity_counts"]
+        if severity_data:
+            sev_colors = {"CRITICAL": "#ff4444", "HIGH": "#ff8800", "MEDIUM": "#ffaa00", "LOW": "#44aa44"}
+            fig4 = go.Figure(go.Pie(
+                labels=list(severity_data.keys()), values=list(severity_data.values()),
+                marker_colors=[sev_colors.get(k, "#60a5fa") for k in severity_data.keys()], hole=0.4
+            ))
+            fig4.update_layout(title="Severity Distribution", paper_bgcolor="rgba(0,0,0,0)", font_color="#e2e8f0", height=300)
+            st.plotly_chart(fig4, use_container_width=True)
             
-            stats = get_stats()
-            
-            # 1. KPI CARDS
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                st.markdown(f"<div class='stat-card'><div style='font-size:2rem;font-weight:900;color:#60a5fa'>{stats['total_analyses']}</div><div style='color:#64748b;font-size:0.85rem'>Total Analyses</div></div>", unsafe_allow_html=True)
-            with col2:
-                st.markdown(f"<div class='stat-card'><div style='font-size:2rem;font-weight:900;color:#22c55e'>{stats['today_analyses']}</div><div style='color:#64748b;font-size:0.85rem'>Scans Today</div></div>", unsafe_allow_html=True)
-            with col3:
-                st.markdown(f"<div class='stat-card'><div style='font-size:2rem;font-weight:900;color:#ff4444'>{stats['critical_count']}</div><div style='color:#64748b;font-size:0.85rem'>Critical Threats</div></div>", unsafe_allow_html=True)
-            with col4:
-                st.markdown(f"<div class='stat-card'><div style='font-size:2rem;font-weight:900;color:#ffaa00'>{stats['avg_risk_score']}</div><div style='color:#64748b;font-size:0.85rem'>Avg Risk Score</div></div>", unsafe_allow_html=True)
-            
-            st.markdown("<br>", unsafe_allow_html=True)
-            
-            # 2. THREAT MAP & RADAR
-            col_map, col_radar = st.columns([2, 1])
-            
-            with col_map:
-                st.markdown("### 🌍 Live Global Threat Map")
-                import pandas as pd
-                from src.admin import get_threat_map_data, get_attack_vectors
-                map_data = get_threat_map_data()
-                df_map = pd.DataFrame(map_data)
+    st.divider()
+    
+    col_feed, col_clients = st.columns(2)
+    with col_feed:
+        st.markdown("### 🚨 Live Incident Feed")
+        threats = get_recent_threats(5)
+        if not threats:
+            st.info("No critical threats detected recently.")
+        else:
+            for row in threats:
+                if len(row) == 6:
+                    timestamp, score, severity, kw_hits, susp_urls, preview = row
+                    st.error(f"**{severity}** ({score}/100) — {timestamp[:16]}\n\n*URLs: {susp_urls} | Flags: {kw_hits}*\n\n`{preview[:60]}...`")
                 
-                fig_map = px.scatter_geo(
-                    df_map, lat="lat", lon="lon", size="threats", color="threats",
-                    hover_name="city", hover_data=["country"],
-                    color_continuous_scale="Reds", size_max=25,
-                    projection="natural earth"
-                )
-                fig_map.update_layout(
-                    paper_bgcolor="rgba(0,0,0,0)",
-                    geo=dict(bgcolor='rgba(0,0,0,0)', lakecolor='#0f172a', landcolor='#1e293b', showcountries=True, bordercolor='#334155'),
-                    margin=dict(l=0, r=0, t=0, b=0),
-                    height=350
-                )
-                st.plotly_chart(fig_map, use_container_width=True)
-                
-            with col_radar:
-                st.markdown("### 🎯 Attack Vectors")
-                vectors = get_attack_vectors()
-                fig_radar = go.Figure(data=go.Scatterpolar(
-                    r=list(vectors.values()),
-                    theta=list(vectors.keys()),
-                    fill='toself',
-                    line_color='#ef4444',
-                    fillcolor='rgba(239, 68, 68, 0.2)'
-                ))
-                fig_radar.update_layout(
-                    polar=dict(
-                        radialaxis=dict(visible=False, range=[0, 100]),
-                        bgcolor='rgba(0,0,0,0)'
-                    ),
-                    paper_bgcolor="rgba(0,0,0,0)",
-                    font_color="#e2e8f0",
-                    margin=dict(l=20, r=20, t=20, b=20),
-                    height=350
-                )
-                st.plotly_chart(fig_radar, use_container_width=True)
-                
-            st.divider()
+    with col_clients:
+        st.markdown("### 👥 Client Management")
+        st.info("Update `st.secrets` on Streamlit Cloud to manage access:")
+        st.code("[passwords]\nadmin = \"your_admin_password\"\nclient1 = \"client1_password\"", language="toml")
+        
+        all_analyses = get_all_analyses(100)
+        if all_analyses:
+            output = io.StringIO()
+            writer = csv.writer(output)
+            writer.writerow(["ID", "Timestamp", "Risk Score", "Severity", "Keywords", "URLs", "Preview"])
+            writer.writerows(all_analyses)
+            st.download_button("📥 Export All Telemetry (CSV)", data=output.getvalue(), file_name="phishguard_telemetry.csv", mime="text/csv", use_container_width=True)
             
-            # 3. TRENDS & SEVERITY
-            col_chart1, col_chart2 = st.columns(2)
-            with col_chart1:
-                daily = get_daily_counts(14)
-                fig3 = go.Figure(go.Bar(
-                    x=[d["date"] for d in daily], y=[d["count"] for d in daily],
-                    marker_color="#2563eb", text=[d["count"] for d in daily], textposition="outside"
-                ))
-                fig3.update_layout(title="Analyses per Day (Last 14 Days)", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#e2e8f0", height=300)
-                fig3.update_xaxes(showgrid=False)
-                fig3.update_yaxes(gridcolor="#1e3a5f")
-                st.plotly_chart(fig3, use_container_width=True)
-                
-            with col_chart2:
-                severity_data = stats["severity_counts"]
-                if severity_data:
-                    sev_colors = {"CRITICAL": "#ff4444", "HIGH": "#ff8800", "MEDIUM": "#ffaa00", "LOW": "#44aa44"}
-                    fig4 = go.Figure(go.Pie(
-                        labels=list(severity_data.keys()), values=list(severity_data.values()),
-                        marker_colors=[sev_colors.get(k, "#60a5fa") for k in severity_data.keys()], hole=0.4
-                    ))
-                    fig4.update_layout(title="Severity Distribution", paper_bgcolor="rgba(0,0,0,0)", font_color="#e2e8f0", height=300)
-                    st.plotly_chart(fig4, use_container_width=True)
-                    
-            st.divider()
-            
-            # 4. INCIDENT FEED & CLIENT MANAGEMENT
-            col_feed, col_clients = st.columns(2)
-            
-            with col_feed:
-                st.markdown("### 🚨 Live Incident Feed")
-                threats = get_recent_threats(5)
-                if not threats:
-                    st.info("No critical threats detected recently.")
-                else:
-                    for row in threats:
-                        timestamp, score, severity, kw_hits, susp_urls, preview = row
-                        st.error(f"**{severity}** ({score}/100) — {timestamp[:16]}\n\n*URLs: {susp_urls} | Flags: {kw_hits}*\n\n`{preview[:60]}...`")
-                        
-            with col_clients:
-                st.markdown("### 👥 Client Management")
-                st.info("Update `st.secrets` on Streamlit Cloud to manage access:")
-                st.code("[passwords]\nadmin = \"your_admin_password\"\nclient1 = \"client1_password\"", language="toml")
-                
-                all_analyses = get_all_analyses(100)
-                if all_analyses:
-                    import csv, io
-                    output = io.StringIO()
-                    writer = csv.writer(output)
-                    writer.writerow(["ID", "Timestamp", "Risk Score", "Severity", "Keywords", "URLs", "Preview"])
-                    writer.writerows(all_analyses)
-                    st.download_button("📥 Export All Telemetry (CSV)", data=output.getvalue(), file_name="phishguard_telemetry.csv", mime="text/csv", use_container_width=True)
-                    
-                if st.button("🔄 Refresh Dashboard", use_container_width=True):
-                    st.rerun()
+        if st.button("🔄 Refresh Dashboard", use_container_width=True):
+            st.rerun()
