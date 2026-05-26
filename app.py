@@ -80,12 +80,153 @@ st.title("🛡️ PhishGuard AI")
 st.markdown("Commercial Threat Intelligence & Header Analysis Platform")
 
 # --- Define the 4 Main Tabs ---
-tab1, tab2, tab3, tab4 = st.tabs([
-    "🔍 Analyze Email", 
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+    "🔍 Analyze", 
+    "📨 Header Parser", 
+    "🤖 AI Copilot", 
+    "🎯 Phishing Simulator",
+    "🖼️ Screenshot Scanner",
     "📊 History", 
-    "⚙️ Admin Dashboard", 
-    "📨 Email Header Analyzer"
+    "⚙️ Admin"
 ])
+
+# ── TAB 3: AI COPILOT ──────────────────────────────────────────
+with tab3:
+    st.markdown("## 🤖 PhishGuard AI Copilot")
+    st.markdown("<p style='color:#94a3b8'>Ask anything about phishing, email headers, typosquatting, or threat remediation.</p>", unsafe_allow_html=True)
+
+    if "copilot_messages" not in st.session_state:
+        st.session_state.copilot_messages = []
+
+    for msg in st.session_state.copilot_messages:
+        role_icon = "🧑" if msg["role"] == "user" else "🤖"
+        with st.chat_message(msg["role"]):
+            st.markdown(f"{msg['content']}")
+
+    user_input = st.chat_input("Ask PhishGuard Copilot...")
+    if user_input:
+        st.session_state.copilot_messages.append({"role": "user", "content": user_input})
+        with st.chat_message("user"):
+            st.markdown(user_input)
+        with st.chat_message("assistant"):
+            with st.spinner("Thinking..."):
+                from src.ai_analyzer import copilot_chat
+                reply = copilot_chat(st.session_state.copilot_messages)
+            st.markdown(reply)
+        st.session_state.copilot_messages.append({"role": "assistant", "content": reply})
+
+
+# ── TAB 4: PHISHING SIMULATOR ──────────────────────────────────
+with tab4:
+    st.markdown("## 🎯 Phishing Simulator — Training Mode")
+    st.markdown("<p style='color:#94a3b8'>Generate realistic phishing emails for employee awareness training.</p>", unsafe_allow_html=True)
+
+    st.markdown("""
+    <div style='background:#0f172a;border:1px solid #f59e0b;border-radius:8px;padding:12px;margin-bottom:16px;font-size:13px;color:#94a3b8'>
+    ⚠️ <b style='color:#f59e0b'>For training purposes only.</b> These are simulated phishing emails to help users recognize threats.
+    </div>
+    """, unsafe_allow_html=True)
+
+    scenario = st.selectbox("Choose a phishing scenario:", [
+        "bank-scam",
+        "crypto-scam", 
+        "fake-hr",
+        "fake-delivery"
+    ], format_func=lambda x: {
+        "bank-scam": "🏦 Bank / Credit Card Scam",
+        "crypto-scam": "₿ Crypto / Web3 Wallet Scam",
+        "fake-hr": "👔 Fake HR / Salary Email",
+        "fake-delivery": "📦 Fake Delivery / DHL Scam"
+    }[x])
+
+    if st.button("🎯 Generate Phishing Simulation", type="primary", use_container_width=True):
+        with st.spinner("Generating realistic phishing email..."):
+            from src.ai_analyzer import simulate_phishing
+            sim = simulate_phishing(scenario)
+
+        st.markdown("### 📧 Simulated Phishing Email")
+        st.markdown(f"""
+        <div style='background:#1e0a0a;border:1px solid #dc2626;border-radius:10px;padding:20px;font-family:monospace;font-size:13px'>
+            <div style='margin-bottom:8px'><b style='color:#94a3b8'>From:</b> <span style='color:#fca5a5'>{sim.get('sender','')}</span></div>
+            <div style='margin-bottom:8px'><b style='color:#94a3b8'>Subject:</b> <span style='color:#fbbf24'>{sim.get('subject','')}</span></div>
+            <hr style='border-color:#374151;margin:12px 0'>
+            <pre style='white-space:pre-wrap;color:#e2e8f0;font-size:13px'>{sim.get('body','')}</pre>
+        </div>
+        """, unsafe_allow_html=True)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("### 🔍 Red Flags — Can You Spot Them?")
+        clues = sim.get("clues", [])
+        for i, clue in enumerate(clues):
+            with st.expander(f"🚩 Clue {i+1} — Click to reveal"):
+                st.markdown(f"**{clue}**")
+
+        st.divider()
+        st.markdown("### ✅ Remediation")
+        st.success(sim.get("remediation", ""))
+
+
+# ── TAB 5: SCREENSHOT SCANNER ──────────────────────────────────
+with tab5:
+    st.markdown("## 🖼️ Screenshot Phishing Scanner")
+    st.markdown("<p style='color:#94a3b8'>Upload a screenshot of a suspicious login page, email, or alert. AI will analyze it for phishing indicators.</p>", unsafe_allow_html=True)
+
+    uploaded_img = st.file_uploader(
+        "Upload screenshot (PNG, JPG, WEBP)",
+        type=["png", "jpg", "jpeg", "webp"],
+        key="screenshot_uploader"
+    )
+
+    if uploaded_img:
+        import base64
+        st.image(uploaded_img, caption="Uploaded screenshot", use_container_width=True)
+        mime_type = uploaded_img.type or "image/png"
+        img_bytes = uploaded_img.read()
+        img_b64 = base64.b64encode(img_bytes).decode("utf-8")
+
+        if st.button("🔍 Scan Screenshot for Phishing", type="primary", use_container_width=True):
+            with st.spinner("Running AI vision analysis..."):
+                from src.ai_analyzer import analyze_screenshot
+                result = analyze_screenshot(img_b64, mime_type)
+
+            vscore = result.get("score", 0)
+            if vscore >= 75:
+                st.error(f"🔴 **Visual Risk Score: {vscore}/100 — CRITICAL THREAT**")
+            elif vscore >= 50:
+                st.error(f"🟠 **Visual Risk Score: {vscore}/100 — HIGH RISK**")
+            elif vscore >= 25:
+                st.warning(f"🟡 **Visual Risk Score: {vscore}/100 — SUSPICIOUS**")
+            else:
+                st.success(f"🟢 **Visual Risk Score: {vscore}/100 — CLEAN**")
+
+            st.divider()
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown(f"**Severity:** `{result.get('severity','N/A')}`")
+                st.markdown(f"**Brand Target:** `{result.get('brandTarget','N/A')}`")
+            with col2:
+                st.markdown(f"**Phishing:** `{'YES ⚠️' if result.get('isPhishing') else 'NO ✅'}`")
+
+            if result.get("detectedTextOcr"):
+                st.divider()
+                st.markdown("### 📄 OCR — Detected Text")
+                st.code(result["detectedTextOcr"], language=None)
+
+            if result.get("visualAnomalies"):
+                st.divider()
+                st.markdown("### 🚨 Visual Anomalies Detected")
+                for anomaly in result["visualAnomalies"]:
+                    st.markdown(f"- {anomaly}")
+
+            if result.get("detailedVerdict"):
+                st.divider()
+                st.markdown("### 🧠 AI Verdict")
+                st.info(result["detailedVerdict"])
+
+            if result.get("remediation"):
+                st.divider()
+                st.markdown("### ✅ Remediation")
+                st.success(result["remediation"])
 
 # ==========================================
 # TAB 1: ANALYZE EMAIL
@@ -145,6 +286,57 @@ with tab1:
                 st.markdown("#### 🤖 Deep Learning SecOps Report")
                 st.markdown(f"<div class='ai-container'>{ai_report_markdown}</div>", unsafe_allow_html=True)
 
+
+# ==========================================
+# TAB 4: EMAIL HEADER ANALYZER
+# ==========================================
+with tab4:
+    st.markdown("### 📨 Email Header Analyzer")
+    st.markdown("Paste the full raw headers from any suspicious email to perform deep authentication analysis.")
+    
+    st.info("""
+    **How to get raw headers:**
+    • **Gmail:** Open email → 3 dots menu → Show original → Copy all
+    • **Outlook:** File → Properties → Internet headers → Copy all
+    • **Apple Mail:** View → Message → All Headers → Copy
+    """)
+    
+    raw_headers = st.text_area("Paste raw email headers here:", height=250)
+    
+    if st.button("Analyze Headers", type="primary", use_container_width=True):
+        if not raw_headers.strip():
+            st.warning("Please paste email headers first.")
+        else:
+            with st.spinner("Parsing routing hops and verifying signatures..."):
+                headers_result = parse_email_headers(raw_headers)
+                
+                # Summary Metrics
+                st.markdown("### 🛡️ Authentication Summary")
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("Risk Score", f"{headers_result['risk_score']}/100")
+                
+                auth_cols = [c2, c3, c4]
+                for idx, auth in enumerate(headers_result["auth_summary"]):
+                    auth_cols[idx].metric(
+                        auth["protocol"], 
+                        f"{auth['icon']} {auth['result']}"
+                    )
+                
+                # Key Findings
+                if headers_result["findings"]:
+                    st.markdown("### ⚠️ Security Findings")
+                    for f in headers_result["findings"]:
+                        st.markdown(f"- {f}")
+                
+                # Routing Hops
+                with st.expander("🌐 View Network Routing Hops", expanded=False):
+                    if not headers_result["received_hops"]:
+                        st.info("No clear routing hops detected.")
+                    else:
+                        for idx, hop in enumerate(headers_result["received_hops"]):
+                            st.markdown(f"**Hop {idx + 1}:** `{hop['ip']}`")
+                            st.code(hop['raw'], language="text")
+
 # ==========================================
 # TAB 2: HISTORY
 # ==========================================
@@ -201,53 +393,3 @@ with tab3:
                     mime="text/csv",
                     use_container_width=True
                 )
-
-# ==========================================
-# TAB 4: EMAIL HEADER ANALYZER
-# ==========================================
-with tab4:
-    st.markdown("### 📨 Email Header Analyzer")
-    st.markdown("Paste the full raw headers from any suspicious email to perform deep authentication analysis.")
-    
-    st.info("""
-    **How to get raw headers:**
-    • **Gmail:** Open email → 3 dots menu → Show original → Copy all
-    • **Outlook:** File → Properties → Internet headers → Copy all
-    • **Apple Mail:** View → Message → All Headers → Copy
-    """)
-    
-    raw_headers = st.text_area("Paste raw email headers here:", height=250)
-    
-    if st.button("Analyze Headers", type="primary", use_container_width=True):
-        if not raw_headers.strip():
-            st.warning("Please paste email headers first.")
-        else:
-            with st.spinner("Parsing routing hops and verifying signatures..."):
-                headers_result = parse_email_headers(raw_headers)
-                
-                # Summary Metrics
-                st.markdown("### 🛡️ Authentication Summary")
-                c1, c2, c3, c4 = st.columns(4)
-                c1.metric("Risk Score", f"{headers_result['risk_score']}/100")
-                
-                auth_cols = [c2, c3, c4]
-                for idx, auth in enumerate(headers_result["auth_summary"]):
-                    auth_cols[idx].metric(
-                        auth["protocol"], 
-                        f"{auth['icon']} {auth['result']}"
-                    )
-                
-                # Key Findings
-                if headers_result["findings"]:
-                    st.markdown("### ⚠️ Security Findings")
-                    for f in headers_result["findings"]:
-                        st.markdown(f"- {f}")
-                
-                # Routing Hops
-                with st.expander("🌐 View Network Routing Hops", expanded=False):
-                    if not headers_result["received_hops"]:
-                        st.info("No clear routing hops detected.")
-                    else:
-                        for idx, hop in enumerate(headers_result["received_hops"]):
-                            st.markdown(f"**Hop {idx + 1}:** `{hop['ip']}`")
-                            st.code(hop['raw'], language="text")
