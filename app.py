@@ -5,10 +5,10 @@ import pandas as pd
 import csv
 import io
 
-# Import project modules
+# Import project modules safely
 from src.database import init_db, save_analysis, get_history
-from src.detector import analyze_email
-from src.ai_analyzer import generate_ai_report
+from src.detector import analyze_email as static_analyze_email
+from src.ai_analyzer import analyze_email, analyze_url, copilot_chat, simulate_phishing, analyze_screenshot, generate_ai_report
 from src.report_generator import generate_pdf_report
 from src.auth import check_password, logout
 from src.threat_intel import check_multiple_urls, get_threat_summary
@@ -26,6 +26,7 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
 
 # --- Custom CSS ---
 st.markdown("""
