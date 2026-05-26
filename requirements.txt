@@ -2,12 +2,6 @@ streamlit
 python-dotenv
 requests
 plotly
-fpdf2
-dnspython
-google-generativeai
-streamlit
-plotly
+tldextract
 pandas
-requests
 openai
-python-dotenv"tldextract" 
