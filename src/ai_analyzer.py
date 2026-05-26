@@ -4,7 +4,19 @@ import json
 import re
 import openai
 
-client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# ─────────────────────────────────────────────
+# SAFE CLIENT INITIALIZATION
+# ─────────────────────────────────────────────
+def _get_openai_client():
+    """Safely fetches OpenAI client only if API key environment variable exists."""
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        return None
+    try:
+        return openai.OpenAI(api_key=api_key)
+    except Exception:
+        return None
+
 
 # ─────────────────────────────────────────────
 # HEURISTIC FALLBACKS (no API key / API down)
