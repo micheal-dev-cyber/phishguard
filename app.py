@@ -394,21 +394,17 @@ with tab7:
     with col_chart1:
         daily = get_daily_counts()
         
-        # Defensive check: ensure data is formatted correctly
-        if daily and isinstance(daily[0], dict):
-            dates = [d.get("date", "") for d in daily]
-            counts = [d.get("count", 0) for d in daily]
+        # Fix: Convert DataFrame to list of dicts if needed
+        if isinstance(daily, pd.DataFrame):
+            daily_data = daily.to_dict('records')
         else:
-            # Fallback if the data is just a list of dates/strings
-            st.warning("Dashboard: Using raw data format.")
-            dates = daily if isinstance(daily, list) else []
-            counts = [1] * len(dates) # Placeholder count if backend is broken
-
+            daily_data = daily or [] # Fallback to empty list if None
+            
         fig3 = go.Figure(go.Bar(
-            x=dates, 
-            y=counts,
+            x=[d.get("date", "") for d in daily_data], 
+            y=[d.get("count", 0) for d in daily_data],
             marker_color="#2563eb", 
-            text=counts, 
+            text=[d.get("count", 0) for d in daily_data], 
             textposition="outside"
         ))
         fig3.update_layout(
