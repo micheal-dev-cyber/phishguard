@@ -1,4 +1,4 @@
-import streamlit as st
+content = '''import streamlit as st
 import plotly.graph_objects as go
 from src.detector import analyze_email
 from src.database import init_db, save_analysis, get_history
@@ -48,28 +48,28 @@ is_admin  = st.session_state.get("is_admin", False)
 # ── Header ──────────────────────────────────────────────────────────────────
 col_title, col_quota, col_user = st.columns([3, 2, 1])
 with col_title:
-    st.markdown("<h1 style=\'color:#60a5fa;font-size:2rem;margin-bottom:0\'>🛡 PhishGuard AI</h1>", unsafe_allow_html=True)
-    st.markdown("<p style=\'color:#94a3b8;margin-top:2px\'>AI-Powered Phishing & Threat Detection</p>", unsafe_allow_html=True)
+    st.markdown("<h1 style=\\'color:#60a5fa;font-size:2rem;margin-bottom:0\\'>🛡 PhishGuard AI</h1>", unsafe_allow_html=True)
+    st.markdown("<p style=\\'color:#94a3b8;margin-top:2px\\'>AI-Powered Phishing & Threat Detection</p>", unsafe_allow_html=True)
 with col_quota:
     q = check_quota(username, plan)
     plan_label = PLANS.get(plan, PLANS["trial"])["label"]
     bar_color = "#ff4444" if q["pct"] >= 90 else "#ffaa00" if q["pct"] >= 70 else "#60a5fa"
     width = q["pct"] if plan != "enterprise" else 0
     st.markdown(f"""
-    <div style=\'margin-top:10px;padding:8px 14px;background:#111827;
-               border-radius:10px;border:1px solid #1e3a5f\'>
-      <div style=\'display:flex;justify-content:space-between;
-                  font-size:12px;color:#94a3b8;margin-bottom:4px\'>
+    <div style=\\'margin-top:10px;padding:8px 14px;background:#111827;
+               border-radius:10px;border:1px solid #1e3a5f\\'>
+      <div style=\\'display:flex;justify-content:space-between;
+                  font-size:12px;color:#94a3b8;margin-bottom:4px\\'>
         <span>📊 {plan_label} plan</span>
         <span>{q["usage"]} / {"∞" if plan == "enterprise" else q["limit"]} analyses</span>
       </div>
-      <div class=\'quota-bar-bg\'><div class=\'quota-bar-fill\'
-           style=\'width:{width}%;background:{bar_color}\'></div></div>
+      <div class=\\'quota-bar-bg\\'><div class=\\'quota-bar-fill\\'
+           style=\\'width:{width}%;background:{bar_color}\\'></div></div>
     </div>
     """, unsafe_allow_html=True)
 with col_user:
     st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown(f"<p style=\'color:#94a3b8;text-align:right\'>👤 {username}</p>", unsafe_allow_html=True)
+    st.markdown(f"<p style=\\'color:#94a3b8;text-align:right\\'>👤 {username}</p>", unsafe_allow_html=True)
     if st.button("Logout", use_container_width=True):
         logout()
 
@@ -88,7 +88,7 @@ else:
 with tab1:
     q = check_quota(username, plan)
     if q["over_limit"] and plan != "enterprise":
-        st.error(f"🚫 Monthly limit reached ({q[\'limit\']} analyses). Upgrade your plan to continue.")
+        st.error(f"🚫 Monthly limit reached ({q[\\'limit\\']} analyses). Upgrade your plan to continue.")
         st.stop()
 
     col_left, col_right = st.columns([2, 1])
@@ -179,23 +179,23 @@ with tab1:
         st.divider()
 
         if results["keyword_matches"]:
-            st.markdown("<div class=\'section-title\'>🎯 Phishing Indicators</div>", unsafe_allow_html=True)
+            st.markdown("<div class=\\'section-title\\'>🎯 Phishing Indicators</div>", unsafe_allow_html=True)
             for category, keywords in results["keyword_matches"].items():
                 with st.expander(f"**{category.upper()}** — {len(keywords)} match(es)"):
-                    tags = " ".join([f"<span class=\'tag\'>{kw}</span>" for kw in keywords])
+                    tags = " ".join([f"<span class=\\'tag\\'>{kw}</span>" for kw in keywords])
                     st.markdown(tags, unsafe_allow_html=True)
 
         if results["suspicious_urls"]:
-            st.markdown("<div class=\'section-title\'>🔗 Suspicious URLs Detected</div>", unsafe_allow_html=True)
+            st.markdown("<div class=\\'section-title\\'>🔗 Suspicious URLs Detected</div>", unsafe_allow_html=True)
             for item in results["suspicious_urls"]:
-                st.markdown(f"<div class=\'url-box\'>🚨 {item[\'url\']}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div class=\\'url-box\\'>🚨 {item[\\'url\\']}</div>", unsafe_allow_html=True)
         elif results["urls_found"]:
-            st.markdown("<div class=\'section-title\'>🔗 URLs Found (no pattern threats)</div>", unsafe_allow_html=True)
+            st.markdown("<div class=\\'section-title\\'>🔗 URLs Found (no pattern threats)</div>", unsafe_allow_html=True)
             for url in results["urls_found"]:
-                st.markdown(f"<div class=\'safe-url-box\'>🔗 {url}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div class=\\'safe-url-box\\'>🔗 {url}</div>", unsafe_allow_html=True)
 
         if vt_results:
-            st.markdown("<div class=\'section-title\'>🌐 Threat Intelligence (VirusTotal)</div>", unsafe_allow_html=True)
+            st.markdown("<div class=\\'section-title\\'>🌐 Threat Intelligence (VirusTotal)</div>", unsafe_allow_html=True)
             for vt in vt_results:
                 status  = vt.get("status","error")
                 url     = vt.get("url","")
@@ -205,20 +205,20 @@ with tab1:
                 threats = vt.get("threat_names",[])
                 vt_link = vt.get("vt_link","")
                 if status == "malicious":
-                    st.markdown(f"<div class=\'url-box\'>🔴 <b>MALICIOUS</b> — {url[:70]}<br><span style=\'font-size:12px\'>{mal}/{total} vendors flagged {\', \'.join(threats) if threats else \'\'}</span></div>", unsafe_allow_html=True)
+                    st.markdown(f"<div class=\\'url-box\\'>🔴 <b>MALICIOUS</b> — {url[:70]}<br><span style=\\'font-size:12px\\'>{mal}/{total} vendors flagged {\\', \\'.join(threats) if threats else \\'\\'}</span></div>", unsafe_allow_html=True)
                 elif status == "suspicious":
-                    st.markdown(f"<div style=\'background:#2a1a0a;border:1px solid #ff8800;border-radius:8px;padding:10px 14px;margin:4px 0\'>🟠 <b>SUSPICIOUS</b> — {url[:70]}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style=\\'background:#2a1a0a;border:1px solid #ff8800;border-radius:8px;padding:10px 14px;margin:4px 0\\'>🟠 <b>SUSPICIOUS</b> — {url[:70]}</div>", unsafe_allow_html=True)
                 elif status == "clean":
-                    st.markdown(f"<div class=\'safe-url-box\'>🟢 <b>CLEAN</b> — {url[:70]}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div class=\\'safe-url-box\\'>🟢 <b>CLEAN</b> — {url[:70]}</div>", unsafe_allow_html=True)
                 else:
-                    st.markdown(f"<div style=\'background:#111827;border:1px solid #1e3a5f;border-radius:8px;padding:10px 14px;margin:4px 0;font-size:12px;color:#64748b\'>⚪ Could not check: {url[:70]}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style=\\'background:#111827;border:1px solid #1e3a5f;border-radius:8px;padding:10px 14px;margin:4px 0;font-size:12px;color:#64748b\\'>⚪ Could not check: {url[:70]}</div>", unsafe_allow_html=True)
                 if vt_link and status != "error":
-                    st.markdown(f"<a href=\'{vt_link}\' target=\'_blank\' style=\'font-size:11px;color:#60a5fa\'>View on VirusTotal →</a>", unsafe_allow_html=True)
+                    st.markdown(f"<a href=\\'{vt_link}\\' target=\\'_blank\\' style=\\'font-size:11px;color:#60a5fa\\'>View on VirusTotal →</a>", unsafe_allow_html=True)
 
         if osint_data and osint_data.get("domain_results"):
-            st.markdown("<div class=\'section-title\'>🔎 OSINT Investigation</div>", unsafe_allow_html=True)
+            st.markdown("<div class=\\'section-title\\'>🔎 OSINT Investigation</div>", unsafe_allow_html=True)
             if osint_data.get("sender"):
-                st.markdown(f"**Sender:** `{osint_data[\'sender\']}`")
+                st.markdown(f"**Sender:** `{osint_data[\\'sender\\']}`")
             osint_risk = osint_data.get("osint_risk_score", 0)
             if osint_risk >= 75:
                 st.error(f"🔴 OSINT Risk Score: {osint_risk}/100 — High confidence threat infrastructure")
@@ -229,11 +229,11 @@ with tab1:
             else:
                 st.success(f"🟢 OSINT Risk Score: {osint_risk}/100 — No major infrastructure concerns")
             for dr in osint_data["domain_results"]:
-                with st.expander(f"🌐 **{dr[\'domain\']}** — Risk: {dr[\'risk_score\']}/100"):
+                with st.expander(f"🌐 **{dr[\\'domain\\']}** — Risk: {dr[\\'risk_score\\']}/100"):
                     c1, c2, c3 = st.columns(3)
-                    c1.metric("Risk Score", f"{dr[\'risk_score\']}/100")
+                    c1.metric("Risk Score", f"{dr[\\'risk_score\\']}/100")
                     c2.metric("Country", dr.get("country","Unknown"))
-                    c3.metric("Domain Age", f"{dr[\'domain_age_days\']} days" if dr.get("domain_age_days") else "Unknown")
+                    c3.metric("Domain Age", f"{dr[\\'domain_age_days\\']} days" if dr.get("domain_age_days") else "Unknown")
                     for ind in dr.get("risk_indicators",[]):
                         st.markdown(f"- {ind}")
 
@@ -241,19 +241,19 @@ with tab1:
             st.warning("📎 **Attachment detected** — Do NOT open files from unverified senders.")
         header = results.get("header_analysis", {})
         if header.get("findings"):
-            st.markdown("<div class=\'section-title\'>📨 Email Header Analysis</div>", unsafe_allow_html=True)
+            st.markdown("<div class=\\'section-title\\'>📨 Email Header Analysis</div>", unsafe_allow_html=True)
             for finding in header["findings"]: st.error(f"🚨 {finding}")
         attach = results.get("attachment_analysis", {})
         if attach.get("findings"):
-            st.markdown("<div class=\'section-title\'>📎 Attachment Analysis</div>", unsafe_allow_html=True)
+            st.markdown("<div class=\\'section-title\\'>📎 Attachment Analysis</div>", unsafe_allow_html=True)
             for finding in attach["findings"]: st.error(f"🚨 {finding}")
         lang = results.get("language_analysis", {})
         if lang.get("findings"):
-            st.markdown("<div class=\'section-title\'>🧠 Language & Manipulation Analysis</div>", unsafe_allow_html=True)
+            st.markdown("<div class=\\'section-title\\'>🧠 Language & Manipulation Analysis</div>", unsafe_allow_html=True)
             for finding in lang["findings"]: st.warning(f"⚠ {finding}")
 
         st.divider()
-        st.markdown("<div class=\'section-title\'>📋 Security Verdict</div>", unsafe_allow_html=True)
+        st.markdown("<div class=\\'section-title\\'>📋 Security Verdict</div>", unsafe_allow_html=True)
         if score >= 75:
             st.error("🔴 **CRITICAL THREAT** — Strong phishing indicators detected. Do not click any links.")
         elif score >= 50:
@@ -264,7 +264,7 @@ with tab1:
             st.success("🟢 **LOW RISK** — No major phishing indicators found. Stay vigilant.")
 
         st.divider()
-        st.markdown("<div class=\'section-title\'>📄 Export & AI Analysis</div>", unsafe_allow_html=True)
+        st.markdown("<div class=\\'section-title\\'>📄 Export & AI Analysis</div>", unsafe_allow_html=True)
         col_ai, col_pdf = st.columns(2)
         with col_ai:
             if st.button("🤖 Generate AI Security Report", use_container_width=True, type="secondary"):
@@ -280,10 +280,10 @@ with tab1:
             ai_report_text = st.session_state.get("ai_report", "")
             pdf_bytes = generate_pdf_report(results, email_text_saved, ai_report_text)
             st.download_button(label="📥 Download PDF Report", data=pdf_bytes,
-                file_name=f"phishguard_report_{results[\'severity\'].lower()}.pdf",
+                file_name=f"phishguard_report_{results[\\'severity\\'].lower()}.pdf",
                 mime="application/pdf", use_container_width=True, type="primary")
         if "ai_report" in st.session_state:
-            st.markdown("<div class=\'section-title\'>🤖 AI Security Analysis</div>", unsafe_allow_html=True)
+            st.markdown("<div class=\\'section-title\\'>🤖 AI Security Analysis</div>", unsafe_allow_html=True)
             st.markdown(st.session_state["ai_report"])
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -314,7 +314,7 @@ with tab2:
                 ca.metric("Risk Score", score)
                 cb.metric("Keyword Hits", kw_hits)
                 cc.metric("Suspicious URLs", susp_urls)
-                st.markdown(f"<div class=\'url-box\' style=\'color:#94a3b8\'>📧 {preview}...</div>", unsafe_allow_html=True)
+                st.markdown(f"<div class=\\'url-box\\' style=\\'color:#94a3b8\\'>📧 {preview}...</div>", unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 3: ADMIN DASHBOARD (admin only)
@@ -325,10 +325,10 @@ if is_admin:
         st.divider()
         stats = get_stats()
         c1, c2, c3, c4 = st.columns(4)
-        c1.markdown(f"<div class=\'stat-card\'><div style=\'font-size:2rem;font-weight:900;color:#60a5fa\'>{stats[\'total_analyses\']}</div><div style=\'color:#64748b;font-size:0.85rem\'>Total Analyses</div></div>", unsafe_allow_html=True)
-        c2.markdown(f"<div class=\'stat-card\'><div style=\'font-size:2rem;font-weight:900;color:#22c55e\'>{stats[\'today_analyses\']}</div><div style=\'color:#64748b;font-size:0.85rem\'>Today</div></div>", unsafe_allow_html=True)
-        c3.markdown(f"<div class=\'stat-card\'><div style=\'font-size:2rem;font-weight:900;color:#ff4444\'>{stats[\'critical_count\']}</div><div style=\'color:#64748b;font-size:0.85rem\'>Critical Threats</div></div>", unsafe_allow_html=True)
-        c4.markdown(f"<div class=\'stat-card\'><div style=\'font-size:2rem;font-weight:900;color:#ffaa00\'>{stats[\'avg_risk_score\']}</div><div style=\'color:#64748b;font-size:0.85rem\'>Avg Risk Score</div></div>", unsafe_allow_html=True)
+        c1.markdown(f"<div class=\\'stat-card\\'><div style=\\'font-size:2rem;font-weight:900;color:#60a5fa\\'>{stats[\\'total_analyses\\']}</div><div style=\\'color:#64748b;font-size:0.85rem\\'>Total Analyses</div></div>", unsafe_allow_html=True)
+        c2.markdown(f"<div class=\\'stat-card\\'><div style=\\'font-size:2rem;font-weight:900;color:#22c55e\\'>{stats[\\'today_analyses\\']}</div><div style=\\'color:#64748b;font-size:0.85rem\\'>Today</div></div>", unsafe_allow_html=True)
+        c3.markdown(f"<div class=\\'stat-card\\'><div style=\\'font-size:2rem;font-weight:900;color:#ff4444\\'>{stats[\\'critical_count\\']}</div><div style=\\'color:#64748b;font-size:0.85rem\\'>Critical Threats</div></div>", unsafe_allow_html=True)
+        c4.markdown(f"<div class=\\'stat-card\\'><div style=\\'font-size:2rem;font-weight:900;color:#ffaa00\\'>{stats[\\'avg_risk_score\\']}</div><div style=\\'color:#64748b;font-size:0.85rem\\'>Avg Risk Score</div></div>", unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
         col_ch1, col_ch2 = st.columns(2)
         with col_ch1:
@@ -365,7 +365,7 @@ if is_admin:
                 ca.metric("Risk Score", sc)
                 cb.metric("Keyword Hits", kh)
                 cc.metric("Suspicious URLs", su)
-                st.markdown(f"<div class=\'url-box\' style=\'color:#94a3b8\'>📧 {preview}...</div>", unsafe_allow_html=True)
+                st.markdown(f"<div class=\\'url-box\\' style=\\'color:#94a3b8\\'>📧 {preview}...</div>", unsafe_allow_html=True)
         st.divider()
         col_ref, col_exp = st.columns(2)
         with col_ref:
@@ -391,7 +391,7 @@ if is_admin:
         st.divider()
 
         # Usage overview
-        st.markdown("### 📊 This Month\'s Usage")
+        st.markdown("### 📊 This Month\\'s Usage")
         usage_rows = get_usage_all_tenants()
         if usage_rows:
             for row in usage_rows:
@@ -401,15 +401,15 @@ if is_admin:
                 bar_c = "#ff4444" if pct >= 90 else "#ffaa00" if pct >= 70 else "#60a5fa"
                 status_dot = "🟢" if uactive else "🔴"
                 st.markdown(f"""
-                <div style=\'background:#111827;border:1px solid #1e3a5f;
-                            border-radius:10px;padding:12px 16px;margin:6px 0\'>
-                  <div style=\'display:flex;justify-content:space-between;margin-bottom:6px\'>
-                    <span style=\'color:#e2e8f0;font-weight:500\'>{status_dot} {uname}</span>
-                    <span style=\'color:#94a3b8;font-size:12px\'>{PLANS.get(uplan,PLANS["trial"])["label"]} · {uemail or "no email"}</span>
-                    <span style=\'color:#94a3b8;font-size:12px\'>{uanalyses} / {"∞" if uplan == "enterprise" else limit} analyses</span>
+                <div style=\\'background:#111827;border:1px solid #1e3a5f;
+                            border-radius:10px;padding:12px 16px;margin:6px 0\\'>
+                  <div style=\\'display:flex;justify-content:space-between;margin-bottom:6px\\'>
+                    <span style=\\'color:#e2e8f0;font-weight:500\\'>{status_dot} {uname}</span>
+                    <span style=\\'color:#94a3b8;font-size:12px\\'>{PLANS.get(uplan,PLANS["trial"])["label"]} · {uemail or "no email"}</span>
+                    <span style=\\'color:#94a3b8;font-size:12px\\'>{uanalyses} / {"∞" if uplan == "enterprise" else limit} analyses</span>
                   </div>
-                  <div style=\'background:#1e3a5f;border-radius:4px;height:6px\'>
-                    <div style=\'background:{bar_c};border-radius:4px;height:6px;width:{pct}%\'></div>
+                  <div style=\\'background:#1e3a5f;border-radius:4px;height:6px\\'>
+                    <div style=\\'background:{bar_c};border-radius:4px;height:6px;width:{pct}%\\'></div>
                   </div>
                 </div>
                 """, unsafe_allow_html=True)
@@ -425,16 +425,16 @@ if is_admin:
             nc3, nc4 = st.columns(2)
             new_email = nc3.text_input("Email (optional)")
             new_plan  = nc4.selectbox("Plan", list(PLANS.keys()),
-                                       format_func=lambda k: f"{PLANS[k][\'label\']} — {PLANS[k][\'price\']}")
+                                       format_func=lambda k: f"{PLANS[k][\\'label\\']} — {PLANS[k][\\'price\\']}")
             new_notes = st.text_input("Notes (optional)", placeholder="Company name, contract ref...")
             if st.form_submit_button("✅ Create Client", type="primary"):
                 if new_username and new_password:
                     ok = create_tenant(new_username, new_password, new_email, new_plan, notes=new_notes)
                     if ok:
-                        st.success(f"✅ Client \"{new_username}\" created on {PLANS[new_plan][\'label\']} plan.")
+                        st.success(f"✅ Client \\"{new_username}\\" created on {PLANS[new_plan][\\'label\\']} plan.")
                         st.rerun()
                     else:
-                        st.error(f"Username \"{new_username}\" already exists.")
+                        st.error(f"Username \\"{new_username}\\" already exists.")
                 else:
                     st.warning("Username and password are required.")
 
@@ -448,20 +448,20 @@ if is_admin:
             if uname == username:
                 continue  # don't show self
             status = "🟢 Active" if uactive else "🔴 Suspended"
-            with st.expander(f"**{uname}** — {PLANS.get(uplan,PLANS[\'trial\'])[\'label\']} — {status}"):
+            with st.expander(f"**{uname}** — {PLANS.get(uplan,PLANS[\\'trial\\'])[\\'label\\']} — {status}"):
                 m1, m2 = st.columns(2)
                 with m1:
-                    st.markdown(f"**Email:** {uemail or \'—\'}")
-                    st.markdown(f"**Created:** {ucreated[:10] if ucreated else \'—\'}")
-                    st.markdown(f"**Notes:** {unotes or \'—\'}")
+                    st.markdown(f"**Email:** {uemail or \\'—\\'}")
+                    st.markdown(f"**Created:** {ucreated[:10] if ucreated else \\'—\\'}")
+                    st.markdown(f"**Notes:** {unotes or \\'—\\'}")
                 with m2:
                     new_plan_val = st.selectbox("Change plan", list(PLANS.keys()),
                         index=list(PLANS.keys()).index(uplan) if uplan in PLANS else 0,
                         key=f"plan_{uname}",
-                        format_func=lambda k: PLANS[k][\'label\'])
+                        format_func=lambda k: PLANS[k][\\'label\\'])
                     if st.button("💾 Save Plan", key=f"save_{uname}"):
                         update_tenant(uname, plan=new_plan_val)
-                        st.success(f"Plan updated to {PLANS[new_plan_val][\'label\']}")
+                        st.success(f"Plan updated to {PLANS[new_plan_val][\\'label\\']}")
                         st.rerun()
 
                     new_pw = st.text_input("New password", type="password", key=f"pw_{uname}")
@@ -487,3 +487,10 @@ if is_admin:
                     delete_tenant(uname)
                     st.error(f"{uname} deleted.")
                     st.rerun()
+'''
+
+with open("app.py", "w", encoding="utf-8") as f:
+    f.write(content)
+
+print("app.py written successfully!")
+print(f"Total chars: {len(content)}")
