@@ -231,29 +231,6 @@ with tab1:
                 except Exception as e:
                     st.error(f"Analysis failed: {str(e)}")
 
-# 2. Then check the button
-# Updated with a unique key
-if st.button("🚀 Deep URL Scan", key="deep_url_scan_unique_btn"):
-    if not url_input:
-        st.warning("Please enter a URL first.")
-    else:
-        with st.spinner("Tracing redirects and analyzing destination..."):
-            from src.url_intel import analyze_url_safety
-            
-            analysis = analyze_url_safety(url_input)
-            
-            # Display the results
-            st.subheader("Deep Scan Results")
-            col1, col2 = st.columns(2)
-            with col1:
-                st.metric("Final Domain", analysis['domain'])
-                st.write(f"Redirects: {analysis['chain_length']}")
-            with col2:
-                st.write(f"Shortened URL: {'Yes' if analysis['is_shortened'] else 'No'}")
-            
-            st.markdown("### 🔗 Full Redirect Chain")
-            for i, hop in enumerate(analysis['chain']):
-                st.text(f"{i+1}: {hop}")
 
 # ==========================================
 # TAB 2: EMAIL HEADER ANALYZER
