@@ -201,6 +201,26 @@ with tab1:
             with layout_right:
                 st.markdown("#### 🤖 Deep Learning SecOps Report")
                 st.markdown(f"<div class='ai-container'>{ai_report_markdown}</div>", unsafe_allow_html=True)
+    # In your "Analyze" tab logic inside app.py:
+if st.button("🚀 Deep URL Scan"):
+    with st.spinner("Tracing redirects and analyzing destination..."):
+        from src.url_intel import analyze_url_safety
+        
+        # Assume 'url_input' is your text input field
+        analysis = analyze_url_safety(url_input)
+        
+        # Display the results
+        st.subheader("Deep Scan Results")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("Final Domain", analysis['domain'])
+            st.write(f"Redirects: {analysis['chain_length']}")
+        with col2:
+            st.write(f"Shortened URL: {'Yes' if analysis['is_shortened'] else 'No'}")
+        
+        st.markdown("### 🔗 Full Redirect Chain")
+        for i, hop in enumerate(analysis['chain']):
+            st.text(f"{i+1}: {hop}")
 
 # ==========================================
 # TAB 2: EMAIL HEADER ANALYZER
