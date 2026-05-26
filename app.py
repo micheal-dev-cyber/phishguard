@@ -205,22 +205,32 @@ with tab1:
 if st.button("🚀 Deep URL Scan"):
     with st.spinner("Tracing redirects and analyzing destination..."):
         from src.url_intel import analyze_url_safety
-        
-        # Assume 'url_input' is your text input field
-        analysis = analyze_url_safety(url_input)
-        
-        # Display the results
-        st.subheader("Deep Scan Results")
-        col1, col2 = st.columns(2)
-        with col1:
-            st.metric("Final Domain", analysis['domain'])
-            st.write(f"Redirects: {analysis['chain_length']}")
-        with col2:
-            st.write(f"Shortened URL: {'Yes' if analysis['is_shortened'] else 'No'}")
-        
-        st.markdown("### 🔗 Full Redirect Chain")
-        for i, hop in enumerate(analysis['chain']):
-            st.text(f"{i+1}: {hop}")
+        # 1. Define the input widget first
+url_input = st.text_input("Enter URL to scan:", placeholder="https://example.com")
+
+# 2. Then check the button
+if st.button("🚀 Deep URL Scan"):
+    if not url_input:
+        st.warning("Please enter a URL first.")
+    else:
+        with st.spinner("Tracing redirects and analyzing destination..."):
+            from src.url_intel import analyze_url_safety
+            
+            # Now url_input is defined and has the value from the user
+            analysis = analyze_url_safety(url_input)
+            
+            # Display the results
+            st.subheader("Deep Scan Results")
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("Final Domain", analysis['domain'])
+                st.write(f"Redirects: {analysis['chain_length']}")
+            with col2:
+                st.write(f"Shortened URL: {'Yes' if analysis['is_shortened'] else 'No'}")
+            
+            st.markdown("### 🔗 Full Redirect Chain")
+            for i, hop in enumerate(analysis['chain']):
+                st.text(f"{i+1}: {hop}")
 
 # ==========================================
 # TAB 2: EMAIL HEADER ANALYZER
