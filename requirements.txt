@@ -1,7 +1,8 @@
 streamlit
-python-dotenv
 requests
+pandas
 plotly
 tldextract
-pandas
 openai
+python-dotenv
+fpdf2
