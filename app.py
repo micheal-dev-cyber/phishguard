@@ -392,9 +392,9 @@ with tab7:
     
     col_chart1, col_chart2 = st.columns(2)
     with col_chart1:
-        daily = get_daily_counts(14)
+        daily = get_daily_counts()
         fig3 = go.Figure(go.Bar(
-            x=[d["date"] for d in daily], y=[d["count"] for d in daily],
+            x=[d.get("date", "") for d in daily], y=[d.get("count", 0) for d in daily], y=[d["count"] for d in daily],
             marker_color="#2563eb", text=[d["count"] for d in daily], textposition="outside"
         ))
         fig3.update_layout(title="Analyses per Day (Last 14 Days)", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#e2e8f0", height=300)
