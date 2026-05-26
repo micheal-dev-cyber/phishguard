@@ -17,6 +17,60 @@ from src.osint import run_osint
 from src.admin import get_stats, get_all_analyses, get_recent_threats, get_daily_counts
 from src.header_parser import parse_email_headers
 
+# --- Design Injection (Obsidian Sentinel) ---
+def apply_design():
+    st.markdown(f"""
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=JetBrains+Mono:wght@400;700&display=swap');
+        
+        .stApp {{ background-color: #131313; font-family: 'Inter', sans-serif; color: #e5e2e1; }}
+        
+        /* Obsidian Sentinel Palette */
+        .glass-card {{
+            background: #1c1b1b;
+            border: 1px solid #2a2a2a;
+            border-radius: 1rem;
+            padding: 1.5rem;
+            backdrop-filter: blur(20px);
+            margin-bottom: 1rem;
+        }}
+        
+        .threat-card {{
+            border-left: 4px solid #FF4444;
+        }}
+        
+        /* Buttons */
+        .stButton > button {{
+            background: transparent;
+            border: 1px solid #39FF14;
+            color: #39FF14;
+            border-radius: 0.5rem;
+            font-family: 'JetBrains Mono', monospace;
+            transition: all 0.3s ease;
+        }}
+        .stButton > button:hover {{
+            box-shadow: 0 0 15px rgba(57, 255, 20, 0.3);
+            background: rgba(57, 255, 20, 0.05);
+        }}
+        
+        /* Typography */
+        h1, h2, h3 {{ font-family: 'Inter', sans-serif; color: #efffe3 !important; }}
+        code {{ font-family: 'JetBrains Mono', monospace; background: #0e0e0e; color: #39FF14; }}
+    </style>
+    """, unsafe_allow_html=True)
+
+# Helper for the UI
+def glass_card(title=None, is_threat=False):
+    css_class = "glass-card" + (" threat-card" if is_threat else "")
+    container = st.container()
+    container.markdown(f'<div class="{css_class}">', unsafe_allow_html=True)
+    if title:
+        container.markdown(f"### {title}")
+    return container
+
+# Call this immediately after set_page_config
+apply_design()
+
 # Initialize Database
 init_db()
 
