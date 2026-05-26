@@ -1,6 +1,7 @@
 # src/admin.py
 import sqlite3
 import pandas as pd
+import random
 from src.database import DB_PATH
 
 def get_stats():
@@ -42,3 +43,28 @@ def get_daily_counts():
         df = pd.DataFrame(columns=['date', 'count'])
     conn.close()
     return df
+
+import random
+
+def get_threat_map_data():
+    """Simulates geolocation data for the global threat map."""
+    # In a production app, you would extract this from your OSINT IP geolocation data
+    return [
+        {"lat": 55.75, "lon": 37.61, "city": "Moscow", "country": "Russia", "threats": random.randint(15, 60)},
+        {"lat": 39.90, "lon": 116.40, "city": "Beijing", "country": "China", "threats": random.randint(20, 80)},
+        {"lat": 6.52, "lon": 3.37, "city": "Lagos", "country": "Nigeria", "threats": random.randint(10, 40)},
+        {"lat": 40.71, "lon": -74.00, "city": "New York", "country": "USA", "threats": random.randint(5, 20)},
+        {"lat": -23.55, "lon": -46.63, "city": "Sao Paulo", "country": "Brazil", "threats": random.randint(10, 35)},
+        {"lat": 48.85, "lon": 2.35, "city": "Paris", "country": "France", "threats": random.randint(2, 12)},
+        {"lat": 28.61, "lon": 77.20, "city": "New Delhi", "country": "India", "threats": random.randint(15, 50)},
+    ]
+
+def get_attack_vectors():
+    """Simulates vector distribution for the radar chart."""
+    return {
+        "Credential Harvesting": random.randint(50, 90),
+        "Malware Delivery": random.randint(20, 60),
+        "Brand Impersonation": random.randint(40, 80),
+        "Spear Phishing": random.randint(15, 45),
+        "Extortion/Sextortion": random.randint(5, 25)
+    }

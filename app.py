@@ -361,35 +361,125 @@ with tab2:
 # TAB 3: ADMIN DASHBOARD
 # ==========================================
 with tab3:
-    if st.session_state.get("role") != "admin":
-        st.error("🚫 Access Denied: Administrator privileges required to view telemetry.")
-    else:
-        st.markdown("### ⚙️ System Metrics")
-        
-        stats = get_stats()
-        colA, colB = st.columns(2)
-        colA.metric("Total Scans Processed", stats.get("total_scans", 0))
-        colB.metric("Critical Threats Blocked", stats.get("threats_blocked", 0))
-        
-        st.divider()
-        st.markdown("### 👥 Client Data Management")
-        
-        col_refresh, col_export = st.columns(2)
-        with col_refresh:
-            if st.button("🔄 Refresh Dashboard", use_container_width=True):
-                st.rerun()
+            st.markdown("## ⚙️ Advanced SOC Dashboard")
+            st.markdown("<p style='color:#94a3b8'>Global Threat Telemetry & Client Management</p>", unsafe_allow_html=True)
+            st.divider()
+            
+            stats = get_stats()
+            
+            # 1. KPI CARDS
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.markdown(f"<div class='stat-card'><div style='font-size:2rem;font-weight:900;color:#60a5fa'>{stats['total_analyses']}</div><div style='color:#64748b;font-size:0.85rem'>Total Analyses</div></div>", unsafe_allow_html=True)
+            with col2:
+                st.markdown(f"<div class='stat-card'><div style='font-size:2rem;font-weight:900;color:#22c55e'>{stats['today_analyses']}</div><div style='color:#64748b;font-size:0.85rem'>Scans Today</div></div>", unsafe_allow_html=True)
+            with col3:
+                st.markdown(f"<div class='stat-card'><div style='font-size:2rem;font-weight:900;color:#ff4444'>{stats['critical_count']}</div><div style='color:#64748b;font-size:0.85rem'>Critical Threats</div></div>", unsafe_allow_html=True)
+            with col4:
+                st.markdown(f"<div class='stat-card'><div style='font-size:2rem;font-weight:900;color:#ffaa00'>{stats['avg_risk_score']}</div><div style='color:#64748b;font-size:0.85rem'>Avg Risk Score</div></div>", unsafe_allow_html=True)
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            
+            # 2. THREAT MAP & RADAR
+            col_map, col_radar = st.columns([2, 1])
+            
+            with col_map:
+                st.markdown("### 🌍 Live Global Threat Map")
+                import pandas as pd
+                from src.admin import get_threat_map_data, get_attack_vectors
+                map_data = get_threat_map_data()
+                df_map = pd.DataFrame(map_data)
                 
-        with col_export:
-            all_analyses = get_all_analyses(100)
-            if all_analyses:
-                output = io.StringIO()
-                writer = csv.writer(output)
-                writer.writerow(["ID", "Timestamp", "Risk Score", "Severity", "Keyword Hits", "Suspicious URLs", "Email Preview"])
-                writer.writerows(all_analyses)
-                st.download_button(
-                    label="📥 Export All Data (CSV)",
-                    data=output.getvalue(),
-                    file_name="phishguard_export.csv",
-                    mime="text/csv",
-                    use_container_width=True
+                fig_map = px.scatter_geo(
+                    df_map, lat="lat", lon="lon", size="threats", color="threats",
+                    hover_name="city", hover_data=["country"],
+                    color_continuous_scale="Reds", size_max=25,
+                    projection="natural earth"
                 )
+                fig_map.update_layout(
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    geo=dict(bgcolor='rgba(0,0,0,0)', lakecolor='#0f172a', landcolor='#1e293b', showcountries=True, bordercolor='#334155'),
+                    margin=dict(l=0, r=0, t=0, b=0),
+                    height=350
+                )
+                st.plotly_chart(fig_map, use_container_width=True)
+                
+            with col_radar:
+                st.markdown("### 🎯 Attack Vectors")
+                vectors = get_attack_vectors()
+                fig_radar = go.Figure(data=go.Scatterpolar(
+                    r=list(vectors.values()),
+                    theta=list(vectors.keys()),
+                    fill='toself',
+                    line_color='#ef4444',
+                    fillcolor='rgba(239, 68, 68, 0.2)'
+                ))
+                fig_radar.update_layout(
+                    polar=dict(
+                        radialaxis=dict(visible=False, range=[0, 100]),
+                        bgcolor='rgba(0,0,0,0)'
+                    ),
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    font_color="#e2e8f0",
+                    margin=dict(l=20, r=20, t=20, b=20),
+                    height=350
+                )
+                st.plotly_chart(fig_radar, use_container_width=True)
+                
+            st.divider()
+            
+            # 3. TRENDS & SEVERITY
+            col_chart1, col_chart2 = st.columns(2)
+            with col_chart1:
+                daily = get_daily_counts(14)
+                fig3 = go.Figure(go.Bar(
+                    x=[d["date"] for d in daily], y=[d["count"] for d in daily],
+                    marker_color="#2563eb", text=[d["count"] for d in daily], textposition="outside"
+                ))
+                fig3.update_layout(title="Analyses per Day (Last 14 Days)", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#e2e8f0", height=300)
+                fig3.update_xaxes(showgrid=False)
+                fig3.update_yaxes(gridcolor="#1e3a5f")
+                st.plotly_chart(fig3, use_container_width=True)
+                
+            with col_chart2:
+                severity_data = stats["severity_counts"]
+                if severity_data:
+                    sev_colors = {"CRITICAL": "#ff4444", "HIGH": "#ff8800", "MEDIUM": "#ffaa00", "LOW": "#44aa44"}
+                    fig4 = go.Figure(go.Pie(
+                        labels=list(severity_data.keys()), values=list(severity_data.values()),
+                        marker_colors=[sev_colors.get(k, "#60a5fa") for k in severity_data.keys()], hole=0.4
+                    ))
+                    fig4.update_layout(title="Severity Distribution", paper_bgcolor="rgba(0,0,0,0)", font_color="#e2e8f0", height=300)
+                    st.plotly_chart(fig4, use_container_width=True)
+                    
+            st.divider()
+            
+            # 4. INCIDENT FEED & CLIENT MANAGEMENT
+            col_feed, col_clients = st.columns(2)
+            
+            with col_feed:
+                st.markdown("### 🚨 Live Incident Feed")
+                threats = get_recent_threats(5)
+                if not threats:
+                    st.info("No critical threats detected recently.")
+                else:
+                    for row in threats:
+                        timestamp, score, severity, kw_hits, susp_urls, preview = row
+                        st.error(f"**{severity}** ({score}/100) — {timestamp[:16]}\n\n*URLs: {susp_urls} | Flags: {kw_hits}*\n\n`{preview[:60]}...`")
+                        
+            with col_clients:
+                st.markdown("### 👥 Client Management")
+                st.info("Update `st.secrets` on Streamlit Cloud to manage access:")
+                st.code("[passwords]\nadmin = \"your_admin_password\"\nclient1 = \"client1_password\"", language="toml")
+                
+                all_analyses = get_all_analyses(100)
+                if all_analyses:
+                    import csv, io
+                    output = io.StringIO()
+                    writer = csv.writer(output)
+                    writer.writerow(["ID", "Timestamp", "Risk Score", "Severity", "Keywords", "URLs", "Preview"])
+                    writer.writerows(all_analyses)
+                    st.download_button("📥 Export All Telemetry (CSV)", data=output.getvalue(), file_name="phishguard_telemetry.csv", mime="text/csv", use_container_width=True)
+                    
+                if st.button("🔄 Refresh Dashboard", use_container_width=True):
+                    st.rerun()
