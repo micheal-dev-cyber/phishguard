@@ -5,3 +5,9 @@ plotly
 fpdf2
 dnspython
 google-generativeai
+streamlit
+plotly
+pandas
+requests
+openai
+python-dotenv
