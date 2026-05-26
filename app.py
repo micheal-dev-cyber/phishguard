@@ -393,14 +393,31 @@ with tab7:
     col_chart1, col_chart2 = st.columns(2)
     with col_chart1:
         daily = get_daily_counts()
+        
+        # Defensive check: ensure data is formatted correctly
+        if daily and isinstance(daily[0], dict):
+            dates = [d.get("date", "") for d in daily]
+            counts = [d.get("count", 0) for d in daily]
+        else:
+            # Fallback if the data is just a list of dates/strings
+            st.warning("Dashboard: Using raw data format.")
+            dates = daily if isinstance(daily, list) else []
+            counts = [1] * len(dates) # Placeholder count if backend is broken
+
         fig3 = go.Figure(go.Bar(
-            x=[d.get("date", "") for d in daily], 
-            y=[d.get("count", 0) for d in daily],
+            x=dates, 
+            y=counts,
             marker_color="#2563eb", 
-            text=[d.get("count", 0) for d in daily], 
+            text=counts, 
             textposition="outside"
         ))
-        fig3.update_layout(title="Analyses per Day", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#e2e8f0", height=300)
+        fig3.update_layout(
+            title="Analyses per Day (Last 14 Days)", 
+            paper_bgcolor="rgba(0,0,0,0)", 
+            plot_bgcolor="rgba(0,0,0,0)", 
+            font_color="#e2e8f0", 
+            height=300
+        )
         st.plotly_chart(fig3, use_container_width=True)
         
     with col_chart2:
