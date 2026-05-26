@@ -201,12 +201,35 @@ with tab1:
             with layout_right:
                 st.markdown("#### 🤖 Deep Learning SecOps Report")
                 st.markdown(f"<div class='ai-container'>{ai_report_markdown}</div>", unsafe_allow_html=True)
-    # In your "Analyze" tab logic inside app.py:
-if st.button("🚀 Deep URL Scan"):
-    with st.spinner("Tracing redirects and analyzing destination..."):
-        from src.url_intel import analyze_url_safety
-        # 1. Define the input widget first
-url_input = st.text_input("Enter URL to scan:", placeholder="https://example.com")
+
+    st.divider()
+    
+    # --- Deep URL Scan Section (Properly Nested in Tab 1) ---
+    st.markdown("### 🔗 Deep URL Intelligence")
+    url_input = st.text_input("Enter URL to scan:", placeholder="https://example.com", key="unique_url_input_tab1")
+
+    if st.button("🚀 Deep URL Scan", key="unique_scan_btn_tab1"):
+        if not url_input:
+            st.warning("Please enter a URL first.")
+        else:
+            with st.spinner("Tracing redirects and analyzing destination..."):
+                from src.url_intel import analyze_url_safety
+                try:
+                    analysis = analyze_url_safety(url_input)
+                    st.subheader("Deep Scan Results")
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.metric("Final Domain", analysis.get('domain', 'N/A'))
+                        st.write(f"Redirects: {analysis.get('chain_length', 0)}")
+                    with col2:
+                        is_short = analysis.get('is_shortened', False)
+                        st.write(f"Shortened URL: {'Yes' if is_short else 'No'}")
+                    
+                    st.markdown("### 🔗 Full Redirect Chain")
+                    for i, hop in enumerate(analysis.get('chain', [])):
+                        st.text(f"{i+1}: {hop}")
+                except Exception as e:
+                    st.error(f"Analysis failed: {str(e)}")
 
 # 2. Then check the button
 # Updated with a unique key
