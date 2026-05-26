@@ -394,10 +394,13 @@ with tab7:
     with col_chart1:
         daily = get_daily_counts()
         fig3 = go.Figure(go.Bar(
-            x=[d.get("date", "") for d in daily], y=[d.get("count", 0) for d in daily], y=[d["count"] for d in daily],
-            marker_color="#2563eb", text=[d["count"] for d in daily], textposition="outside"
+            x=[d.get("date", "") for d in daily], 
+            y=[d.get("count", 0) for d in daily],
+            marker_color="#2563eb", 
+            text=[d.get("count", 0) for d in daily], 
+            textposition="outside"
         ))
-        fig3.update_layout(title="Analyses per Day (Last 14 Days)", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#e2e8f0", height=300)
+        fig3.update_layout(title="Analyses per Day", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#e2e8f0", height=300)
         st.plotly_chart(fig3, use_container_width=True)
         
     with col_chart2:
