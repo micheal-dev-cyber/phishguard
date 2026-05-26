@@ -366,15 +366,14 @@ with tab7:
                 hover_name="city", hover_data=["country"],
                 color_continuous_scale="Reds", size_max=25, projection="natural earth"
             )
-            fig_map.update_layout(
-                paper_bgcolor="rgba(0,0,0,0)",
-                geo=dict(bgcolor='rgba(0,0,0,0)', lakecolor='#0f172a', landcolor='#1e293b', showcountries=True, bordercolor='#334155'),
-                margin=dict(l=0, r=0, t=0, b=0), height=350
-            )
-            st.plotly_chart(fig_map, use_container_width=True)
-        else:
-            st.info("No geospatial map data compiled yet.")
-        
+        # REMOVED bordercolor from here as it caused the ValueError
+        fig_map.update_layout(
+            paper_bgcolor="rgba(0,0,0,0)",
+            geo=dict(bgcolor='rgba(0,0,0,0)', lakecolor='#0f172a', landcolor='#1e293b', showcountries=True),
+            margin=dict(l=0, r=0, t=0, b=0), height=350
+        )
+        st.plotly_chart(fig_map, use_container_width=True)
+
     with col_radar:
         st.markdown("### 🎯 Attack Vectors")
         vectors = get_attack_vectors()
