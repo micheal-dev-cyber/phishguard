@@ -209,14 +209,14 @@ if st.button("🚀 Deep URL Scan"):
 url_input = st.text_input("Enter URL to scan:", placeholder="https://example.com")
 
 # 2. Then check the button
-if st.button("🚀 Deep URL Scan"):
+# Updated with a unique key
+if st.button("🚀 Deep URL Scan", key="deep_url_scan_unique_btn"):
     if not url_input:
         st.warning("Please enter a URL first.")
     else:
         with st.spinner("Tracing redirects and analyzing destination..."):
             from src.url_intel import analyze_url_safety
             
-            # Now url_input is defined and has the value from the user
             analysis = analyze_url_safety(url_input)
             
             # Display the results
