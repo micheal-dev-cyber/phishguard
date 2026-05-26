@@ -10,4 +10,4 @@ plotly
 pandas
 requests
 openai
-python-dotenv
+python-dotenv"tldextract" 
