@@ -1,0 +1,59 @@
+services:
+  streamlit:
+    build: .
+    container_name: phishguard-streamlit
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./data:/app/data
+      - ./api_keys.json:/app/api_keys.json:ro
+    env_file:
+      - .env
+    environment:
+      - STREAMLIT_SERVER_ADDRESS=0.0.0.0
+    command: streamlit run app.py --server.address=0.0.0.0 --server.port=8501
+    restart: unless-stopped
+
+  api-gateway:
+    build: .
+    container_name: phishguard-api
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/app/data
+      - ./api_keys.json:/app/api_keys.json:ro
+    env_file:
+      - .env
+    command: uvicorn api_gateway.main:app --host 0.0.0.0 --port 8080 --workers 2
+    restart: unless-stopped
+
+  webhook:
+    build: .
+    container_name: phishguard-webhook
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./data:/app/data
+    env_file:
+      - .env
+    command: python webhook.py
+    restart: unless-stopped
+
+  imap-worker:
+    build: .
+    container_name: phishguard-imap
+    volumes:
+      - ./data:/app/data
+    env_file:
+      - .env
+    environment:
+      - IMAP_HOST=${IMAP_HOST}
+      - IMAP_USER=${IMAP_USER}
+      - IMAP_PASS=${IMAP_PASS}
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASS=${SMTP_PASS}
+    command: python workers/imap_worker.py
+    restart: unless-stopped
+    profiles:
+      - imap
