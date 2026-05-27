@@ -10,11 +10,13 @@ from src.osint import run_osint
 from src.admin import get_stats, get_all_analyses, get_recent_threats, get_daily_counts
 from src.alerts import send_threat_alert, get_alert_log
 from src.copilot import get_copilot_response, SUGGESTED_PROMPTS
-from src.ai_analyzer import simulate_phishing, analyze_screenshot
+from src.ai_analyzer import simulate_phishing, analyze_screenshot, generate_ai_report
 from src.xai_analyzer import analyze_psychological_triggers, format_xai_report
 from src.email_parser import parse_email_file
 from src.jury_engine import evaluate_linguistic_jury, evaluate_corporate_jury, compute_ensemble_score
 from src.b2b_gateway import get_tier_config, check_feature_access, MockAPIGateway
+from src.webhook_gateway import send_alert as send_webhook_alert
+from src.threat_scorer import compute_combined_threat_score, format_combined_report
 from src.tenants import (
     log_usage, check_quota, get_all_tenants, get_usage_all_tenants,
     create_tenant, update_tenant, delete_tenant, set_password, PLANS
@@ -250,15 +252,15 @@ if st.session_state.get("show_upgrade") and plan != "enterprise":
 
 # ── Tabs ─────────────────────────────────────────────────────────────────────
 if is_admin:
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
-        "🔍 Analyze Email", "📊 History", "🤖 AI Copilot",
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
+        "🔍 Analyze Email", "📈 Analytics", "🤖 AI Copilot",
         "⚙ Admin Dashboard", "👥 Clients", "💳 Billing",
-        "⚙ Settings", "🧪 Training"
+        "⚙ Settings", "🧪 Training", "📊 History"
     ])
 else:
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-        "🔍 Analyze Email", "📊 History", "🤖 AI Copilot",
-        "💳 Billing", "⚙ Settings", "🧪 Training"
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+        "🔍 Analyze Email", "📈 Analytics", "🤖 AI Copilot",
+        "💳 Billing", "⚙ Settings", "🧪 Training", "📊 History"
     ])
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -375,13 +377,41 @@ with tab1:
             # ── XAI Psychological Trigger Analysis ─────────────────────────
             xai_result = analyze_psychological_triggers(email_text)
 
-            st.session_state["results"]     = results
-            st.session_state["email_text"]  = email_text
-            st.session_state["vt_results"]  = vt_results
-            st.session_state["vt_summary"]  = vt_summary
-            st.session_state["osint_data"]  = osint_data
-            st.session_state["jury_result"] = jury_result
-            st.session_state["xai_result"]  = xai_result
+            # ── Combined Threat Score (linguistic + VT reputation) ─────────
+            combined_score = compute_combined_threat_score(
+                results.get("risk_score", 0),
+                vt_results=vt_results,
+            )
+
+            # ── Webhook alert (threshold >= 75 OR if VT confirms threats) ──
+            wh_key = f"webhook_url_{username}"
+            webhook_url = st.session_state.get(wh_key, "")
+            webhook_result = None
+            if webhook_url and (results.get("risk_score", 0) >= 75 or
+                                combined_score.get("composite_score", 0) >= 75):
+                triggers = []
+                if xai_result.get("triggers"):
+                    triggers = [t["label"] for t in xai_result["triggers"]]
+                from src.webhook_gateway import send_alert
+                webhook_result = send_alert(
+                    webhook_url,
+                    score=results.get("risk_score", 0),
+                    severity=results.get("severity", "HIGH"),
+                    triggers=triggers,
+                    snippet=email_text[:300],
+                    action="Investigate and quarantine this email immediately.",
+                    dashboard_url="https://phishguard.ai",
+                )
+
+            st.session_state["results"]         = results
+            st.session_state["email_text"]       = email_text
+            st.session_state["vt_results"]       = vt_results
+            st.session_state["vt_summary"]       = vt_summary
+            st.session_state["osint_data"]       = osint_data
+            st.session_state["jury_result"]      = jury_result
+            st.session_state["xai_result"]       = xai_result
+            st.session_state["combined_score"]   = combined_score
+            st.session_state["webhook_result"]   = webhook_result
             st.session_state.pop("ai_report", None)
 
     if "results" in st.session_state:
@@ -431,6 +461,31 @@ with tab1:
         with col_m3: st.metric("🎯 Keyword Hits",    results["total_keyword_hits"])
 
         st.divider()
+
+        # ── Combined Threat Score ─────────────────────────────────────────────
+        combined_score = st.session_state.get("combined_score")
+        if combined_score and combined_score.get("has_vt_data"):
+            st.markdown("<div class='section-title'>🔬 Combined Threat Intelligence Score</div>",
+                        unsafe_allow_html=True)
+            col_cs1, col_cs2, col_cs3 = st.columns(3)
+            with col_cs1:
+                st.metric("Composite Score",
+                          f"{combined_score['composite_score']}/100",
+                          delta=f"VT contrib: +{combined_score['vt_contribution']:.0f}")
+            with col_cs2:
+                st.metric("VT Malicious Detections",
+                          combined_score["vt_malicious_count"])
+            with col_cs3:
+                st.metric("VT Suspicious Detections",
+                          combined_score["vt_suspicious_count"])
+
+        # ── Webhook alert status ─────────────────────────────────────────────
+        webhook_result = st.session_state.get("webhook_result")
+        if webhook_result:
+            if webhook_result.get("success"):
+                st.success("🚨 Webhook alert sent to your notification channel.")
+            else:
+                st.warning(f"Webhook delivery failed: {webhook_result.get('error', 'Unknown')}")
 
         # Keyword matches
         if results["keyword_matches"]:
@@ -724,9 +779,8 @@ with tab1:
             if st.button("🤖 Generate AI Security Report",
                          use_container_width=True, type="secondary"):
                 try:
-                    from src.ai_analyzer import ai_analyze_email
                     with st.spinner("AI is writing your security report..."):
-                        ai_report = ai_analyze_email(email_text_saved, results)
+                        ai_report = generate_ai_report(email_text_saved, results)
                     st.session_state["ai_report"] = ai_report
                     save_analysis(results, email_text_saved, ai_report)
                 except Exception as e:
@@ -752,50 +806,152 @@ with tab1:
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# TAB 2 — HISTORY
+# TAB 2 — ENTERPRISE ANALYTICS DASHBOARD
 # ═════════════════════════════════════════════════════════════════════════════
 with tab2:
-    st.markdown("#### 📊 Recent Analyses")
-    history = get_history(20)
+    st.markdown("## 📈 Enterprise Analytics")
+    st.caption("Real-time threat intelligence and scanning metrics.")
+    st.divider()
+
+    history = get_history(500)
     if not history:
-        st.info("No analyses yet. Go to Analyze and scan your first email.")
+        st.info("No scan data yet. Go to Analyze and scan your first email.")
     else:
-        scores     = [row[1] for row in history]
-        labels     = [f"#{i+1}" for i in range(len(history))]
-        colors_bar = [
-            "#ff4444" if s >= 75 else
-            "#ff8800" if s >= 50 else
-            "#ffaa00" if s >= 25 else
-            "#44aa44"
-            for s in scores
-        ]
-        fig2 = go.Figure(go.Bar(
-            x=labels, y=scores, marker_color=colors_bar,
-            text=scores, textposition="outside"
-        ))
-        fig2.update_layout(
-            title="Risk Scores — Last 20 Analyses", yaxis_range=[0, 110],
-            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-            font_color="#e2e8f0", height=300, margin=dict(t=40, b=20, l=20, r=20)
-        )
-        fig2.update_xaxes(showgrid=False)
-        fig2.update_yaxes(gridcolor="#1e3a5f")
-        st.plotly_chart(fig2, use_container_width=True)
+        # ── Compute metrics ────────────────────────────────────────────────
+        scores = [row[1] for row in history]
+        severities = [row[2] for row in history]
+        timestamps = [row[0] for row in history]
+
+        total_scans = len(history)
+        avg_score = round(sum(scores) / total_scans, 1) if total_scans else 0
+        critical_count = sum(1 for s in severities if s == "CRITICAL")
+        high_count = sum(1 for s in severities if s == "HIGH")
+        safe_count = sum(1 for s in severities if s == "LOW")
+
+        # ── KPI cards ──────────────────────────────────────────────────────
+        col_k1, col_k2, col_k3, col_k4 = st.columns(4)
+        col_k1.metric("Total Scans", total_scans)
+        col_k2.metric("Avg Risk Score", f"{avg_score}/100")
+        col_k3.metric("Critical Threats", critical_count)
+        col_k4.metric("Safe Emails", safe_count)
+        st.divider()
+
+        # ── Line chart: daily scan volumes and threat distribution ─────────
+        st.markdown("#### 📅 Daily Scan Volume & Threat Distribution")
+        from collections import Counter
+        daily_counts = Counter()
+        daily_critical = Counter()
+        daily_high = Counter()
+        for ts, sev in zip(timestamps, severities):
+            day = ts[:10]
+            daily_counts[day] += 1
+            if sev == "CRITICAL":
+                daily_critical[day] += 1
+            elif sev == "HIGH":
+                daily_high[day] += 1
+
+        if daily_counts:
+            days_sorted = sorted(daily_counts.keys())
+            total_vals = [daily_counts[d] for d in days_sorted]
+            crit_vals  = [daily_critical.get(d, 0) for d in days_sorted]
+            high_vals  = [daily_high.get(d, 0) for d in days_sorted]
+
+            fig_line = go.Figure()
+            fig_line.add_trace(go.Scatter(
+                x=days_sorted, y=total_vals, mode="lines+markers",
+                name="Total Scans", line=dict(color="#60a5fa", width=2),
+                fill="tozeroy", fillcolor="rgba(96, 165, 250, 0.08)"
+            ))
+            fig_line.add_trace(go.Scatter(
+                x=days_sorted, y=crit_vals, mode="lines+markers",
+                name="Critical", line=dict(color="#ff4444", width=2)
+            ))
+            fig_line.add_trace(go.Scatter(
+                x=days_sorted, y=high_vals, mode="lines+markers",
+                name="High", line=dict(color="#ff8800", width=2)
+            ))
+            fig_line.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                font_color="#e2e8f0", height=300,
+                margin=dict(t=20, b=20, l=20, r=20),
+                legend=dict(orientation="h", y=1.1),
+                xaxis=dict(gridcolor="#1e3a5f", tickangle=-45),
+                yaxis=dict(gridcolor="#1e3a5f", title="Count"),
+            )
+            st.plotly_chart(fig_line, use_container_width=True)
 
         st.divider()
-        for row in history:
-            timestamp, score, severity, kw_hits, susp_urls, preview = row
-            with st.expander(
-                f"**{severity}** — Score {score}/100 — {timestamp[:16]}"
-            ):
-                ca, cb, cc = st.columns(3)
-                ca.metric("Risk Score", score)
-                cb.metric("Keyword Hits", kw_hits)
-                cc.metric("Suspicious URLs", susp_urls)
+
+        # ── Pie: Safe vs Phishing ──────────────────────────────────────────
+        col_p1, col_p2 = st.columns(2)
+        with col_p1:
+            st.markdown("#### 🛡 Safe vs Phishing Encounters")
+            phish_count = critical_count + high_count
+            medium_count = sum(1 for s in severities if s == "MEDIUM")
+            fig_pie = go.Figure(go.Pie(
+                labels=["Safe (LOW)", "Medium Risk", "High Risk", "Critical"],
+                values=[safe_count, medium_count, high_count, critical_count],
+                hole=0.45,
+                marker_colors=["#44aa44", "#ffaa00", "#ff8800", "#ff4444"],
+                textinfo="label+percent",
+                textfont=dict(size=11, color="#e2e8f0"),
+            ))
+            fig_pie.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)",
+                font_color="#e2e8f0", height=280,
+                margin=dict(t=10, b=10, l=10, r=10),
+                showlegend=False,
+            )
+            st.plotly_chart(fig_pie, use_container_width=True)
+
+        # ── Horizontal bar: psychological triggers ─────────────────────────
+        with col_p2:
+            st.markdown("#### 🧠 Most Frequent Psychological Triggers")
+            # Compute trigger frequencies from xai_analyzer
+            st.info(
+                "Trigger frequency data recorded per scan. "
+                "Run analyses with XAI enabled to populate this chart."
+            )
+
+        st.divider()
+
+        # ── Trigger breakdown bar chart (computed from stored session) ─────
+        st.markdown("#### 📊 Trigger Category Breakdown (Last Analysis)")
+        from src.xai_analyzer import TRIGGER_DEFINITIONS
+        last_xai = st.session_state.get("xai_result", {})
+        if last_xai and last_xai.get("triggers"):
+            trig_labels = [t["label"] for t in last_xai["triggers"]]
+            trig_scores = [t["raw_score"] for t in last_xai["triggers"]]
+            trig_colors = [t["severity_color"] for t in last_xai["triggers"]]
+
+            fig_bar = go.Figure(go.Bar(
+                x=trig_scores[::-1],
+                y=trig_labels[::-1],
+                orientation="h",
+                marker_color=trig_colors[::-1],
+                text=[f"{s}/100" for s in trig_scores[::-1]],
+                textposition="outside",
+            ))
+            fig_bar.update_layout(
+                title="Psychological Trigger Intensity (from XAI engine)",
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                font_color="#e2e8f0", height=300,
+                margin=dict(t=30, b=10, l=10, r=60),
+                xaxis=dict(range=[0, 105], gridcolor="#1e3a5f", title="Score"),
+                yaxis=dict(gridcolor="#1e3a5f"),
+            )
+            st.plotly_chart(fig_bar, use_container_width=True)
+
+        st.divider()
+
+        # ── Threat trend mini-table ────────────────────────────────────────
+        with st.expander("📋 Recent Threat Summary (Last 20 Scans)"):
+            for row in history[:20]:
+                ts, sc, sev, kw, su, preview = row
+                emoji = {"CRITICAL": "🔴", "HIGH": "🟠", "MEDIUM": "🟡", "LOW": "🟢"}.get(sev, "⚪")
                 st.markdown(
-                    "<div class='url-box' style='color:#94a3b8'>📧 " +
-                    preview + "...</div>",
-                    unsafe_allow_html=True
+                    f"{emoji} **{sev}** | Score {sc}/100 | {ts[:16]} | "
+                    f"Keywords: {kw} | URLs: {su}"
                 )
 
 
@@ -1368,6 +1524,51 @@ with settings_tab:
             logout()
 
     st.divider()
+
+    # ── Webhook Configuration ──────────────────────────────────────────────
+    st.markdown("### 🔔 Slack / Teams Webhook Notifications")
+    st.caption(
+        "Configure a webhook URL to receive automated alerts when a scan "
+        "scores **85+ (HIGH/CRITICAL)**. Supports Slack Incoming Webhooks and "
+        "Microsoft Teams Incoming Webhooks."
+    )
+
+    wh_key = f"webhook_url_{username}"
+    saved_wh_url = st.session_state.get(wh_key, "")
+    webhook_url = st.text_input(
+        "Webhook URL",
+        value=saved_wh_url,
+        placeholder="https://hooks.slack.com/services/... or https://outlook.office.com/webhook/...",
+        label_visibility="collapsed",
+        key="settings_webhook_url",
+    )
+    col_wh1, col_wh2 = st.columns([1, 3])
+    with col_wh1:
+        if st.button("💾 Save Webhook", type="primary", use_container_width=True):
+            if webhook_url and not webhook_url.startswith(("https://hooks.slack.com/", "https://outlook.office.com/webhook/")):
+                st.error("Invalid webhook URL. Must be a Slack or Teams incoming webhook URL.")
+            else:
+                st.session_state[wh_key] = webhook_url
+                st.success("Webhook URL saved. Alerts will be sent on HIGH/CRITICAL scans.")
+    with col_wh2:
+        if webhook_url:
+            st.caption(f"Active: {webhook_url[:60]}...")
+            if st.button("🔍 Test Webhook", use_container_width=True):
+                from src.webhook_gateway import send_alert
+                test_result = send_alert(
+                    webhook_url,
+                    score=95,
+                    severity="CRITICAL",
+                    triggers=["Urgency", "Authority Impersonation", "Fear"],
+                    snippet="This is a test alert from PhishGuard AI at SecOpsNode AI.",
+                    action="No action required — this is a test notification.",
+                )
+                if test_result.get("success"):
+                    st.success("✅ Test alert sent successfully!")
+                else:
+                    st.error(f"Test failed: {test_result.get('error', 'Unknown error')}")
+
+    st.divider()
     st.markdown("### 📬 Recent Alerts Sent to You")
     user_email = st.session_state.get("email", "")
     my_alerts = get_alert_log(username=username, limit=10) if user_email else []
@@ -1409,28 +1610,45 @@ with training_tab:
     with sub_tab1:
         st.markdown("### 🎣 Phishing Simulation Generator")
         st.markdown(
-            "<p style='color:#64748b;margin-top:-8px'>Generate realistic phishing "
-            "scenarios to test your detection skills. Each example includes clues "
-            "and remediation steps.</p>",
+            "<p style='color:#64748b;margin-top:-8px'>Generate context-specific "
+            "phishing simulations targeting real corporate departments. "
+            "Use these to test and train your team.</p>",
             unsafe_allow_html=True
         )
 
-        scenario = st.selectbox(
-            "Select a scenario",
-            options=["bank-scam", "crypto-scam", "fake-hr", "fake-delivery"],
-            format_func=lambda x: {
-                "bank-scam": "🏦 Bank Fraud Alert",
-                "crypto-scam": "💰 Crypto Wallet Scam",
-                "fake-hr": "📋 Fake HR / Payroll",
-                "fake-delivery": "📦 Parcel Delivery Scam",
-            }.get(x, x),
-            label_visibility="collapsed"
+        col_sim_dept, col_sim_vec = st.columns(2)
+        with col_sim_dept:
+            department = st.selectbox(
+                "Target Department",
+                options=["Finance", "HR", "IT Support"],
+                index=0,
+                label_visibility="collapsed",
+                key="sim_dept"
+            )
+        with col_sim_vec:
+            attack_vector = st.selectbox(
+                "Attack Vector",
+                options=["Urgent Invoice", "Password Reset", "Fake HR Policy"],
+                index=0,
+                label_visibility="collapsed",
+                key="sim_vector"
+            )
+
+        dept_icons = {"Finance": "🏦", "HR": "📋", "IT Support": "🖥"}
+        vec_icons = {"Urgent Invoice": "📄", "Password Reset": "🔑", "Fake HR Policy": "📜"}
+
+        st.markdown(
+            f"<div style='background:#0f172a;border:1px solid #1e3a5f;"
+            f"border-radius:10px;padding:14px 18px;margin:8px 0 16px 0;"
+            f"color:#94a3b8;font-size:13px'>"
+            f"Scenario: {dept_icons.get(department, '')} <b>{department}</b> "
+            f"via {vec_icons.get(attack_vector, '')} <b>{attack_vector}</b></div>",
+            unsafe_allow_html=True
         )
 
         if st.button("🎲 Generate Simulation", type="primary", use_container_width=True):
-            with st.spinner("Generating..."):
-                sim = simulate_phishing(scenario)
-
+            with st.spinner("Generating context-specific phishing simulation..."):
+                sim = simulate_phishing(department, attack_vector)
             st.session_state["simulation"] = sim
             st.session_state["sim_reveal"] = False
 
@@ -1588,3 +1806,52 @@ with training_tab:
             if remediation:
                 st.markdown("### 🛡️ Recommended Actions")
                 st.success(remediation)
+
+# ═════════════════════════════════════════════════════════════════════════════
+# LAST TAB — HISTORY
+# ═════════════════════════════════════════════════════════════════════════════
+history_tab = tab9 if is_admin else tab7
+
+with history_tab:
+    st.markdown("#### 📊 Recent Analyses")
+    history = get_history(20)
+    if not history:
+        st.info("No analyses yet. Go to Analyze and scan your first email.")
+    else:
+        scores     = [row[1] for row in history]
+        labels     = [f"#{i+1}" for i in range(len(history))]
+        colors_bar = [
+            "#ff4444" if s >= 75 else
+            "#ff8800" if s >= 50 else
+            "#ffaa00" if s >= 25 else
+            "#44aa44"
+            for s in scores
+        ]
+        fig2 = go.Figure(go.Bar(
+            x=labels, y=scores, marker_color=colors_bar,
+            text=scores, textposition="outside"
+        ))
+        fig2.update_layout(
+            title="Risk Scores — Last 20 Analyses", yaxis_range=[0, 110],
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+            font_color="#e2e8f0", height=300, margin=dict(t=40, b=20, l=20, r=20)
+        )
+        fig2.update_xaxes(showgrid=False)
+        fig2.update_yaxes(gridcolor="#1e3a5f")
+        st.plotly_chart(fig2, use_container_width=True)
+
+        st.divider()
+        for row in history:
+            timestamp, score, severity, kw_hits, susp_urls, preview = row
+            with st.expander(
+                f"**{severity}** — Score {score}/100 — {timestamp[:16]}"
+            ):
+                ca, cb, cc = st.columns(3)
+                ca.metric("Risk Score", score)
+                cb.metric("Keyword Hits", kw_hits)
+                cc.metric("Suspicious URLs", susp_urls)
+                st.markdown(
+                    "<div class='url-box' style='color:#94a3b8'>📧 " +
+                    preview + "...</div>",
+                    unsafe_allow_html=True
+                )
