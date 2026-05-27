@@ -35,6 +35,9 @@ from src.ratelimit import check_rate_limit, get_rate_limit_remaining
 from src.leaderboard import render_leaderboard, record_scan as lb_record_scan
 from src.env import ENV, get_config_status, log_config_status
 
+if not check_password():
+    st.stop()
+
 st.markdown("""
 <style>
 .block-container { padding-top: 1.5rem; }
@@ -65,9 +68,6 @@ st.markdown("""
 .quota-bar-fill { border-radius: 6px; height: 10px; }
 </style>
 """, unsafe_allow_html=True)
-
-if not check_password():
-    st.stop()
 
 init_db()
 log_config_status()
