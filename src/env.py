@@ -6,7 +6,9 @@ variables via os.getenv(). This is compatible with:
 
   • Hugging Face Spaces → "Variables and secrets" panel (sets env vars)
   • Local development  → .env file via python-dotenv, or manual export
-  • Streamlit Cloud    → st.secrets (fallback, not recommended)
+
+IMPORTANT: This module does NOT import streamlit, so it can be imported
+before st.set_page_config() without triggering Streamlit internals.
 
 Usage:
     from src.env import ENV
@@ -17,7 +19,7 @@ Naming convention:  All caps, underscores.  Every key defaults to "".
 
 import os
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 logger = logging.getLogger("phishguard-env")
@@ -25,27 +27,18 @@ logger = logging.getLogger("phishguard-env")
 
 @dataclass
 class EnvConfig:
-    # ── LLM / AI providers ─────────────────────────────────────────────────
     OPENAI_API_KEY: str = ""
     ANTHROPIC_API_KEY: str = ""
-
-    # ── Threat intelligence ────────────────────────────────────────────────
     VIRUSTOTAL_API_KEY: str = ""
-
-    # ── Payment processing (Paddle) ────────────────────────────────────────
     PADDLE_API_KEY: str = ""
     PADDLE_CLIENT_TOKEN: str = ""
     PADDLE_WEBHOOK_SECRET: str = ""
     PADDLE_PRICE_ID_STARTER: str = ""
     PADDLE_PRICE_ID_BUSINESS: str = ""
     PADDLE_ENVIRONMENT: str = "sandbox"
-
-    # ── Platform ───────────────────────────────────────────────────────────
     LOG_LEVEL: str = "INFO"
     ADMIN_PASSWORD: str = "phishguard2026"
     APP_URL: str = ""
-
-    # ── Derived state (set after load) ─────────────────────────────────────
     paddle_configured: bool = False
 
     def __post_init__(self):
@@ -55,32 +48,12 @@ class EnvConfig:
 
 
 def _read_env(key: str, default: str = "") -> str:
-    """Read an env var with fallback chain: os.getenv → st.secrets → default.
-
-    This mirrors the pattern already used across the codebase so that
-    local .streamlit/secrets.toml files still work during development.
-    """
-    val = os.getenv(key)
-    if val:
-        return val
-
-    # Optional Streamlit secrets fallback (for local dev convenience)
-    try:
-        import streamlit as st
-        val = st.secrets.get(key, st.secrets.get("paddle", {}).get(
-            key.removeprefix("PADDLE_").lower(), ""
-        ))
-        if val:
-            return str(val)
-    except Exception:
-        pass
-
-    return default
+    """Read an env var. Pure os.getenv — no streamlit import."""
+    return os.getenv(key, default)
 
 
 def load_env() -> EnvConfig:
-    """Load all configuration from environment variables."""
-    cfg = EnvConfig(
+    return EnvConfig(
         OPENAI_API_KEY=_read_env("OPENAI_API_KEY"),
         ANTHROPIC_API_KEY=_read_env("ANTHROPIC_API_KEY"),
         VIRUSTOTAL_API_KEY=_read_env("VIRUSTOTAL_API_KEY"),
@@ -94,26 +67,18 @@ def load_env() -> EnvConfig:
         ADMIN_PASSWORD=_read_env("ADMIN_PASSWORD", "phishguard2026"),
         APP_URL=_read_env("APP_URL", ""),
     )
-    return cfg
 
 
 # Singleton — import once, use everywhere.
+# Pure os.getenv — safe to import before set_page_config().
 ENV: EnvConfig = load_env()
 
 
 def get_config_status() -> dict:
-    """Return a dict of which keys are / are not configured (safe for UI).
-
-    Values are masked — this never exposes actual secrets.
-    """
     status = {}
     for key in [
-        "OPENAI_API_KEY",
-        "ANTHROPIC_API_KEY",
-        "VIRUSTOTAL_API_KEY",
-        "PADDLE_API_KEY",
-        "PADDLE_CLIENT_TOKEN",
-        "PADDLE_WEBHOOK_SECRET",
+        "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "VIRUSTOTAL_API_KEY",
+        "PADDLE_API_KEY", "PADDLE_CLIENT_TOKEN", "PADDLE_WEBHOOK_SECRET",
     ]:
         val = getattr(ENV, key, "")
         status[key] = {
@@ -125,13 +90,9 @@ def get_config_status() -> dict:
 
 
 def log_config_status():
-    """Log which services are configured (without revealing secrets)."""
     status = get_config_status()
     configured = [k for k, v in status.items() if isinstance(v, dict) and v["configured"]]
     missing = [k for k, v in status.items() if isinstance(v, dict) and not v["configured"]]
     logger.info("Configured services: %s", ", ".join(configured) or "none")
     if missing:
-        logger.warning(
-            "Missing API keys — set via env vars or HF Secrets panel: %s",
-            ", ".join(missing),
-        )
+        logger.warning("Missing API keys: %s", ", ".join(missing))
