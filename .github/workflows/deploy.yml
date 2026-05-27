@@ -3,11 +3,11 @@
 # ──────────────────────────────────────────────────────────────────────────────
 # Trigger:        Every push to main or master
 # Secret used:    secrets.HF_TOKEN  (HF User Access Token with write permission)
-# Target:         hf.co/spaces/Sabersouihi/PhishGuard
+# Target:         hf.co/spaces/Sabersouihi/phishguard-ai
 #
 # Setup:
 #   1. Create a Space at https://huggingface.co/new-space
-#      - Owner: Sabersouihi, Space Name: PhishGuard
+#      - Owner: Sabersouihi, Space Name: phishguard-ai
 #      - SDK: Streamlit
 #   2. Set HF_TOKEN in GitHub repo: Settings → Secrets → Actions → HF_TOKEN
 #   3. Replace YOUR_HF_USERNAME in the HF_URL below
@@ -45,7 +45,7 @@ jobs:
           # ── CONFIGURATION ────────────────────────────────────────────────
           # Replace with your actual Hugging Face username and space name:
           HF_USERNAME="Sabersouihi"
-          HF_SPACE="PhishGuard"
+          HF_SPACE="phishguard-ai"
           # ─────────────────────────────────────────────────────────────────
           HF_URL="https://${HF_USERNAME}:${HF_TOKEN}@huggingface.co/spaces/${HF_USERNAME}/${HF_SPACE}"
           git push --force "${HF_URL}" main
