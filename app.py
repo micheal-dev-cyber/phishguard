@@ -8,6 +8,7 @@ from src.threat_intel import check_multiple_urls, get_threat_summary
 from src.osint import run_osint
 from src.admin import get_stats, get_all_analyses, get_recent_threats, get_daily_counts
 from src.alerts import send_threat_alert, get_alert_log
+from src.copilot import get_copilot_response, SUGGESTED_PROMPTS
 from src.tenants import (
     log_usage, check_quota, get_all_tenants, get_usage_all_tenants,
     create_tenant, update_tenant, delete_tenant, set_password, PLANS
@@ -102,11 +103,11 @@ st.divider()
 
 # ── Tabs ─────────────────────────────────────────────────────────────────────
 if is_admin:
-    tab1, tab2, tab3, tab4 = st.tabs([
-        "🔍 Analyze Email", "📊 History", "⚙ Admin Dashboard", "👥 Clients"
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "🔍 Analyze Email", "📊 History", "🤖 AI Copilot", "⚙ Admin Dashboard", "👥 Clients"
     ])
 else:
-    tab1, tab2 = st.tabs(["🔍 Analyze Email", "📊 History"])
+    tab1, tab2, tab3 = st.tabs(["🔍 Analyze Email", "📊 History", "🤖 AI Copilot"])
 
 # ═════════════════════════════════════════════════════════════════════════════
 # TAB 1 — ANALYZER
@@ -461,11 +462,128 @@ with tab2:
                 )
 
 
+
+# ═════════════════════════════════════════════════════════════════════════════
+# TAB 3 — AI COPILOT
+# ═════════════════════════════════════════════════════════════════════════════
+with tab3:
+    st.markdown("## 🤖 AI Security Copilot")
+    st.markdown(
+        "<p style='color:#64748b;margin-top:-8px;margin-bottom:24px'>"
+        "Ask anything about phishing, threats, or email security. "
+        "The copilot has full context of your last analysis.</p>",
+        unsafe_allow_html=True
+    )
+
+    # Init chat history
+    if "copilot_messages" not in st.session_state:
+        st.session_state["copilot_messages"] = []
+
+    messages = st.session_state["copilot_messages"]
+    current_results = st.session_state.get("results", None)
+
+    # Context banner if analysis exists
+    if current_results:
+        score    = current_results["risk_score"]
+        severity = current_results["severity"]
+        color    = current_results["severity_color"]
+        st.markdown(
+            "<div style='background:#111827;border:1px solid #1e3a5f;"
+            "border-radius:10px;padding:10px 16px;margin-bottom:20px;"
+            "display:flex;align-items:center;gap:12px'>"
+            "<span style='font-size:1.2rem'>📊</span>"
+            "<span style='color:#94a3b8;font-size:13px'>"
+            "Analysis loaded — Risk Score <strong style='color:" + color + "'>" +
+            str(score) + "/100 " + severity + "</strong>. "
+            "Copilot has full context.</span>"
+            "</div>",
+            unsafe_allow_html=True
+        )
+
+    # Suggested prompts when chat is empty
+    if not messages:
+        st.markdown(
+            "<p style='color:#475569;font-size:13px;margin-bottom:12px'>"
+            "💡 Try one of these:</p>",
+            unsafe_allow_html=True
+        )
+        cols = st.columns(2)
+        for i, prompt in enumerate(SUGGESTED_PROMPTS):
+            with cols[i % 2]:
+                if st.button(prompt, key="sugg_" + str(i), use_container_width=True):
+                    st.session_state["copilot_messages"].append(
+                        {"role": "user", "content": prompt}
+                    )
+                    with st.spinner("Copilot is thinking..."):
+                        reply = get_copilot_response(
+                            st.session_state["copilot_messages"],
+                            results=current_results
+                        )
+                    st.session_state["copilot_messages"].append(
+                        {"role": "assistant", "content": reply}
+                    )
+                    st.rerun()
+        st.divider()
+
+    # Render chat history
+    for msg in messages:
+        role    = msg["role"]
+        content = msg["content"]
+        if role == "user":
+            st.markdown(
+                "<div style='display:flex;justify-content:flex-end;margin:8px 0'>"
+                "<div style='background:#1e3a5f;border-radius:14px 14px 2px 14px;"
+                "padding:12px 18px;max-width:75%;color:#e2e8f0;font-size:14px'>"
+                + content +
+                "</div></div>",
+                unsafe_allow_html=True
+            )
+        else:
+            st.markdown(
+                "<div style='display:flex;justify-content:flex-start;margin:8px 0'>"
+                "<div style='background:#111827;border:1px solid #1e3a5f;"
+                "border-radius:14px 14px 14px 2px;padding:14px 18px;"
+                "max-width:80%;color:#e2e8f0;font-size:14px;line-height:1.6'>"
+                + content.replace("\n", "<br>") +
+                "</div></div>",
+                unsafe_allow_html=True
+            )
+
+    # Input area
+    st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
+    col_input, col_send, col_clear = st.columns([6, 1, 1])
+    with col_input:
+        user_input = st.text_input(
+            "copilot_input", label_visibility="collapsed",
+            placeholder="Ask the copilot anything about this threat...",
+            key="copilot_text"
+        )
+    with col_send:
+        send_btn = st.button("→ Send", use_container_width=True, type="primary")
+    with col_clear:
+        if st.button("🗑 Clear", use_container_width=True):
+            st.session_state["copilot_messages"] = []
+            st.rerun()
+
+    if send_btn and user_input.strip():
+        st.session_state["copilot_messages"].append(
+            {"role": "user", "content": user_input.strip()}
+        )
+        with st.spinner("Copilot is thinking..."):
+            reply = get_copilot_response(
+                st.session_state["copilot_messages"],
+                results=current_results
+            )
+        st.session_state["copilot_messages"].append(
+            {"role": "assistant", "content": reply}
+        )
+        st.rerun()
+
 # ═════════════════════════════════════════════════════════════════════════════
 # TAB 3 — ADMIN DASHBOARD
 # ═════════════════════════════════════════════════════════════════════════════
 if is_admin:
-    with tab3:
+    with tab4:
         st.markdown("## ⚙ Admin Dashboard")
         st.markdown(
             "<p style='color:#94a3b8'>Only visible to admin account</p>",
@@ -588,7 +706,7 @@ if is_admin:
 # TAB 4 — CLIENT MANAGEMENT
 # ═════════════════════════════════════════════════════════════════════════════
 if is_admin:
-    with tab4:
+    with tab5:
         st.markdown("## 👥 Client Management")
         st.divider()
 
