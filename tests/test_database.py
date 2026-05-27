@@ -28,8 +28,14 @@ class TestDatabase:
         self.db = db
 
     def test_save_and_get_history(self):
-        self.db.save_analysis(75, "HIGH", 5, 2, "Suspicious email...")
-        self.db.save_analysis(20, "LOW", 1, 0, "Safe email...")
+        self.db.save_analysis(
+            {"risk_score": 75, "severity": "HIGH", "total_keyword_hits": 5, "suspicious_url_count": 2},
+            "Suspicious email...",
+        )
+        self.db.save_analysis(
+            {"risk_score": 20, "severity": "LOW", "total_keyword_hits": 1, "suspicious_url_count": 0},
+            "Safe email...",
+        )
         history = self.db.get_history(10)
         assert len(history) == 2
 
@@ -39,7 +45,8 @@ class TestDatabase:
 
     def test_save_with_ai_report(self):
         self.db.save_analysis(
-            85, "CRITICAL", 8, 3, "Phishing email...",
+            {"risk_score": 85, "severity": "CRITICAL", "total_keyword_hits": 8, "suspicious_url_count": 3},
+            "Phishing email...",
             ai_report="This is a phishing attempt...",
         )
         history = self.db.get_history(10)
@@ -51,18 +58,27 @@ class TestDatabase:
         assert history == []
 
     def test_save_analysis_returns_none(self):
-        result = self.db.save_analysis(50, "MEDIUM", 3, 1, "Test")
+        result = self.db.save_analysis(
+            {"risk_score": 50, "severity": "MEDIUM", "total_keyword_hits": 3, "suspicious_url_count": 1},
+            "Test",
+        )
         assert result is None
 
     def test_multiple_saves_order(self):
         scores = [10, 50, 90]
         for s in scores:
-            self.db.save_analysis(s, "TEST", 0, 0, f"Email {s}")
+            self.db.save_analysis(
+                {"risk_score": s, "severity": "TEST", "total_keyword_hits": 0, "suspicious_url_count": 0},
+                f"Email {s}",
+            )
         history = self.db.get_history(5)
         assert [h[1] for h in history] == [90, 50, 10]
 
     def test_history_limit(self):
         for i in range(20):
-            self.db.save_analysis(i * 5, "TEST", i, 0, f"Email {i}")
+            self.db.save_analysis(
+                {"risk_score": i * 5, "severity": "TEST", "total_keyword_hits": i, "suspicious_url_count": 0},
+                f"Email {i}",
+            )
         history = self.db.get_history(5)
         assert len(history) == 5

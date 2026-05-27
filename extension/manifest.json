@@ -12,9 +12,9 @@
   ],
   "host_permissions": [
     "https://mail.google.com/*",
-    "https://phishguard-okmkdupa4om23rq6e78bad.streamlit.app/*",
-    "http://127.0.0.1:8080/*",
-    "https://*.secopsnode.com/*"
+    "https://huggingface.co/spaces/Sabersouihi/phishguard-ai/*",
+    "http://127.0.0.1:8501/*",
+    "http://127.0.0.1:8080/*"
   ],
   "background": {
     "service_worker": "background.js"
