@@ -29,6 +29,8 @@ logger = logging.getLogger("phishguard-env")
 class EnvConfig:
     OPENAI_API_KEY: str = ""
     ANTHROPIC_API_KEY: str = ""
+    GROQ_API_KEY: str = ""
+    OPENROUTER_API_KEY: str = ""
     VIRUSTOTAL_API_KEY: str = ""
     PADDLE_API_KEY: str = ""
     PADDLE_CLIENT_TOKEN: str = ""
@@ -61,6 +63,8 @@ def load_env() -> EnvConfig:
     return EnvConfig(
         OPENAI_API_KEY=_read_env("OPENAI_API_KEY"),
         ANTHROPIC_API_KEY=_read_env("ANTHROPIC_API_KEY"),
+        GROQ_API_KEY=_read_env("GROQ_API_KEY"),
+        OPENROUTER_API_KEY=_read_env("OPENROUTER_API_KEY"),
         VIRUSTOTAL_API_KEY=_read_env("VIRUSTOTAL_API_KEY"),
         PADDLE_API_KEY=_read_env("PADDLE_API_KEY"),
         PADDLE_CLIENT_TOKEN=_read_env("PADDLE_CLIENT_TOKEN"),
@@ -87,7 +91,7 @@ ENV: EnvConfig = load_env()
 def get_config_status() -> dict:
     status = {}
     for key in [
-        "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "VIRUSTOTAL_API_KEY",
+        "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GROQ_API_KEY", "OPENROUTER_API_KEY", "VIRUSTOTAL_API_KEY",
         "PADDLE_API_KEY", "PADDLE_CLIENT_TOKEN", "PADDLE_WEBHOOK_SECRET",
         "SMTP_HOST", "SMTP_USER", "SMTP_FROM",
     ]:
