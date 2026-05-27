@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: phishguard-webhook
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn webhook:app --bind 0.0.0.0:$PORT --workers 1 --timeout 30
+    envVars:
+      - key: PADDLE_API_KEY
+        sync: false
+      - key: PADDLE_CLIENT_TOKEN
+        sync: false
+      - key: PADDLE_WEBHOOK_SECRET
+        sync: false
+      - key: PADDLE_PRICE_ID_STARTER
+        sync: false
+      - key: PADDLE_PRICE_ID_BUSINESS
+        sync: false
+      - key: PADDLE_ENVIRONMENT
+        value: sandbox

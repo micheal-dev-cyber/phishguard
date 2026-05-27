@@ -39,6 +39,11 @@ except ImportError as e:
     sys.exit(1)
 
 try:
+    from src.detector import analyze_email
+except ImportError:
+    analyze_email = None
+
+try:
     from dotenv import load_dotenv
     load_dotenv()
 except ImportError:
@@ -77,6 +82,36 @@ def webhook():
     except Exception as e:
         logger.error(f"Error handling {event_type}: {e}")
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/analyze", methods=["POST"])
+def analyze():
+    """API endpoint for the browser extension to scan email/page text."""
+    if analyze_email is None:
+        return jsonify({"error": "Detection engine unavailable"}), 500
+
+    data = request.get_json(force=True, silent=True)
+    if not data or not data.get("text", "").strip():
+        return jsonify({"error": "Missing 'text' field"}), 400
+
+    text = data["text"][:10000]
+    try:
+        results = analyze_email(text)
+        return jsonify({
+            "risk_score": results.get("risk_score", 0),
+            "severity": results.get("severity", "LOW"),
+            "total_keyword_hits": results.get("total_keyword_hits", 0),
+            "url_count": results.get("url_count", 0),
+            "suspicious_url_count": results.get("suspicious_url_count", 0),
+            "urgency": [],
+            "threats": [],
+            "requests": [],
+            "impersonation": [],
+            "suspicious_urls": [u["url"] for u in results.get("suspicious_urls", [])],
+        })
+    except Exception as e:
+        logger.error(f"Analysis error: {e}")
+        return jsonify({"error": "Analysis failed", "status": "error"}), 500
 
 
 @app.route("/health", methods=["GET"])

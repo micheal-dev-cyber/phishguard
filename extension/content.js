@@ -1,6 +1,7 @@
 // ── PhishGuard AI — Gmail Content Script ──────────────────────────────────────
 
 const PHISHGUARD_API = "https://phishguard-okmkdupa4om23rq6e78bad.streamlit.app";
+const PHISHGUARD_APP = "https://phishguard-okmkdupa4om23rq6e78bad.streamlit.app";
 
 let scanButtonInjected = false;
 
@@ -373,7 +374,7 @@ function showResults(results, emailData) {
             <span style="font-size:11px;color:#475569">
                 Powered by PhishGuard AI
             </span>
-            <a href="https://phishguard-okmkdupa4om23rq6e78bad.streamlit.app"
+            <a href="${PHISHGUARD_APP}"
                 target="_blank"
                 style="font-size:11px;color:#60a5fa;text-decoration:none">
                 Full Analysis →
