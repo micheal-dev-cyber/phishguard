@@ -1,0 +1,51 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# PhishGuard AI → Hugging Face Spaces — CI/CD Deployment
+# ──────────────────────────────────────────────────────────────────────────────
+# Trigger:        Every push to main or master
+# Secret used:    secrets.HF_TOKEN  (HF User Access Token with write permission)
+# Target:         hf.co/spaces/<YOUR_HF_USERNAME>/PhishGuard
+#
+# Setup:
+#   1. Create a Space at https://huggingface.co/new-space
+#      - Owner: <your-username>, Space Name: PhishGuard
+#      - SDK: Streamlit
+#   2. Set HF_TOKEN in GitHub repo: Settings → Secrets → Actions → HF_TOKEN
+#   3. Replace YOUR_HF_USERNAME in the HF_URL below
+#   4. In HF Space Settings → Variables and secrets, add:
+#      - OPENAI_API_KEY, ANTHROPIC_API_KEY, VIRUSTOTAL_API_KEY, etc.
+# ──────────────────────────────────────────────────────────────────────────────
+
+name: Deploy to Hugging Face Spaces
+
+on:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure git identity
+        run: |
+          git config --global user.name "PhishGuard CI/CD"
+          git config --global user.email "deploy@phishguard.ai"
+
+      - name: Force push to Hugging Face Spaces
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          # ── CONFIGURATION ────────────────────────────────────────────────
+          # Replace with your actual Hugging Face username and space name:
+          HF_USERNAME="YOUR_HF_USERNAME"
+          HF_SPACE="PhishGuard"
+          # ─────────────────────────────────────────────────────────────────
+          HF_URL="https://${HF_USERNAME}:${HF_TOKEN}@huggingface.co/spaces/${HF_USERNAME}/${HF_SPACE}"
+          git push --force "${HF_URL}" main

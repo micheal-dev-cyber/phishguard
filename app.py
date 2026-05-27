@@ -29,6 +29,12 @@ from src.paddle_billing import (
 from src.ratelimit import check_rate_limit, get_rate_limit_remaining
 from src.leaderboard import render_leaderboard, record_scan as lb_record_scan
 
+# ── Centralised environment / secrets loader ─────────────────────────────────
+# All API keys read via os.getenv() — compatible with Hugging Face Spaces
+# "Variables and secrets" panel, local .env files, or Streamlit secrets.toml.
+# See src/env.py for the full list of supported env vars.
+from src.env import ENV, get_config_status, log_config_status
+
 st.set_page_config(page_title="PhishGuard AI", page_icon="🛡",
                    layout="wide", initial_sidebar_state="collapsed")
 
@@ -67,6 +73,21 @@ if not check_password():
     st.stop()
 
 init_db()
+log_config_status()
+
+# ── Startup config banner (admin only) ──────────────────────────────────────
+if st.session_state.get("is_admin"):
+    cfg_status = get_config_status()
+    missing = [k for k, v in cfg_status.items() if isinstance(v, dict) and not v["configured"]]
+    if missing:
+        import logging
+        logger = logging.getLogger("phishguard")
+        logger.warning("Missing API keys on startup: %s", ", ".join(missing))
+        with st.sidebar.expander("⚠️ Configuration Status", expanded=True):
+            st.caption("Set these via HF Space → Settings → Variables and secrets:")
+            for key in missing:
+                st.markdown(f"- `{key}`")
+            st.caption("The app will still run — features needing these keys will gracefully degrade.")
 
 username = st.session_state.get("username", "user")
 plan     = st.session_state.get("plan", "trial")
