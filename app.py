@@ -1,5 +1,6 @@
 import streamlit as st
 import plotly.graph_objects as go
+from datetime import datetime
 from src.detector import analyze_email
 from src.database import init_db, save_analysis, get_history
 from src.report_generator import generate_pdf_report
@@ -9,6 +10,7 @@ from src.osint import run_osint
 from src.admin import get_stats, get_all_analyses, get_recent_threats, get_daily_counts
 from src.alerts import send_threat_alert, get_alert_log
 from src.copilot import get_copilot_response, SUGGESTED_PROMPTS
+from src.ai_analyzer import simulate_phishing, analyze_screenshot
 from src.tenants import (
     log_usage, check_quota, get_all_tenants, get_usage_all_tenants,
     create_tenant, update_tenant, delete_tenant, set_password, PLANS
@@ -18,6 +20,7 @@ from src.paddle_billing import (
     generate_checkout_url,
     verify_transaction,
 )
+from src.ratelimit import check_rate_limit, get_rate_limit_remaining
 
 st.set_page_config(page_title="PhishGuard AI", page_icon="🛡",
                    layout="wide", initial_sidebar_state="collapsed")
@@ -61,6 +64,18 @@ init_db()
 username = st.session_state.get("username", "user")
 plan     = st.session_state.get("plan", "trial")
 is_admin = st.session_state.get("is_admin", False)
+
+# ── Session timeout (30 min inactivity) ─────────────────────────────────────
+now = datetime.now()
+last_active = st.session_state.get("last_active")
+if last_active:
+    elapsed = (now - last_active).total_seconds()
+    if elapsed > 1800:
+        for key in ["authenticated", "username", "plan", "is_admin", "email", "last_active"]:
+            st.session_state.pop(key, None)
+        st.warning("⏰ Session expired due to inactivity. Please log in again.")
+        st.rerun()
+st.session_state["last_active"] = now
 
 # ── Header ───────────────────────────────────────────────────────────────────
 col_title, col_quota, col_user = st.columns([3, 2, 1])
@@ -231,13 +246,15 @@ if st.session_state.get("show_upgrade") and plan != "enterprise":
 
 # ── Tabs ─────────────────────────────────────────────────────────────────────
 if is_admin:
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
         "🔍 Analyze Email", "📊 History", "🤖 AI Copilot",
-        "⚙ Admin Dashboard", "👥 Clients", "💳 Billing"
+        "⚙ Admin Dashboard", "👥 Clients", "💳 Billing",
+        "⚙ Settings", "🧪 Training"
     ])
 else:
-    tab1, tab2, tab3, tab4 = st.tabs([
-        "🔍 Analyze Email", "📊 History", "🤖 AI Copilot", "💳 Billing"
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+        "🔍 Analyze Email", "📊 History", "🤖 AI Copilot",
+        "💳 Billing", "⚙ Settings", "🧪 Training"
     ])
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -278,6 +295,12 @@ with tab1:
         if not email_text.strip():
             st.warning("⚠ Please paste an email first.")
         else:
+            rl_key = f"analyze_{username}"
+            if not check_rate_limit(rl_key, max_requests=15, window=60):
+                remaining = get_rate_limit_remaining(rl_key, max_requests=15, window=60)
+                st.error(f"⏳ Rate limit reached. Please wait before submitting another analysis. ({remaining} remaining)")
+                st.stop()
+
             with st.spinner("Scanning for threats..."):
                 results = analyze_email(email_text)
                 save_analysis(results, email_text)
@@ -1064,3 +1087,282 @@ with billing_tab:
         "Need help? Contact support.</p>",
         unsafe_allow_html=True
     )
+
+# ═════════════════════════════════════════════════════════════════════════════
+# TAB 7/5 — SETTINGS
+# ═════════════════════════════════════════════════════════════════════════════
+settings_tab = tab7 if is_admin else tab5
+
+with settings_tab:
+    st.markdown("## ⚙ Account Settings")
+    st.divider()
+
+    col_s1, col_s2 = st.columns([1, 1])
+
+    with col_s1:
+        st.markdown("### 👤 Profile")
+        st.markdown(f"**Username:** `{username}`")
+        st.markdown(f"**Plan:** {PLANS.get(plan, PLANS['trial'])['label']}")
+
+        st.divider()
+        st.markdown("### 📧 Email for Alerts")
+        current_email = st.session_state.get("email", "")
+        new_email = st.text_input(
+            "Email address",
+            value=current_email,
+            placeholder="you@example.com",
+            label_visibility="collapsed",
+            key="settings_email"
+        )
+        if st.button("💾 Save Email", type="primary", use_container_width=True):
+            update_tenant(username, email=new_email)
+            st.session_state["email"] = new_email
+            st.success("✅ Email updated. HIGH/CRITICAL alerts will be sent here.")
+
+        if current_email:
+            st.caption(f"Current: {current_email}")
+            st.info("💡 Alerts fire automatically when an analysis scores HIGH or CRITICAL.")
+
+    with col_s2:
+        st.markdown("### 🔑 Security")
+        st.markdown("#### Change Password")
+        pw1 = st.text_input("New password", type="password", placeholder="Enter new password", key="pw_new", label_visibility="collapsed")
+        pw2 = st.text_input("Confirm password", type="password", placeholder="Confirm new password", key="pw_confirm", label_visibility="collapsed")
+        if st.button("🔄 Update Password", type="primary", use_container_width=True):
+            if not pw1:
+                st.warning("Enter a new password.")
+            elif pw1 != pw2:
+                st.error("Passwords do not match.")
+            elif len(pw1) < 6:
+                st.warning("Password must be at least 6 characters.")
+            else:
+                set_password(username, pw1)
+                st.success("✅ Password updated successfully.")
+
+        st.divider()
+        st.markdown("#### Session")
+        st.caption(f"Logged in as: **{username}**")
+        if st.button("🚪 Logout", use_container_width=True):
+            logout()
+
+    st.divider()
+    st.markdown("### 📬 Recent Alerts Sent to You")
+    user_email = st.session_state.get("email", "")
+    my_alerts = get_alert_log(username=username, limit=10) if user_email else []
+    if not my_alerts:
+        st.info("No alerts sent yet. Alerts are triggered automatically when a HIGH or CRITICAL threat is detected and you have an email saved above.")
+    else:
+        for ar in my_alerts:
+            al_user, al_email, al_subject, al_sev, al_score, al_sent, al_ok = ar
+            dot = "🟢" if al_ok else "🔴"
+            sev_color = "#ff4444" if al_sev == "CRITICAL" else "#ff8800"
+            st.markdown(
+                "<div style='background:#111827;border:1px solid #1e3a5f;"
+                "border-radius:10px;padding:12px 16px;margin:4px 0;"
+                "display:flex;justify-content:space-between;align-items:center'>"
+                "<span style='color:#e2e8f0'>" + dot + " " + al_subject[:50] + "</span>"
+                "<span style='color:" + sev_color + ";font-size:12px;font-weight:700'>" + al_sev + " " + str(al_score) + "/100</span>"
+                "<span style='color:#475569;font-size:11px;font-family:monospace'>" + al_sent[:16] + "</span>"
+                "</div>",
+                unsafe_allow_html=True
+            )
+
+# ═════════════════════════════════════════════════════════════════════════════
+# TAB 8/6 — TRAINING (Simulator + Screenshot Scanner)
+# ═════════════════════════════════════════════════════════════════════════════
+training_tab = tab8 if is_admin else tab6
+
+with training_tab:
+    st.markdown("## 🧪 Security Training Tools")
+    st.markdown(
+        "<p style='color:#64748b;margin-top:-8px'>Interactive tools to help you "
+        "recognise phishing attempts and test your security awareness.</p>",
+        unsafe_allow_html=True
+    )
+    st.divider()
+
+    sub_tab1, sub_tab2 = st.tabs(["🎣 Phishing Simulator", "📷 Screenshot Scanner"])
+
+    # ── Sub-tab 1: Phishing Simulator ────────────────────────────────────────
+    with sub_tab1:
+        st.markdown("### 🎣 Phishing Simulation Generator")
+        st.markdown(
+            "<p style='color:#64748b;margin-top:-8px'>Generate realistic phishing "
+            "scenarios to test your detection skills. Each example includes clues "
+            "and remediation steps.</p>",
+            unsafe_allow_html=True
+        )
+
+        scenario = st.selectbox(
+            "Select a scenario",
+            options=["bank-scam", "crypto-scam", "fake-hr", "fake-delivery"],
+            format_func=lambda x: {
+                "bank-scam": "🏦 Bank Fraud Alert",
+                "crypto-scam": "💰 Crypto Wallet Scam",
+                "fake-hr": "📋 Fake HR / Payroll",
+                "fake-delivery": "📦 Parcel Delivery Scam",
+            }.get(x, x),
+            label_visibility="collapsed"
+        )
+
+        if st.button("🎲 Generate Simulation", type="primary", use_container_width=True):
+            with st.spinner("Generating..."):
+                sim = simulate_phishing(scenario)
+
+            st.session_state["simulation"] = sim
+            st.session_state["sim_reveal"] = False
+
+        sim = st.session_state.get("simulation")
+        if sim:
+            st.divider()
+            st.markdown("### 📧 Simulated Email")
+
+            col_sim1, col_sim2 = st.columns([1, 3])
+            with col_sim1:
+                st.markdown("**From:**")
+                st.markdown("**Subject:**")
+                st.markdown("**Body:**")
+            with col_sim2:
+                st.markdown(f"`{sim.get('sender', 'unknown@example.com')}`")
+                st.markdown(f"**{sim.get('subject', '(no subject)')}**")
+                st.markdown(
+                    "<div style='background:#0f172a;border:1px solid #1e3a5f;"
+                    "border-radius:10px;padding:16px;font-family:monospace;"
+                    "font-size:13px;color:#94a3b8;line-height:1.6;margin-top:4px;"
+                    "max-height:300px;overflow-y:auto'>"
+                    + sim.get("body", "").replace("\n", "<br>") +
+                    "</div>",
+                    unsafe_allow_html=True
+                )
+
+            st.divider()
+
+            reveal = st.session_state.get("sim_reveal", False)
+            if not reveal:
+                if st.button("🔍 Reveal Phishing Clues", type="primary", use_container_width=True):
+                    st.session_state["sim_reveal"] = True
+                    st.rerun()
+            else:
+                clues = sim.get("clues", [])
+                remediation = sim.get("remediation", "")
+
+                st.markdown("### 🚩 Phishing Indicators")
+                for clue in clues:
+                    st.markdown(
+                        "<div style='background:#2a0a0a;border:1px solid #ff444444;"
+                        "border-radius:8px;padding:10px 14px;margin:6px 0;"
+                        "color:#ff8888;font-size:13px'>🚨 " + clue + "</div>",
+                        unsafe_allow_html=True
+                    )
+
+                st.markdown("### 🛡️ Remediation")
+                st.success(remediation)
+
+                st.divider()
+                st.markdown("### 📊 What to Look For")
+                st.markdown(
+                    "- **Urgency tactics** — phrases like 'act now', 'limited time', "
+                    "'suspended' are red flags\n"
+                    "- **Spoofed domains** — check the sender domain carefully, "
+                    "phishers use similar-looking addresses\n"
+                    "- **Generic greetings** — real companies use your name\n"
+                    "- **Suspicious links** — hover before clicking, check the real URL\n"
+                    "- **Requests for credentials** — legitimate companies never ask "
+                    "for passwords or personal info\n"
+                    "- **Poor grammar/spelling** — many phishing emails originate "
+                    "from non-native speakers"
+                )
+
+                if st.button("🔄 Try Another Scenario", use_container_width=True):
+                    st.session_state.pop("simulation", None)
+                    st.session_state.pop("sim_reveal", None)
+                    st.rerun()
+
+    # ── Sub-tab 2: Screenshot OCR Scanner ────────────────────────────────────
+    with sub_tab2:
+        st.markdown("### 📷 Screenshot / Image Scanner")
+        st.markdown(
+            "<p style='color:#64748b;margin-top:-8px'>Upload a screenshot of a "
+            "suspicious email, website, or message. AI vision analysis detects "
+            "brand impersonation, visual spoofing, and phishing layouts.</p>",
+            unsafe_allow_html=True
+        )
+
+        uploaded = st.file_uploader(
+            "Choose an image", type=["png", "jpg", "jpeg", "webp"],
+            label_visibility="collapsed"
+        )
+
+        if uploaded:
+            st.image(uploaded, caption="Uploaded screenshot", use_container_width=True)
+
+            if st.button("🔍 Analyze Screenshot", type="primary", use_container_width=True):
+                with st.spinner("AI vision analysis in progress..."):
+                    import base64
+                    bytes_data = uploaded.getvalue()
+                    mime = uploaded.type or "image/png"
+                    b64 = base64.b64encode(bytes_data).decode()
+                    result = analyze_screenshot(b64, mime)
+
+                st.session_state["screenshot_result"] = result
+
+        result = st.session_state.get("screenshot_result")
+        if result:
+            st.divider()
+            is_phish = result.get("isPhishing", False)
+            score = result.get("score", 0)
+            severity = result.get("severity", "LOW")
+            color = "#ff4444" if score >= 75 else "#ff8800" if score >= 50 else "#ffaa00" if score >= 25 else "#44aa44"
+
+            st.markdown("### 📊 Scan Results")
+            col_r1, col_r2 = st.columns([1, 2])
+            with col_r1:
+                st.markdown(
+                    "<div style='text-align:center;padding:20px;background:#111827;"
+                    "border-radius:12px;border:1px solid " + color + "'>"
+                    "<div style='font-size:3rem;font-weight:900;color:" + color + "'>"
+                    + str(score) + "</div>"
+                    "<div style='color:#64748b;font-size:0.8rem'>Risk Score</div>"
+                    "<div style='color:" + color + ";font-weight:700;margin-top:4px'>"
+                    + severity + "</div>"
+                    + ("<div style='color:#ff4444;font-size:0.9rem;margin-top:8px'>⚠️ Phishing Risk</div>"
+                       if is_phish else
+                       "<div style='color:#44aa44;font-size:0.9rem;margin-top:8px'>✅ No Threats</div>")
+                    + "</div>",
+                    unsafe_allow_html=True
+                )
+
+            with col_r2:
+                brand = result.get("brandTarget", "N/A")
+                st.markdown(f"**Brand Targeted:** {brand}")
+                ocr_text = result.get("detectedTextOcr", "")
+                if ocr_text and ocr_text != "N/A":
+                    st.markdown("**Detected Text:**")
+                    st.markdown(
+                        "<div style='background:#0f172a;border:1px solid #1e3a5f;"
+                        "border-radius:8px;padding:10px;font-family:monospace;"
+                        "font-size:12px;color:#94a3b8;max-height:150px;overflow-y:auto'>"
+                        + ocr_text[:500] + "</div>",
+                        unsafe_allow_html=True
+                    )
+
+            anomalies = result.get("visualAnomalies", [])
+            if anomalies and not any("unavailable" in a.lower() for a in anomalies):
+                st.markdown("### 👁️ Visual Anomalies")
+                for a in anomalies:
+                    st.markdown(
+                        "<div style='background:#2a1a0a;border:1px solid #ff880044;"
+                        "border-radius:8px;padding:8px 12px;margin:4px 0;"
+                        "color:#ffaa00;font-size:12px'>⚠ " + a + "</div>",
+                        unsafe_allow_html=True
+                    )
+
+            verdict = result.get("detailedVerdict", "")
+            if verdict and "unavailable" not in verdict.lower():
+                st.markdown("### 📋 Verdict")
+                st.info(verdict)
+
+            remediation = result.get("remediation", "")
+            if remediation:
+                st.markdown("### 🛡️ Recommended Actions")
+                st.success(remediation)
