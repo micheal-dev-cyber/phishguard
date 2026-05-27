@@ -1,6 +1,11 @@
 import streamlit as st
 import plotly.graph_objects as go
 from datetime import datetime
+
+st.set_page_config(page_title="PhishGuard AI", page_icon="🛡",
+                   layout="wide", initial_sidebar_state="collapsed")
+
+# ── All src.* imports go AFTER set_page_config to avoid Streamlit init issues ──
 from src.detector import analyze_email
 from src.database import init_db, save_analysis, get_history
 from src.report_generator import generate_pdf_report
@@ -28,15 +33,7 @@ from src.paddle_billing import (
 )
 from src.ratelimit import check_rate_limit, get_rate_limit_remaining
 from src.leaderboard import render_leaderboard, record_scan as lb_record_scan
-
-# ── Centralised environment / secrets loader ─────────────────────────────────
-# All API keys read via os.getenv() — compatible with Hugging Face Spaces
-# "Variables and secrets" panel, local .env files, or Streamlit secrets.toml.
-# See src/env.py for the full list of supported env vars.
 from src.env import ENV, get_config_status, log_config_status
-
-st.set_page_config(page_title="PhishGuard AI", page_icon="🛡",
-                   layout="wide", initial_sidebar_state="collapsed")
 
 st.markdown("""
 <style>
