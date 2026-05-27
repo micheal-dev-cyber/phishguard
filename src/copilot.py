@@ -64,20 +64,11 @@ def get_copilot_response(
     stream: bool = False
 ) -> str:
     """
-    Send messages to Claude and return the response.
+    Send messages to the best available AI provider and return the response.
     messages: list of {"role": "user"/"assistant", "content": str}
     results: optional current analysis context
     """
-    try:
-        import anthropic
-        client = anthropic.Anthropic()
-    except ImportError:
-        return (
-            "⚠ The `anthropic` package is not installed. "
-            "Add `anthropic` to requirements.txt and redeploy."
-        )
-    except Exception as e:
-        return f"⚠ Could not initialise Anthropic client: {e}"
+    from src.providers import get_chat_completion
 
     # Build system prompt — inject analysis context if available
     system = SYSTEM_PROMPT
@@ -85,32 +76,12 @@ def get_copilot_response(
     if ctx:
         system += f"\n\n{ctx}"
 
-    # Convert messages to Anthropic format, skip empty
-    api_messages = [
-        {"role": m["role"], "content": m["content"]}
-        for m in messages
-        if m.get("content", "").strip()
-    ]
-    if not api_messages:
+    # Filter empty messages
+    filtered = [m for m in messages if m.get("content", "").strip()]
+    if not filtered:
         return "Ask me anything about phishing or email security."
 
-    try:
-        response = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=1000,
-            system=system,
-            messages=api_messages,
-        )
-        return response.content[0].text
-    except anthropic.AuthenticationError:
-        return (
-            "⚠ Invalid Anthropic API key. "
-            "Add `ANTHROPIC_API_KEY` to Streamlit secrets."
-        )
-    except anthropic.RateLimitError:
-        return "⚠ Rate limit reached. Please wait a moment and try again."
-    except Exception as e:
-        return f"⚠ Copilot error: {e}"
+    return get_chat_completion(filtered, system_prompt=system, max_tokens=1000)
 
 
 # ── Suggested prompts shown when chat is empty ────────────────────────────

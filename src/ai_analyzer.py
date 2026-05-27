@@ -93,45 +93,38 @@ def _url_heuristic_fallback(url: str, host: str, error_msg: str = "") -> dict:
 # ─────────────────────────────────────────────
 
 def analyze_email(subject: str, body: str, sender: str) -> dict:
-    client = _get_client()
-    if not client:
-        return _email_heuristic_fallback(subject, body, sender, "OpenAI API Key missing")
+    from src.providers import get_completion
 
-    prompt = f"""Perform a highly rigorous Cyber Threat Analysis on this incoming email for enterprise security protection.
+    prompt = (
+        f"Perform a highly rigorous Cyber Threat Analysis on this incoming email "
+        f"for enterprise security protection.\n\n"
+        f"Sender: {sender or 'Unknown External'}\n"
+        f"Subject: {subject or 'None Provided'}\n"
+        f"Body Content:\n\"\"\"\n{body}\n\"\"\"\n\n"
+        f"Evaluate the risk score from 0 (Fully Safe) to 100 "
+        f"(Unquestionable malicious phishing / Credential Harvest / Spear Phishing).\n"
+        f"Identify phishing techniques (e.g., typosquatting, sender spoofing, "
+        f"generic greeting, panic trigger, credential harvesting links, "
+        f"suspicious attachments, call to action).\n\n"
+        f"Return ONLY a valid JSON object with this exact structure:\n"
+        f'{{"isPhishing": boolean, "score": integer (0 to 100), '
+        f'"severity": "CRITICAL" | "HIGH" | "MEDIUM" | "LOW", '
+        f'"indicators": [list of specific threat indicators found], '
+        f'"senderAssessment": "analysis of sender authenticity and domain reputation", '
+        f'"analysisSummary": "expert cybersecurity explanation of the threat campaign and flags", '
+        f'"remediationPlan": "expert action steps to neutralize the threat immediately"}}'
+    )
 
-Sender: {sender or "Unknown External"}
-Subject: {subject or "None Provided"}
-Body Content:
-\"\"\"
-{body}
-\"\"\"
-
-Evaluate the risk score from 0 (Fully Safe) to 100 (Unquestionable malicious phishing / Credential Harvest / Spear Phishing).
-Identify phishing techniques (e.g., typosquatting, sender spoofing, generic greeting, panic trigger, credential harvesting links, suspicious attachments, call to action).
-
-Return ONLY a valid JSON object with this exact structure:
-{{
-  "isPhishing": boolean,
-  "score": integer (0 to 100),
-  "severity": "CRITICAL" | "HIGH" | "MEDIUM" | "LOW",
-  "indicators": [list of specific threat indicators found],
-  "senderAssessment": "analysis of sender authenticity and domain reputation",
-  "analysisSummary": "expert cybersecurity explanation of the threat campaign and flags",
-  "remediationPlan": "expert action steps to neutralize the threat immediately"
-}}"""
+    result = get_completion(
+        "You are a senior enterprise cybersecurity analyst specializing in phishing detection. Always respond with valid JSON only, no markdown, no explanation.",
+        prompt,
+        max_tokens=1000,
+    )
+    if result.startswith("⚠"):
+        return _email_heuristic_fallback(subject, body, sender, result)
 
     try:
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": "You are a senior enterprise cybersecurity analyst specializing in phishing detection. Always respond with valid JSON only, no markdown, no explanation."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.1,
-            max_tokens=1000
-        )
-        raw = response.choices[0].message.content.strip()
-        raw = re.sub(r'^```json|^```|```$', '', raw, flags=re.MULTILINE).strip()
+        raw = re.sub(r'^```json|^```|```$', '', result, flags=re.MULTILINE).strip()
         return json.loads(raw)
     except Exception as e:
         return _email_heuristic_fallback(subject, body, sender, str(e))
@@ -142,6 +135,8 @@ Return ONLY a valid JSON object with this exact structure:
 # ─────────────────────────────────────────────
 
 def analyze_url(url: str) -> dict:
+    from src.providers import get_completion
+
     try:
         from urllib.parse import urlparse
         parsed = urlparse(url if url.startswith("http") else "http://" + url)
@@ -149,39 +144,30 @@ def analyze_url(url: str) -> dict:
     except Exception:
         host = url.lower()
 
-    client = _get_client()
-    if not client:
-        return _url_heuristic_fallback(url, host, "OpenAI API Key missing")
+    prompt = (
+        f"Review this suspicious URL from an enterprise firewall inspection.\n\n"
+        f"Target URL: {url}\n"
+        f"Extracted Hostname: {host}\n\n"
+        f"Evaluate if this URL presents a cyber risk: phishing portals, banking trojans, "
+        f"typosquatted brand fraud, or malicious redirects.\n\n"
+        f"Return ONLY a valid JSON object:\n"
+        f'{{"isPhishing": boolean, "score": integer (0 to 100), '
+        f'"severity": "CRITICAL" | "HIGH" | "MEDIUM" | "LOW", '
+        f'"threatCategory": "e.g. Brand Impersonation / Credential Harvest, Malicious Download, Safe / Low Risk", '
+        f'"indicators": [list of malicious traits found in URL structure or domain], '
+        f'"aiExplanation": "expert security summary outlining typosquatting tricks, domain mimicry, or structural anomalies"}}'
+    )
 
-    prompt = f"""Review this suspicious URL from an enterprise firewall inspection.
-
-Target URL: {url}
-Extracted Hostname: {host}
-
-Evaluate if this URL presents a cyber risk: phishing portals, banking trojans, typosquatted brand fraud, or malicious redirects.
-
-Return ONLY a valid JSON object:
-{{
-  "isPhishing": boolean,
-  "score": integer (0 to 100),
-  "severity": "CRITICAL" | "HIGH" | "MEDIUM" | "LOW",
-  "threatCategory": "e.g. Brand Impersonation / Credential Harvest, Malicious Download, Safe / Low Risk",
-  "indicators": [list of malicious traits found in URL structure or domain],
-  "aiExplanation": "expert security summary outlining typosquatting tricks, domain mimicry, or structural anomalies"
-}}"""
+    result = get_completion(
+        "You are a senior cybersecurity URL threat analyst. Always respond with valid JSON only.",
+        prompt,
+        max_tokens=600,
+    )
+    if result.startswith("⚠"):
+        return _url_heuristic_fallback(url, host, result)
 
     try:
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": "You are a senior cybersecurity URL threat analyst. Always respond with valid JSON only."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.1,
-            max_tokens=600
-        )
-        raw = response.choices[0].message.content.strip()
-        raw = re.sub(r'^```json|^```|```$', '', raw, flags=re.MULTILINE).strip()
+        raw = re.sub(r'^```json|^```|```$', '', result, flags=re.MULTILINE).strip()
         data = json.loads(raw)
         return {"url": url, "host": host, **data}
     except Exception as e:
@@ -193,31 +179,12 @@ Return ONLY a valid JSON object:
 # ─────────────────────────────────────────────
 
 def copilot_chat(messages: list) -> str:
-    client = _get_client()
-    if not client:
-        last = messages[-1]["content"].lower() if messages else ""
-        if any(w in last for w in ["spf", "dkim", "dmarc", "header"]):
-            return """### 🛡️ Email Authentication (SPF, DKIM, DMARC)
-- **SPF**: Lists authorized IPs that can send mail for your domain.
-- **DKIM**: Adds a cryptographic signature to verify the message wasn't tampered.
-- **DMARC**: Policy that tells receivers what to do when SPF/DKIM fail.
-
-*PhishGuard Tip*: Emails missing all three records should automatically trigger elevated threat scores."""
-        return """### 👋 PhishGuard AI Copilot (Fallback Mode)
-I can help you understand email headers, typosquatting, and mitigation rules. *(Connect OPENAI_API_KEY for dynamic contextual chat).*"""
-
-    system_prompt = "You are PhishGuard AI Copilot — a senior enterprise cyber defense assistant. Use Markdown formatting."
-
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[{"role": "system", "content": system_prompt}] + messages,
-            temperature=0.3,
-            max_tokens=800
-        )
-        return response.choices[0].message.content
-    except Exception as e:
-        return f"*Copilot connection error: {e}*"
+    from src.providers import get_chat_completion
+    return get_chat_completion(
+        messages,
+        system_prompt="You are PhishGuard AI Copilot — a senior enterprise cyber defense assistant. Use Markdown formatting.",
+        max_tokens=800,
+    )
 
 
 # ─────────────────────────────────────────────
@@ -320,28 +287,11 @@ def _get_simulation_fallback(department: str, vector: str) -> dict:
 
 
 def simulate_phishing(department: str, attack_vector: str) -> dict:
-    """
-    Generate a department- and vector-specific phishing simulation.
-
-    Parameters
-    ----------
-    department : str
-        Target corporate department (e.g. 'Finance', 'HR', 'IT Support').
-    attack_vector : str
-        Attack scenario (e.g. 'Urgent Invoice', 'Password Reset', 'Fake HR Policy').
-
-    Returns
-    -------
-    dict with keys: subject, sender, body, clues (list), remediation.
-    """
-    client = _get_client()
-    if not client:
-        return _get_simulation_fallback(department, attack_vector)
+    from src.providers import get_completion
 
     prompt = (
-        f"You are an enterprise security awareness trainer. Generate a realistic "
-        f"mock phishing email targeting the '{department}' department via "
-        f"a '{attack_vector}' attack scenario.\n\n"
+        f"Generate a realistic mock phishing email targeting the '{department}' "
+        f"department via a '{attack_vector}' attack scenario.\n\n"
         f"The email must:\n"
         f"- Be contextually relevant to {department} team members\n"
         f"- Use the {attack_vector} attack vector convincingly\n"
@@ -352,21 +302,16 @@ def simulate_phishing(department: str, attack_vector: str) -> dict:
         f"'clues' (list of 4-6 specific indicators), 'remediation'."
     )
 
+    result = get_completion(
+        "You are a senior enterprise security awareness specialist. Generate educational simulation content. Respond with valid JSON only, no markdown formatting.",
+        prompt,
+        max_tokens=1200,
+    )
+    if result.startswith("⚠"):
+        return _get_simulation_fallback(department, attack_vector)
+
     try:
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You are a senior enterprise security awareness specialist at SecOpsNode AI. Generate educational simulation content. Respond with valid JSON only, no markdown formatting."
-                },
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.7,
-            max_tokens=1200
-        )
-        raw = response.choices[0].message.content.strip()
-        raw = re.sub(r'^```json|^```|```$', '', raw, flags=re.MULTILINE).strip()
+        raw = re.sub(r'^```json|^```|```$', '', result, flags=re.MULTILINE).strip()
         return json.loads(raw)
     except Exception:
         return _get_simulation_fallback(department, attack_vector)

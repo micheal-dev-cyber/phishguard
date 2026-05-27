@@ -15,6 +15,7 @@ from src.threat_intel import check_multiple_urls, get_threat_summary
 from src.osint import run_osint
 from src.admin import get_stats, get_all_analyses, get_recent_threats, get_daily_counts
 from src.alerts import send_threat_alert, get_alert_log
+from src.header_auth import analyze_auth_headers
 from src.copilot import get_copilot_response, SUGGESTED_PROMPTS
 from src.ai_analyzer import simulate_phishing, analyze_screenshot, generate_ai_report
 from src.xai_analyzer import analyze_psychological_triggers, format_xai_report
@@ -101,9 +102,16 @@ def _cached_all_analyses(limit: int = 100):
     from src.admin import get_all_analyses as _ga
     return _ga(limit)
 
+theme = st.session_state.get("theme", "dark")
+bg_main = "#0d1117" if theme == "dark" else "#ffffff"
+bg_card = "#111827" if theme == "dark" else "#f3f4f6"
+text_main = "#e2e8f0" if theme == "dark" else "#1f2937"
+text_sec  = "#94a3b8" if theme == "dark" else "#6b7280"
+border_c  = "#1e3a5f" if theme == "dark" else "#d1d5db"
 st.markdown("""
 <style>
 .block-container { padding-top: 1.5rem; }
+.stApp { background-color: """ + bg_main + """; }
 .tag {
     display: inline-block; background: #1e3a5f; color: #60a5fa;
     border-radius: 6px; padding: 3px 10px; margin: 3px;
@@ -129,6 +137,8 @@ st.markdown("""
 }
 .quota-bar-bg { background: #1e3a5f; border-radius: 6px; height: 10px; margin: 6px 0; }
 .quota-bar-fill { border-radius: 6px; height: 10px; }
+.quarantine-badge { display:inline-block; background:#ff4444; color:#fff; border-radius:100px;
+    padding:2px 10px; font-size:10px; font-weight:700; letter-spacing:.08em; margin-left:6px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -206,10 +216,48 @@ with col_quota:
 
 with col_user:
     st.markdown("<br>", unsafe_allow_html=True)
+
+    # ── Notification Bell ────────────────────────────────────────────────
+    if "notifications" not in st.session_state:
+        st.session_state["notifications"] = []
+    n_count = len(st.session_state["notifications"])
+    n_badge = f'<span style="background:#ff4444;color:#fff;border-radius:50%;padding:1px 6px;font-size:10px;margin-left:4px">{n_count}</span>' if n_count else ""
     st.markdown(
-        "<p style='color:#94a3b8;text-align:right'>👤 " + username + "</p>",
-        unsafe_allow_html=True
+        f'<div style="text-align:right;font-size:13px;color:#94a3b8">'
+        f'🔔{n_badge} 👤 {username}</div>',
+        unsafe_allow_html=True,
     )
+    if n_count > 0:
+        with st.expander(f"🔔 {n_count} Alert(s)", expanded=False):
+            for n in st.session_state["notifications"][-5:]:
+                c = "#ff4444" if n["severity"] == "CRITICAL" else "#ff8800"
+                st.markdown(
+                    f"<div style='border-left:3px solid {c};padding:4px 8px;margin:4px 0;"
+                    f"background:#111827;border-radius:6px;font-size:12px'>"
+                    f"<span style='color:{c};font-weight:700'>{n['severity']}</span> "
+                    f"<span style='color:#94a3b8'>{n['message'][:60]}</span>"
+                    f"<span style='color:#475569;display:block;font-size:10px'>{n.get('time','')}</span>"
+                    f"</div>",
+                    unsafe_allow_html=True,
+                )
+            if st.button("Clear All", key="clear_notif", use_container_width=True):
+                st.session_state["notifications"] = []
+                st.rerun()
+
+    # ── Theme Toggle ─────────────────────────────────────────────────────
+    if "theme" not in st.session_state:
+        st.session_state["theme"] = "dark"
+    theme_toggle = st.toggle("☀️", value=(st.session_state["theme"] == "light"),
+                              key="theme_toggle", help="Toggle light/dark theme")
+    new_theme = "light" if theme_toggle else "dark"
+    if new_theme != st.session_state["theme"]:
+        st.session_state["theme"] = new_theme
+        st.rerun()
+    st.markdown(
+        f"<p style='color:#94a3b8;text-align:right;font-size:11px'>{'☀️ Light' if theme_toggle else '🌙 Dark'}</p>",
+        unsafe_allow_html=True,
+    )
+
     if st.button("Logout", use_container_width=True):
         logout()
 
@@ -399,6 +447,28 @@ with tab1:
                     st.session_state["email_input"] = combined
                     st.rerun()
 
+        # ── Batch CSV/JSON upload ──────────────────────────────────────────
+        batch_file = st.file_uploader(
+            "📦 Batch upload CSV/JSON (one email per row/object)",
+            type=["csv", "json"],
+            key="batch_uploader",
+        )
+        if batch_file:
+            try:
+                import pandas as pd
+                import json as _json
+                if batch_file.name.endswith(".json"):
+                    batch_data = _json.load(batch_file)
+                else:
+                    batch_data = pd.read_csv(batch_file).to_dict("records")
+                if not batch_data:
+                    st.warning("Batch file is empty.")
+                else:
+                    st.session_state["batch_inputs"] = batch_data
+                    st.success(f"Loaded {len(batch_data)} emails for batch analysis.")
+            except Exception as exc:
+                st.error(f"Batch file error: {exc}")
+
         email_text = st.text_area(
             label="email", label_visibility="collapsed",
             placeholder="Paste the full email here — subject, headers, body, links...",
@@ -418,7 +488,43 @@ with tab1:
         st.markdown("")
         analyze_btn = st.button("🔍 Analyze Email", use_container_width=True, type="primary")
         st.markdown("")
+        batch_btn = st.button("📦 Batch Analyze", use_container_width=True,
+                               help="Analyze all emails from CSV/JSON upload")
+
+        st.markdown("")
         st.info("💡 Paste any suspicious email and click Analyze.")
+
+    if batch_btn:
+        batch_inputs = st.session_state.get("batch_inputs", [])
+        if not batch_inputs:
+            st.warning("Upload a CSV/JSON file with email data first.")
+        else:
+            rl_key = f"batch_{username}"
+            if not check_rate_limit(rl_key, max_requests=3, window=60):
+                st.error("⏳ Rate limit reached for batch (3/min).")
+                st.stop()
+            batch_results = []
+            text_col = "text" if batch_inputs[0].get("text") else "email" if batch_inputs[0].get("email") else list(batch_inputs[0].keys())[0]
+            progress = st.progress(0, text="Batch analysis in progress...")
+            for i, row in enumerate(batch_inputs):
+                t = (row.get(text_col) or "").strip()
+                if t:
+                    r = analyze_email(t)
+                    save_analysis(r, t)
+                    batch_results.append({"input": t[:80], "score": r["risk_score"], "severity": r["severity"]})
+                progress.progress((i + 1) / len(batch_inputs), text=f"Analyzed {i + 1}/{len(batch_inputs)}")
+            st.session_state["batch_results"] = batch_results
+            st.success(f"✅ Batch complete — {len(batch_results)} emails analyzed.")
+            st.rerun()
+
+    if "batch_results" in st.session_state:
+        with st.expander(f"📦 Batch Results ({len(st.session_state['batch_results'])} emails)", expanded=True):
+            for br in st.session_state["batch_results"][-50:]:
+                c = "#ff4444" if br["severity"] in ("CRITICAL","HIGH") else "#88cc88"
+                st.markdown(f"<div style='font-size:12px;padding:4px 0'><span style='color:{c}'>{br['severity']:8}</span> {br['score']:3}/100 · {br['input']}</div>", unsafe_allow_html=True)
+            if st.button("Clear Batch Results", key="clear_batch"):
+                st.session_state.pop("batch_results", None)
+                st.rerun()
 
     if analyze_btn:
         if not email_text.strip():
@@ -469,6 +575,9 @@ with tab1:
                     heuristic_score=results.get("risk_score", 0),
                 )
 
+            # ── Email Header Authentication (SPF/DKIM/DMARC) ────────────────
+            header_auth = analyze_auth_headers(email_text)
+
             # ── XAI Psychological Trigger Analysis ─────────────────────────
             xai_result = analyze_psychological_triggers(email_text)
 
@@ -498,6 +607,29 @@ with tab1:
                     dashboard_url="https://phishguard.ai",
                 )
 
+            # ── Auto-quarantine ────────────────────────────────────────────
+            q_key = f"quarantine_threshold_{username}"
+            q_thresh = st.session_state.get(q_key, 70)
+            severity = results["severity"]
+            if results["risk_score"] >= q_thresh and severity in ("HIGH", "CRITICAL"):
+                q_list_key = f"quarantined_{username}"
+                if q_list_key not in st.session_state:
+                    st.session_state[q_list_key] = []
+                st.session_state[q_list_key].append({
+                    "score": results["risk_score"],
+                    "severity": severity,
+                    "preview": email_text[:60],
+                    "time": datetime.now().strftime("%H:%M"),
+                })
+
+            # ── In-app notification (HIGH/CRITICAL) ────────────────────────
+            if severity in ("HIGH", "CRITICAL") and results["risk_score"] >= 50:
+                st.session_state.setdefault("notifications", []).append({
+                    "severity": severity,
+                    "message": f"Threat detected — Score {results['risk_score']}/100",
+                    "time": datetime.now().strftime("%H:%M"),
+                })
+
             st.session_state["results"]         = results
             st.session_state["email_text"]       = email_text
             st.session_state["vt_results"]       = vt_results
@@ -507,6 +639,7 @@ with tab1:
             st.session_state["xai_result"]       = xai_result
             st.session_state["combined_score"]   = combined_score
             st.session_state["webhook_result"]   = webhook_result
+            st.session_state["header_auth"]      = header_auth
             st.session_state.pop("ai_report", None)
 
     if "results" in st.session_state:
@@ -514,9 +647,15 @@ with tab1:
         email_text_saved = st.session_state["email_text"]
         vt_results       = st.session_state.get("vt_results", [])
         osint_data       = st.session_state.get("osint_data", {})
+        header_auth      = st.session_state.get("header_auth", {})
 
         st.divider()
-        st.markdown("## 📊 Analysis Results")
+        quarantine_badge = ""
+        q_key = f"quarantine_threshold_{username}"
+        q_thresh = st.session_state.get(q_key, 70)
+        if results["risk_score"] >= q_thresh and results.get("severity") in ("HIGH", "CRITICAL"):
+            quarantine_badge = " <span class='quarantine-badge'>🛡 QUARANTINED</span>"
+        st.markdown(f"## 📊 Analysis Results{quarantine_badge}", unsafe_allow_html=True)
 
         score    = results["risk_score"]
         severity = results["severity"]
@@ -554,6 +693,36 @@ with tab1:
         with col_m1: st.metric("🔗 URLs Found",      results["url_count"])
         with col_m2: st.metric("🚨 Suspicious URLs", results["suspicious_url_count"])
         with col_m3: st.metric("🎯 Keyword Hits",    results["total_keyword_hits"])
+
+        # ── Email Authentication (SPF/DKIM/DMARC) ──────────────────────────
+        if header_auth:
+            auth_overall = header_auth.get("overall", "")
+            auth_color = {"PASS": "#44aa44", "WARNING": "#ffaa00", "FAIL": "#ff4444", "UNKNOWN": "#94a3b8"}.get(auth_overall, "#94a3b8")
+            auth_icon = {"PASS": "✅", "WARNING": "⚠️", "FAIL": "🔴", "UNKNOWN": "❓"}.get(auth_overall, "❓")
+            st.markdown(
+                f"<div class='section-title'>{auth_icon} Email Authentication — <span style='color:{auth_color}'>{auth_overall}</span>"
+                f" <span style='font-size:11px;color:#475569;font-weight:400'>(+{header_auth.get('risk_contribution',0)} risk)</span></div>",
+                unsafe_allow_html=True,
+            )
+            cols = st.columns(3)
+            for col, (label, key, color_map) in zip(cols, [
+                ("SPF", "spf_status", {"pass":"#44aa44","fail":"#ff4444","softfail":"#ffaa00","neutral":"#ffaa00","missing":"#94a3b8"}),
+                ("DKIM", "dkim_status", {"pass":"#44aa44","fail":"#ff4444","signed":"#ffaa00","missing":"#94a3b8"}),
+                ("DMARC", "dmarc_status", {"pass":"#44aa44","fail":"#ff4444","bestguesspass":"#88cc88","missing":"#94a3b8"}),
+            ]):
+                val = header_auth.get(key, "missing")
+                c = color_map.get(val, "#94a3b8")
+                dot = "🟢" if val in ("pass",) else "🔴" if val in ("fail",) else "🟡"
+                with col:
+                    st.markdown(
+                        f"<div style='background:#111827;border:1px solid #1e3a5f;border-radius:10px;"
+                        f"padding:12px;text-align:center'>"
+                        f"<div style='color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:.08em'>{label}</div>"
+                        f"<div style='font-size:1.2rem;font-weight:700;color:{c}'>{dot} {val.upper()}</div>"
+                        f"</div>",
+                        unsafe_allow_html=True,
+                    )
+            st.caption(header_auth.get("details", ""))
 
         st.divider()
 
@@ -1052,6 +1221,24 @@ with tab2:
                     f"Keywords: {kw} | URLs: {su}"
                 )
 
+        # ── Weekly Digest ───────────────────────────────────────────────────
+        st.divider()
+        st.markdown("#### 📬 Weekly Digest")
+        st.caption("Summary of the last 7 days.")
+        weekly_scores = [row[1] for row in history if (datetime.now() - datetime.strptime(row[0][:10], "%Y-%m-%d")).days < 7] if history else []
+        if weekly_scores:
+            w_total = len(weekly_scores)
+            w_crit = sum(1 for row in history if row[2] == "CRITICAL" and (datetime.now() - datetime.strptime(row[0][:10], "%Y-%m-%d")).days < 7)
+            w_high = sum(1 for row in history if row[2] == "HIGH" and (datetime.now() - datetime.strptime(row[0][:10], "%Y-%m-%d")).days < 7)
+            w_avg = round(sum(weekly_scores) / w_total, 1)
+            w_col1, w_col2, w_col3, w_col4 = st.columns(4)
+            w_col1.metric("7-Day Scans", w_total)
+            w_col2.metric("Avg Score", f"{w_avg}/100")
+            w_col3.metric("Critical", w_crit, delta_color="inverse")
+            w_col4.metric("High", w_high, delta_color="inverse")
+        else:
+            st.info("No scans in the last 7 days.")
+
         # ── Export options ──────────────────────────────────────────────────
         st.divider()
         st.markdown("#### 📥 Export Data")
@@ -1098,11 +1285,15 @@ with tab2:
 # TAB 3 — AI COPILOT
 # ═════════════════════════════════════════════════════════════════════════════
 with tab3:
+    from src.providers import get_available_provider
+    _active = get_available_provider()
+    _badge = {"groq": "🟢 Groq (free)", "openrouter": "🟢 OpenRouter (free)", "openai": "🟡 OpenAI", "anthropic": "🟡 Anthropic", "none": "🔴 No AI provider"}.get(_active, "🔴 No AI provider")
     st.markdown("## 🤖 AI Security Copilot")
     st.markdown(
-        "<p style='color:#64748b;margin-top:-8px;margin-bottom:24px'>"
-        "Ask anything about phishing, threats, or email security. "
-        "The copilot has full context of your last analysis.</p>",
+        f"<p style='color:#64748b;margin-top:-8px;margin-bottom:24px'>"
+        f"Ask anything about phishing, threats, or email security. "
+        f"<span style='float:right;font-size:12px;background:#111827;padding:2px 10px;border-radius:12px;border:1px solid #1e3a5f'>{_badge}</span>"
+        f"</p>",
         unsafe_allow_html=True
     )
 
@@ -1783,6 +1974,39 @@ with settings_tab:
                     "</div>",
                     unsafe_allow_html=True
                 )
+
+    # ── Auto-Quarantine Configuration ──────────────────────────────────────
+    st.divider()
+    st.markdown("### 🛡 Auto-Quarantine Rules")
+    st.caption("Automatically flag and track emails above a risk threshold.")
+    q_key = f"quarantine_threshold_{username}"
+    if q_key not in st.session_state:
+        st.session_state[q_key] = 70
+    quarantine_threshold = st.slider(
+        "Minimum risk score to auto-quarantine",
+        min_value=0, max_value=100, value=st.session_state[q_key], step=5,
+        key="quarantine_slider",
+    )
+    st.session_state[q_key] = quarantine_threshold
+    st.caption(f"Emails scoring **{quarantine_threshold}+** will be marked with a quarantine badge in results.")
+    q_list_key = f"quarantined_{username}"
+    quarantined = st.session_state.get(q_list_key, [])
+    if quarantined:
+        st.markdown(f"**Quarantined emails:** {len(quarantined)}")
+        for q in quarantined[-10:]:
+            st.markdown(
+                f"<div style='background:#2a0a0a;border:1px solid #ff4444;border-radius:8px;"
+                f"padding:8px 12px;margin:4px 0;font-size:12px'>"
+                f"🔴 Score {q['score']}/100 · {q['preview'][:60]}"
+                f"<span style='color:#475569;display:block;font-size:10px'>{q.get('time','')}</span>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+        if st.button("Clear Quarantine List", key="clear_q", use_container_width=True):
+            st.session_state[q_list_key] = []
+            st.rerun()
+    else:
+        st.info("No quarantined emails yet. Threshold-based tracking is active.")
 
     # ── IMAP Worker Configuration ───────────────────────────────────────────
     st.divider()
