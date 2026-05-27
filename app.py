@@ -27,6 +27,7 @@ from src.paddle_billing import (
     verify_transaction,
 )
 from src.ratelimit import check_rate_limit, get_rate_limit_remaining
+from src.leaderboard import render_leaderboard, record_scan as lb_record_scan
 
 st.set_page_config(page_title="PhishGuard AI", page_icon="🛡",
                    layout="wide", initial_sidebar_state="collapsed")
@@ -252,15 +253,15 @@ if st.session_state.get("show_upgrade") and plan != "enterprise":
 
 # ── Tabs ─────────────────────────────────────────────────────────────────────
 if is_admin:
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
         "🔍 Analyze Email", "📈 Analytics", "🤖 AI Copilot",
         "⚙ Admin Dashboard", "👥 Clients", "💳 Billing",
-        "⚙ Settings", "🧪 Training", "📊 History"
+        "⚙ Settings", "🧪 Training", "🏆 Champions", "📊 History"
     ])
 else:
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
         "🔍 Analyze Email", "📈 Analytics", "🤖 AI Copilot",
-        "💳 Billing", "⚙ Settings", "🧪 Training", "📊 History"
+        "💳 Billing", "⚙ Settings", "🧪 Training", "🏆 Champions", "📊 History"
     ])
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -344,6 +345,11 @@ with tab1:
                 results = analyze_email(email_text)
                 save_analysis(results, email_text)
                 log_usage(username, "analysis", results["risk_score"])
+                lb_record_scan(
+                    username,
+                    severity=results["severity"],
+                    score=results["risk_score"],
+                )
                 # Send email alert if HIGH or CRITICAL
                 user_email = st.session_state.get("email", "")
                 if user_email and results["severity"] in ("CRITICAL", "HIGH"):
@@ -1808,9 +1814,17 @@ with training_tab:
                 st.success(remediation)
 
 # ═════════════════════════════════════════════════════════════════════════════
+# TAB — SECURITY CHAMPIONS LEADERBOARD
+# ═════════════════════════════════════════════════════════════════════════════
+champions_tab = tab9 if is_admin else tab7
+
+with champions_tab:
+    render_leaderboard(username)
+
+# ═════════════════════════════════════════════════════════════════════════════
 # LAST TAB — HISTORY
 # ═════════════════════════════════════════════════════════════════════════════
-history_tab = tab9 if is_admin else tab7
+history_tab = tab10 if is_admin else tab8
 
 with history_tab:
     st.markdown("#### 📊 Recent Analyses")
