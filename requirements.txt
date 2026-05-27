@@ -6,3 +6,4 @@ tldextract
 openai
 python-dotenv
 fpdf2
+anthropic
