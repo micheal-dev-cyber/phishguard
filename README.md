@@ -1,7 +1,7 @@
 ---
 title: PhishGuard AI
 emoji: 🛡
-colorFrom: dark
+colorFrom: indigo
 colorTo: blue
 sdk: streamlit
 sdk_version: "1.41.1"
