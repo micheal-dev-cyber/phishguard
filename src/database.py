@@ -66,6 +66,136 @@ def init_db():
         )
     """)
 
+    # 5. STIX 2.1 Threat Intelligence Sharing
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS threat_intel (
+            id TEXT PRIMARY KEY,
+            stix_id TEXT UNIQUE NOT NULL,
+            indicator_type TEXT NOT NULL,
+            pattern TEXT NOT NULL,
+            linguistic_hash TEXT,
+            sender_domain TEXT,
+            severity TEXT,
+            risk_score INTEGER,
+            first_seen TEXT,
+            last_seen TEXT,
+            is_active INTEGER DEFAULT 1,
+            broadcast_count INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+
+    # 6. Sender Behavioral Profiles
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS sender_profiles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sender_email TEXT UNIQUE NOT NULL,
+            sender_domain TEXT NOT NULL,
+            display_name TEXT,
+            first_contact TEXT,
+            last_contact TEXT,
+            total_emails INTEGER DEFAULT 0,
+            total_attachments INTEGER DEFAULT 0,
+            avg_response_hours REAL,
+            common_salutations TEXT DEFAULT '[]',
+            common_subjects TEXT DEFAULT '[]',
+            common_tone_tags TEXT DEFAULT '[]',
+            avg_urgency_score REAL DEFAULT 0,
+            avg_risk_score REAL DEFAULT 0,
+            trust_score REAL DEFAULT 50.0,
+            linguistic_baseline_hash TEXT,
+            profile_version INTEGER DEFAULT 1,
+            created_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+
+    # 7. Sender Communication Log (rolling 90-day window)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS sender_communications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sender_email TEXT NOT NULL,
+            recipient_email TEXT,
+            subject TEXT,
+            body_hash TEXT,
+            word_count INTEGER,
+            sentiment_score REAL,
+            urgency_score REAL,
+            risk_score INTEGER,
+            has_attachment INTEGER DEFAULT 0,
+            response_time_hours REAL,
+            salutation TEXT,
+            tone_tags TEXT DEFAULT '[]',
+            timestamp TEXT,
+            FOREIGN KEY (sender_email) REFERENCES sender_profiles(sender_email)
+        )
+    """)
+
+    # 8. URL Sandbox Results
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS url_sandbox (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            original_url TEXT NOT NULL,
+            final_url TEXT,
+            redirect_chain TEXT DEFAULT '[]',
+            screenshot_path TEXT,
+            page_title TEXT,
+            detected_login_form INTEGER DEFAULT 0,
+            detected_brand TEXT,
+            llm_verdict TEXT,
+            llm_confidence REAL,
+            html_hash TEXT,
+            dom_checksum TEXT,
+            risk_score INTEGER,
+            verdict TEXT,
+            analysis_time_ms INTEGER,
+            timestamp TEXT DEFAULT (datetime('now'))
+        )
+    """)
+
+    # 9. Homograph attack log
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS homograph_alerts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            original_domain TEXT NOT NULL,
+            decoded_punycode TEXT,
+            ascii_domain TEXT,
+            homograph_type TEXT,
+            visual_lookalike_of TEXT,
+            risk_score INTEGER,
+            found_in_email TEXT,
+            timestamp TEXT DEFAULT (datetime('now'))
+        )
+    """)
+
+    # 10. Collective intelligence broadcast log
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS intel_broadcasts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            stix_id TEXT,
+            broadcast_type TEXT,
+            target_tenants TEXT,
+            payload_size INTEGER,
+            status TEXT,
+            error_message TEXT,
+            timestamp TEXT DEFAULT (datetime('now'))
+        )
+    """)
+
+    # 11. OCR extraction log
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS ocr_extractions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            analysis_id INTEGER,
+            extracted_text TEXT,
+            detected_urls TEXT DEFAULT '[]',
+            detected_emails TEXT DEFAULT '[]',
+            homograph_urls TEXT DEFAULT '[]',
+            ocr_confidence REAL,
+            processing_time_ms INTEGER,
+            timestamp TEXT DEFAULT (datetime('now'))
+        )
+    """)
+
     # 4. Leaderboard points history (audit trail)
     c.execute("""
         CREATE TABLE IF NOT EXISTS leaderboard_history (

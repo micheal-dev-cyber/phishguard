@@ -1,11 +1,48 @@
-streamlit
-requests
-pandas
-plotly
-tldextract
-openai
-python-dotenv
-fpdf2
-anthropic
-flask
-gunicorn
+# ──────────────────────────────────────────────────────────────────────────────
+# PhishGuard AI — Production Dependencies for Hugging Face Spaces
+# ──────────────────────────────────────────────────────────────────────────────
+# WARNING:  Do NOT add playwright, easyocr, pytesseract, or any package that
+#           bundles a full browser / OS-level binary. HF Spaces will OOM or
+#           hit the 15-minute build timeout.
+#
+# All packages pinned for deterministic builds on HF Spaces (Python 3.10+).
+# ──────────────────────────────────────────────────────────────────────────────
+
+# ── Web framework ──────────────────────────────────────────────────────────────
+streamlit>=1.35.0,<2.0.0
+
+# ── LLM / AI APIs ─────────────────────────────────────────────────────────────
+openai>=1.30.0,<2.0.0
+anthropic>=0.34.0,<1.0.0
+
+# ── HTTP / networking ─────────────────────────────────────────────────────────
+requests>=2.31.0,<3.0.0
+tldextract>=5.1.0,<6.0.0
+
+# ── Data & visualisation ──────────────────────────────────────────────────────
+pandas>=2.2.0,<3.0.0
+plotly>=5.20.0,<6.0.0
+
+# ── PDF generation ────────────────────────────────────────────────────────────
+fpdf2>=2.7.0,<3.0.0
+
+# ── Image handling (screenshot OCR analysis) ──────────────────────────────────
+Pillow>=10.3.0,<11.0.0
+
+# ── HTML parsing (URL sandbox DOM analysis — lightweight) ─────────────────────
+beautifulsoup4>=4.12.0,<5.0.0
+
+# ── Configuration ─────────────────────────────────────────────────────────────
+python-dotenv>=1.0.0,<2.0.0
+
+# ──────────────────────────────────────────────────────────────────────────────
+# The following packages are EXCLUDED because they require system-level
+# binaries or heavy ML runtimes that will crash HF Spaces builds:
+#
+#   playwright       → bundles Chromium (~350 MB, OOM on install)
+#   easyocr          → pulls pytorch (~800 MB, build timeout)
+#   pytesseract      → requires system tesseract-ocr binary
+#   lxml             → C extension (safe but heavy; bs4 + html.parser is enough)
+#   gunicorn         → not needed — HF runs `streamlit run` directly
+#   uvicorn          → not needed — this is a Streamlit app, not FastAPI
+# ──────────────────────────────────────────────────────────────────────────────
