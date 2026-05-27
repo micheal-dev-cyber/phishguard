@@ -7,6 +7,7 @@ from src.auth import check_password, logout
 from src.threat_intel import check_multiple_urls, get_threat_summary
 from src.osint import run_osint
 from src.admin import get_stats, get_all_analyses, get_recent_threats, get_daily_counts
+from src.alerts import send_threat_alert, get_alert_log
 from src.tenants import (
     log_usage, check_quota, get_all_tenants, get_usage_all_tenants,
     create_tenant, update_tenant, delete_tenant, set_password, PLANS
@@ -149,6 +150,10 @@ with tab1:
                 results = analyze_email(email_text)
                 save_analysis(results, email_text)
                 log_usage(username, "analysis", results["risk_score"])
+                # Send email alert if HIGH or CRITICAL
+                user_email = st.session_state.get("email", "")
+                if user_email and results["severity"] in ("CRITICAL", "HIGH"):
+                    send_threat_alert(username, user_email, results)
 
             vt_results = []
             vt_summary = {}
@@ -708,3 +713,24 @@ if is_admin:
                     delete_tenant(uname)
                     st.error(f"{uname} deleted.")
                     st.rerun()
+
+        st.divider()
+        st.markdown("### 📬 Recent Alert History")
+        alert_rows = get_alert_log(limit=30)
+        if not alert_rows:
+            st.info("No alerts sent yet. Alerts fire automatically when a HIGH or CRITICAL threat is detected for a client with an email address set.")
+        else:
+            for ar in alert_rows:
+                al_user, al_email, al_subject, al_sev, al_score, al_sent, al_ok = ar
+                dot = "🟢" if al_ok else "🔴"
+                sev_color = "#ff4444" if al_sev == "CRITICAL" else "#ff8800"
+                st.markdown(
+                    "<div style=\'background:#111827;border:1px solid #1e3a5f;"
+                    "border-radius:10px;padding:12px 16px;margin:4px 0;"
+                    "display:flex;justify-content:space-between;align-items:center\'>"
+                    "<span style=\'color:#e2e8f0\'>" + dot + " <b>" + al_user + "</b> → " + al_email + "</span>"
+                    "<span style=\'color:" + sev_color + ";font-size:12px;font-weight:700\'>" + al_sev + " " + str(al_score) + "/100</span>"
+                    "<span style=\'color:#475569;font-size:11px;font-family:monospace\'>" + al_sent[:16] + "</span>"
+                    "</div>",
+                    unsafe_allow_html=True
+                )
