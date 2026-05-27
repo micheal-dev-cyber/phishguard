@@ -221,8 +221,17 @@ def init_db():
     conn.commit()
     conn.close()
 
-def save_analysis(risk_score, severity, keyword_hits, suspicious_urls, email_preview, ai_report=""):
-    """Saves a scan result to the database, including the AI SecOps report."""
+def save_analysis(results, email_text, ai_report=""):
+    """Save analysis results from the detector dict format."""
+    if isinstance(results, dict):
+        risk_score = results.get("risk_score", 0)
+        severity = results.get("severity", "LOW")
+        keyword_hits = results.get("total_keyword_hits", 0)
+        suspicious_urls = results.get("suspicious_url_count", 0)
+        email_preview = (email_text or "")[:100]
+    else:
+        risk_score, severity, keyword_hits, suspicious_urls, email_preview = results, email_text, 0, 0, ""
+
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("""

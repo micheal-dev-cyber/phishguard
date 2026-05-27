@@ -1,0 +1,9 @@
+{
+  "demo_key_abc123": {
+    "client": "Demo Client",
+    "plan": "starter",
+    "tier": "starter",
+    "active": true,
+    "monthly_limit": 100
+  }
+}

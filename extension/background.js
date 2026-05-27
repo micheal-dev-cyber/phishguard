@@ -1,3 +1,6 @@
+// Try local API gateway first, fall back to local analysis.
+// To use HF Space instead: const PHISHGUARD_API = "https://huggingface.co/spaces/Sabersouihi/phishguard-ai";
+// Note: HF Spaces don't expose a REST API, so the extension uses local analysis when offline.
 const PHISHGUARD_API = "http://127.0.0.1:8080";
 
 const TRUSTED_DOMAINS = [
