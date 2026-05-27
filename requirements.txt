@@ -7,3 +7,5 @@ openai
 python-dotenv
 fpdf2
 anthropic
+flask
+gunicorn

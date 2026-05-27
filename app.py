@@ -13,6 +13,11 @@ from src.tenants import (
     log_usage, check_quota, get_all_tenants, get_usage_all_tenants,
     create_tenant, update_tenant, delete_tenant, set_password, PLANS
 )
+from src.paddle_billing import (
+    is_configured as paddle_configured,
+    generate_checkout_url,
+    verify_transaction,
+)
 
 st.set_page_config(page_title="PhishGuard AI", page_icon="🛡",
                    layout="wide", initial_sidebar_state="collapsed")
@@ -76,12 +81,15 @@ with col_quota:
     limit_display = "∞" if plan == "enterprise" else str(q["limit"])
     bar_color = "#ff4444" if q["pct"] >= 90 else "#ffaa00" if q["pct"] >= 70 else "#60a5fa"
     bar_width = q["pct"] if plan != "enterprise" else 0
+    upgrade_link = ""
+    if plan != "enterprise" and paddle_configured():
+        upgrade_link = "<span style='cursor:pointer;color:#3b82f6;font-size:11px' onclick=''>⬆ Upgrade</span>"
     quota_html = (
         "<div style='margin-top:10px;padding:8px 14px;background:#111827;"
         "border-radius:10px;border:1px solid #1e3a5f'>"
         "<div style='display:flex;justify-content:space-between;"
         "font-size:12px;color:#94a3b8;margin-bottom:4px'>"
-        "<span>📊 " + plan_label + " plan</span>"
+        "<span>📊 " + plan_label + " plan " + upgrade_link + "</span>"
         "<span>" + str(q["usage"]) + " / " + limit_display + " analyses</span>"
         "</div>"
         "<div class='quota-bar-bg'>"
@@ -89,6 +97,9 @@ with col_quota:
         "</div></div>"
     )
     st.markdown(quota_html, unsafe_allow_html=True)
+    if st.button("⬆ Upgrade Plan", key="upgrade_btn", use_container_width=True):
+        st.session_state["show_upgrade"] = True
+        st.rerun()
 
 with col_user:
     st.markdown("<br>", unsafe_allow_html=True)
@@ -101,13 +112,133 @@ with col_user:
 
 st.divider()
 
+# ── Handle Paddle checkout return ────────────────────────────────────────────
+qp = st.query_params
+if qp.get("checkout") == "completed" and qp.get("transaction_id"):
+    txn_id = qp["transaction_id"]
+    with st.spinner("Verifying payment..."):
+        txn = verify_transaction(txn_id)
+    if txn and txn.get("status") in ("completed", "paid"):
+        custom = txn.get("custom_data", {}) or {}
+        txn_plan = custom.get("plan", "starter")
+        update_tenant(username, plan=txn_plan)
+        st.session_state["plan"] = txn_plan
+        st.success(f"✅ Payment confirmed! Your account has been upgraded to **{PLANS[txn_plan]['label']}** plan.")
+        st.query_params.clear()
+        st.rerun()
+    else:
+        st.warning("⏳ Payment received but verification is pending. The webhook will process it shortly.")
+        st.query_params.clear()
+
+# ── Upgrade section ──────────────────────────────────────────────────────────
+if st.session_state.get("show_upgrade") and plan != "enterprise":
+    with st.container():
+        st.markdown("## ⬆ Upgrade Your Plan")
+        st.markdown(
+            "<p style='color:#64748b;margin-top:-8px'>Choose a plan that fits your needs. "
+            "All plans include AI-powered phishing detection.</p>",
+            unsafe_allow_html=True
+        )
+
+        if not paddle_configured():
+            st.warning(
+                "⚠️ Payment processing is not configured. "
+                "Contact the administrator to set up Paddle."
+            )
+            if st.button("← Back", key="upgrade_back_no"):
+                st.session_state["show_upgrade"] = False
+                st.rerun()
+            st.stop()
+
+        cols = st.columns(3)
+        upgrade_plans = [
+            ("starter",  "Starter",   "$29/mo", ["100 analyses/mo", "VirusTotal scans", "OSINT investigation", "AI security reports", "Email alerts"]),
+            ("business", "Business",  "$99/mo", ["500 analyses/mo", "Everything in Starter", "Priority support", "Team access", "Export + API access"]),
+            ("enterprise", "Enterprise", "Custom", ["Unlimited analyses", "SLA guarantee", "White-label option", "Dedicated support", "Custom integrations"]),
+        ]
+        for i, (pkey, plabel, pprice, pfeatures) in enumerate(upgrade_plans):
+            with cols[i]:
+                featured = pkey == "business"
+                border = "2px solid #3b82f6" if featured else "1px solid rgba(255,255,255,0.1)"
+                bg = "linear-gradient(160deg, #040f24, #071530)" if featured else "#0f172a"
+                st.markdown(
+                    "<div style='background:" + bg + ";border:" + border + ";"
+                    "border-radius:16px;padding:28px 20px;text-align:center;"
+                    "position:relative;height:100%'>"
+                    + ("<div style='position:absolute;top:-10px;left:50%;transform:translateX(-50%);"
+                       "background:#3b82f6;color:#020818;font-size:10px;font-weight:700;"
+                       "padding:4px 16px;border-radius:100px;letter-spacing:0.1em'>"
+                       "MOST POPULAR</div>" if featured else "")
+                    + "<div style='color:#94a3b8;font-size:0.9rem;font-weight:600;"
+                       "letter-spacing:0.05em;margin-bottom:8px'>" + plabel + "</div>"
+                    + "<div style='color:#f0f6ff;font-size:2.4rem;font-weight:800;"
+                       "margin-bottom:4px'>" + pprice + "</div>"
+                    + "<div style='color:#475569;font-size:0.75rem;margin-bottom:20px;"
+                       "font-family:monospace'>per month</div>"
+                    + "<ul style='list-style:none;padding:0;margin:0 0 24px;text-align:left'>"
+                    + "".join("<li style='color:#94a3b8;font-size:0.8rem;padding:4px 0;"
+                              "border-bottom:1px solid rgba(255,255,255,0.04)'>→ " + f + "</li>"
+                              for f in pfeatures)
+                    + "</ul></div>",
+                    unsafe_allow_html=True
+                )
+
+                already_on = plan == pkey
+                if already_on:
+                    st.success("✅ Current Plan")
+                elif pkey == "enterprise":
+                    st.info("Contact sales")
+                else:
+                    if st.button("⬆ Subscribe — " + plabel, key="sub_" + pkey, use_container_width=True, type="primary"):
+                        with st.spinner("Creating checkout session..."):
+                            base = st.context.headers.get("Origin", "https://phishguard.streamlit.app")
+                            success_url = base + "/?checkout=completed"
+                            url = generate_checkout_url(username, pkey, success_url=success_url)
+                        if url:
+                            st.session_state["checkout_url"] = url
+                            st.session_state["checkout_plan"] = pkey
+                            st.rerun()
+                        else:
+                            st.error("Could not create checkout. Please try again.")
+
+        # If checkout URL is set, show proceed button + success URL guidance
+        checkout_url = st.session_state.get("checkout_url")
+        if checkout_url:
+            cplan = st.session_state["checkout_plan"]
+            st.divider()
+            st.markdown(f"### 🛒 Ready to subscribe to **{PLANS[cplan]['label']}**")
+            st.info(
+                "You will be redirected to Paddle's secure checkout. "
+                "After payment, you'll be returned here and your plan will upgrade automatically."
+            )
+            col_pay, col_cancel = st.columns([1, 1])
+            with col_pay:
+                st.link_button("💳 Proceed to Checkout", checkout_url, use_container_width=True, type="primary")
+            with col_cancel:
+                if st.button("Cancel", use_container_width=True):
+                    st.session_state.pop("checkout_url", None)
+                    st.session_state.pop("checkout_plan", None)
+                    st.rerun()
+
+        st.divider()
+        if st.button("← Back to Dashboard", use_container_width=True):
+            st.session_state["show_upgrade"] = False
+            st.session_state.pop("checkout_url", None)
+            st.session_state.pop("checkout_plan", None)
+            st.rerun()
+        st.stop()
+    st.stop()
+
 # ── Tabs ─────────────────────────────────────────────────────────────────────
 if is_admin:
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        "🔍 Analyze Email", "📊 History", "🤖 AI Copilot", "⚙ Admin Dashboard", "👥 Clients"
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+        "🔍 Analyze Email", "📊 History", "🤖 AI Copilot",
+        "⚙ Admin Dashboard", "👥 Clients", "💳 Billing"
     ])
 else:
-    tab1, tab2, tab3 = st.tabs(["🔍 Analyze Email", "📊 History", "🤖 AI Copilot"])
+    tab1, tab2, tab3, tab4 = st.tabs([
+        "🔍 Analyze Email", "📊 History", "🤖 AI Copilot", "💳 Billing"
+    ])
 
 # ═════════════════════════════════════════════════════════════════════════════
 # TAB 1 — ANALYZER
@@ -852,3 +983,84 @@ if is_admin:
                     "</div>",
                     unsafe_allow_html=True
                 )
+
+# ═════════════════════════════════════════════════════════════════════════════
+# TAB 6/4 — BILLING & SUBSCRIPTION
+# ═════════════════════════════════════════════════════════════════════════════
+billing_tab = tab6 if is_admin else tab4
+
+with billing_tab:
+    st.markdown("## 💳 Billing & Subscription")
+    st.divider()
+
+    plan_info = PLANS.get(plan, PLANS["trial"])
+    q = check_quota(username, plan)
+
+    # Current plan card
+    st.markdown(
+        "<div style='background:#111827;border:1px solid #1e3a5f;"
+        "border-radius:16px;padding:28px 32px;margin-bottom:24px'>"
+        "<div style='display:flex;justify-content:space-between;align-items:center'>"
+        "<div>"
+        "<div style='color:#64748b;font-size:0.8rem;text-transform:uppercase;"
+        "letter-spacing:0.08em;margin-bottom:4px'>Current Plan</div>"
+        "<div style='color:#f0f6ff;font-size:1.8rem;font-weight:800'>"
+        + plan_info["label"] + "</div>"
+        "<div style='color:#475569;font-size:0.85rem;margin-top:4px'>"
+        + plan_info["price"] + "</div>"
+        "</div>"
+        "<div style='text-align:right'>"
+        "<div style='color:#94a3b8;font-size:0.9rem'>"
+        + str(q["usage"]) + " / " + str(q["limit"]) + " analyses used</div>"
+        "<div style='background:#1e3a5f;border-radius:4px;height:6px;width:120px;margin:6px 0 0 auto'>"
+        "<div style='background:#60a5fa;border-radius:4px;height:6px;width:"
+        + str(q["pct"]) + "%'></div></div></div></div></div>",
+        unsafe_allow_html=True
+    )
+
+    if plan == "enterprise":
+        st.success("🌟 You are on the **Enterprise** plan — unlimited analyses, all features enabled.")
+    else:
+        col1, col2, col3 = st.columns(3)
+        upgrade_options = [
+            ("starter", "Starter", "$29/mo", ["100 analyses/mo", "VirusTotal + OSINT", "AI security reports", "Email alerts"]),
+            ("business", "Business", "$99/mo", ["500 analyses/mo", "Priority support", "Team access", "All features"]),
+            ("enterprise", "Enterprise", "Custom", ["Unlimited analyses", "SLA guarantee", "White-label", "Dedicated support"]),
+        ]
+        for i, (pkey, plabel, pprice, pfeatures) in enumerate(upgrade_options):
+            with [col1, col2, col3][i]:
+                featured = pkey == "business"
+                border = "2px solid #3b82f6" if featured else "1px solid rgba(255,255,255,0.1)"
+                bg = "linear-gradient(160deg, #040f24, #071530)" if featured else "#0f172a"
+                already_on = plan == pkey
+                st.markdown(
+                    "<div style='background:" + bg + ";border:" + border + ";"
+                    "border-radius:16px;padding:24px 16px;text-align:center;"
+                    "height:280px;position:relative'>"
+                    + ("<div style='position:absolute;top:-10px;left:50%;transform:translateX(-50%);"
+                       "background:#3b82f6;color:#020818;font-size:9px;font-weight:700;"
+                       "padding:3px 14px;border-radius:100px'>POPULAR</div>" if featured else "")
+                    + "<div style='color:#94a3b8;font-weight:600;margin-bottom:6px'>" + plabel + "</div>"
+                    + "<div style='color:#f0f6ff;font-size:2rem;font-weight:800;margin-bottom:2px'>" + pprice + "</div>"
+                    + "<div style='color:#475569;font-size:0.7rem;margin-bottom:16px'>/ month</div>"
+                    + "".join("<div style='color:#94a3b8;font-size:0.75rem;padding:3px 0'>→ " + f + "</div>" for f in pfeatures)
+                    + "</div>",
+                    unsafe_allow_html=True
+                )
+                if already_on:
+                    st.success("✅ Current Plan")
+                elif pkey == "enterprise":
+                    st.info("Contact sales for Enterprise")
+                else:
+                    if st.button("⬆ Upgrade", key="bill_up_" + pkey, use_container_width=True):
+                        st.session_state["show_upgrade"] = True
+                        st.rerun()
+
+    st.divider()
+    st.markdown(
+        "<p style='color:#475569;font-size:0.8rem;text-align:center'>"
+        "Payments processed securely by <strong>Paddle</strong>. "
+        "Paddle is the merchant of record for all transactions.<br>"
+        "Need help? Contact support.</p>",
+        unsafe_allow_html=True
+    )
