@@ -5,24 +5,19 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
 from pathlib import Path
+from src.env import ENV
 
 DB_PATH = Path(__file__).parent.parent / "data" / "phishguard.db"
 
 
 def _get_smtp_config():
-    """Load SMTP config from Streamlit secrets."""
-    try:
-        import streamlit as st
-        smtp = st.secrets.get("smtp", {})
-        return {
-            "host":     smtp.get("host", "smtp.gmail.com"),
-            "port":     int(smtp.get("port", 587)),
-            "username": smtp.get("username", ""),
-            "password": smtp.get("password", ""),
-            "from":     smtp.get("from_email", smtp.get("username", "")),
-        }
-    except Exception:
-        return {}
+    return {
+        "host":     ENV.SMTP_HOST,
+        "port":     ENV.SMTP_PORT,
+        "username": ENV.SMTP_USER,
+        "password": ENV.SMTP_PASS,
+        "from":     ENV.SMTP_FROM or ENV.SMTP_USER,
+    }
 
 
 def _init_alerts_table():

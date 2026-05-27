@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=64.0"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "phishguard"
+version = "3.0.0"
+description = "Enterprise phishing detection with AI, OSINT, and STIX threat intelligence"
+requires-python = ">=3.10"
+dependencies = [
+    "streamlit>=1.35.0,<2.0.0",
+    "openai>=1.30.0,<2.0.0",
+    "anthropic>=0.34.0,<1.0.0",
+    "requests>=2.31.0,<3.0.0",
+    "tldextract>=5.1.0,<6.0.0",
+    "pandas>=2.2.0,<3.0.0",
+    "plotly>=5.20.0,<6.0.0",
+    "fpdf2>=2.7.0,<3.0.0",
+    "Pillow>=10.3.0,<11.0.0",
+    "beautifulsoup4>=4.12.0,<5.0.0",
+    "python-dotenv>=1.0.0,<2.0.0",
+    "pytest>=8.0.0,<10.0.0",
+]
+
+[project.scripts]
+phishguard = "app:main"
+phishguard-api = "api_proxy:main"
+
+[tool.setuptools.packages.find]
+include = ["src*", "api_gateway*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+addopts = "-v --tb=short"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]
+
+[tool.ruff.format]
+quote-style = "double"

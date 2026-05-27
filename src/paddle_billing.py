@@ -1,41 +1,25 @@
 # src/paddle_billing.py
-import os
-import json
 import hmac
 import hashlib
 import requests
-from datetime import datetime
 from typing import Optional
+from src.env import ENV
 
 PADDLE_API_URL = "https://api.paddle.com"
 PADDLE_SANDBOX_API_URL = "https://sandbox-api.paddle.com"
 
 
 def _get_config():
-    try:
-        import streamlit as st
-        p = st.secrets.get("paddle", {})
-        return {
-            "api_key": p.get("api_key", os.getenv("PADDLE_API_KEY", "")),
-            "client_token": p.get("client_token", os.getenv("PADDLE_CLIENT_TOKEN", "")),
-            "webhook_secret": p.get("webhook_secret", os.getenv("PADDLE_WEBHOOK_SECRET", "")),
-            "price_ids": {
-                "starter": p.get("price_id_starter", os.getenv("PADDLE_PRICE_ID_STARTER", "")),
-                "business": p.get("price_id_business", os.getenv("PADDLE_PRICE_ID_BUSINESS", "")),
-            },
-            "environment": p.get("environment", os.getenv("PADDLE_ENVIRONMENT", "sandbox")),
-        }
-    except Exception:
-        return {
-            "api_key": os.getenv("PADDLE_API_KEY", ""),
-            "client_token": os.getenv("PADDLE_CLIENT_TOKEN", ""),
-            "webhook_secret": os.getenv("PADDLE_WEBHOOK_SECRET", ""),
-            "price_ids": {
-                "starter": os.getenv("PADDLE_PRICE_ID_STARTER", ""),
-                "business": os.getenv("PADDLE_PRICE_ID_BUSINESS", ""),
-            },
-            "environment": os.getenv("PADDLE_ENVIRONMENT", "sandbox"),
-        }
+    return {
+        "api_key": ENV.PADDLE_API_KEY,
+        "client_token": ENV.PADDLE_CLIENT_TOKEN,
+        "webhook_secret": ENV.PADDLE_WEBHOOK_SECRET,
+        "price_ids": {
+            "starter": ENV.PADDLE_PRICE_ID_STARTER,
+            "business": ENV.PADDLE_PRICE_ID_BUSINESS,
+        },
+        "environment": ENV.PADDLE_ENVIRONMENT,
+    }
 
 
 def _api_base() -> str:

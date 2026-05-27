@@ -39,6 +39,11 @@ class EnvConfig:
     LOG_LEVEL: str = "INFO"
     ADMIN_PASSWORD: str = "phishguard2026"
     APP_URL: str = ""
+    SMTP_HOST: str = "smtp.gmail.com"
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASS: str = ""
+    SMTP_FROM: str = ""
     paddle_configured: bool = False
 
     def __post_init__(self):
@@ -66,6 +71,11 @@ def load_env() -> EnvConfig:
         LOG_LEVEL=_read_env("LOG_LEVEL", "INFO"),
         ADMIN_PASSWORD=_read_env("ADMIN_PASSWORD", "phishguard2026"),
         APP_URL=_read_env("APP_URL", ""),
+        SMTP_HOST=_read_env("SMTP_HOST", "smtp.gmail.com"),
+        SMTP_PORT=int(_read_env("SMTP_PORT", "587")),
+        SMTP_USER=_read_env("SMTP_USER"),
+        SMTP_PASS=_read_env("SMTP_PASS"),
+        SMTP_FROM=_read_env("SMTP_FROM"),
     )
 
 
@@ -79,6 +89,7 @@ def get_config_status() -> dict:
     for key in [
         "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "VIRUSTOTAL_API_KEY",
         "PADDLE_API_KEY", "PADDLE_CLIENT_TOKEN", "PADDLE_WEBHOOK_SECRET",
+        "SMTP_HOST", "SMTP_USER", "SMTP_FROM",
     ]:
         val = getattr(ENV, key, "")
         status[key] = {

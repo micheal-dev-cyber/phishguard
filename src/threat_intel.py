@@ -1,16 +1,15 @@
-import requests
 import base64
-import os
 import time
 import requests
-import streamlit as st
+from src.env import ENV
+
 
 def get_url_reputation(url):
     """Queries VirusTotal for URL reputation."""
-    api_key = st.secrets.get("VT_API_KEY") # Security best practice
+    api_key = ENV.VIRUSTOTAL_API_KEY
+    if not api_key:
+        return None
     headers = {"x-apikey": api_key}
-    # VirusTotal requires base64 encoding of the URL
-    import base64
     url_id = base64.urlsafe_b64encode(url.encode()).decode().strip("=")
     
     response = requests.get(f"https://www.virustotal.com/api/v3/urls/{url_id}", headers=headers)
@@ -18,16 +17,10 @@ def get_url_reputation(url):
     if response.status_code == 200:
         data = response.json()
         stats = data['data']['attributes']['last_analysis_stats']
-        return stats # Returns {'malicious': 0, 'suspicious': 0, ...}
+        return stats
     return None
 
-try:
-    import streamlit as st
-    VT_API_KEY = st.secrets.get(
-        "VIRUSTOTAL_API_KEY", os.getenv("VIRUSTOTAL_API_KEY", "")
-    )
-except Exception:
-    VT_API_KEY = os.getenv("VIRUSTOTAL_API_KEY", "")
+VT_API_KEY = ENV.VIRUSTOTAL_API_KEY
 
 VT_BASE_URL = "https://www.virustotal.com/api/v3"
 
