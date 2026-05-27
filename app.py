@@ -11,6 +11,10 @@ from src.admin import get_stats, get_all_analyses, get_recent_threats, get_daily
 from src.alerts import send_threat_alert, get_alert_log
 from src.copilot import get_copilot_response, SUGGESTED_PROMPTS
 from src.ai_analyzer import simulate_phishing, analyze_screenshot
+from src.xai_analyzer import analyze_psychological_triggers, format_xai_report
+from src.email_parser import parse_email_file
+from src.jury_engine import evaluate_linguistic_jury, evaluate_corporate_jury, compute_ensemble_score
+from src.b2b_gateway import get_tier_config, check_feature_access, MockAPIGateway
 from src.tenants import (
     log_usage, check_quota, get_all_tenants, get_usage_all_tenants,
     create_tenant, update_tenant, delete_tenant, set_password, PLANS
@@ -280,12 +284,40 @@ with tab1:
             height=260
         )
 
+        # ── .eml / .msg file upload ────────────────────────────────────────
+        st.markdown("##### 📎 Or upload an email file")
+        uploaded_file = st.file_uploader(
+            "Upload .eml or .msg",
+            type=["eml", "msg"],
+            label_visibility="collapsed",
+            key="email_uploader",
+        )
+        if uploaded_file:
+            with st.spinner("Parsing email file..."):
+                parsed = parse_email_file(uploaded_file.getvalue(), uploaded_file.name)
+            if parsed.get("error"):
+                st.error(f"Parse error: {parsed['error']}")
+            else:
+                st.success(f"Parsed: {parsed.get('subject', '(no subject)')}")
+                combined = (
+                    f"From: {parsed.get('from', '')}\n"
+                    f"Subject: {parsed.get('subject', '')}\n"
+                    f"To: {parsed.get('to', '')}\n\n"
+                    f"{parsed.get('body', '')}"
+                )
+                if combined.strip() != email_text.strip():
+                    email_text = combined
+                    st.info("Email content loaded. Click Analyze to scan.")
+
     with col_right:
         st.markdown("#### ⚙ Options")
         st.checkbox("Analyze URLs", value=True)
         st.checkbox("Keyword Detection", value=True)
         st.checkbox("Social Engineering", value=True)
         enable_vt = st.checkbox("Threat Intelligence + OSINT", value=True)
+        st.markdown("")
+        enable_jury = st.checkbox("🧠 Multi-LLM Jury (ensemble scoring)", value=False,
+                                   help="Routes text through linguistic and corporate context juries for weighted ensemble scoring")
         st.markdown("")
         analyze_btn = st.button("🔍 Analyze Email", use_container_width=True, type="primary")
         st.markdown("")
@@ -323,11 +355,28 @@ with tab1:
                 with st.spinner("Running OSINT investigation..."):
                     osint_data = run_osint(email_text)
 
-            st.session_state["results"]    = results
-            st.session_state["email_text"] = email_text
-            st.session_state["vt_results"] = vt_results
-            st.session_state["vt_summary"] = vt_summary
-            st.session_state["osint_data"] = osint_data
+            # ── Multi-LLM Jury ensemble ────────────────────────────────────
+            jury_result = {}
+            if enable_jury:
+                with st.spinner("🧠 Multi-LLM Jury evaluating linguistic anomalies..."):
+                    linguistic = evaluate_linguistic_jury(email_text)
+                with st.spinner("🧠 Multi-LLM Jury evaluating corporate context..."):
+                    corporate = evaluate_corporate_jury(email_text)
+                jury_result = compute_ensemble_score(
+                    linguistic, corporate,
+                    heuristic_score=results.get("risk_score", 0),
+                )
+
+            # ── XAI Psychological Trigger Analysis ─────────────────────────
+            xai_result = analyze_psychological_triggers(email_text)
+
+            st.session_state["results"]     = results
+            st.session_state["email_text"]  = email_text
+            st.session_state["vt_results"]  = vt_results
+            st.session_state["vt_summary"]  = vt_summary
+            st.session_state["osint_data"]  = osint_data
+            st.session_state["jury_result"] = jury_result
+            st.session_state["xai_result"]  = xai_result
             st.session_state.pop("ai_report", None)
 
     if "results" in st.session_state:
@@ -388,6 +437,106 @@ with tab1:
                         "<span class='tag'>" + kw + "</span>" for kw in keywords
                     )
                     st.markdown(tags, unsafe_allow_html=True)
+
+        # ── XAI Psychological Trigger Breakdown ─────────────────────────────────
+        xai_result = st.session_state.get("xai_result")
+        if xai_result and xai_result.get("triggers"):
+            st.markdown("<div class='section-title'>🧠 Psychological Manipulation Analysis</div>",
+                        unsafe_allow_html=True)
+
+            xai_score = xai_result["total_manipulation_score"]
+            xai_color = xai_result["overall_color"]
+            col_x1, col_x2 = st.columns([1, 2])
+
+            with col_x1:
+                fig_xai = go.Figure(go.Indicator(
+                    mode="gauge+number",
+                    value=xai_score,
+                    domain={"x": [0, 1], "y": [0, 1]},
+                    title={"text": f"<b>Manipulation Score</b>", "font": {"color": xai_color, "size": 14}},
+                    gauge={
+                        "axis": {"range": [0, 100], "tickcolor": "#94a3b8"},
+                        "bar": {"color": xai_color},
+                        "bgcolor": "#111827",
+                        "steps": [
+                            {"range": [0, 25], "color": "#0a2a0a"},
+                            {"range": [25, 50], "color": "#2a2a0a"},
+                            {"range": [50, 75], "color": "#2a1a0a"},
+                            {"range": [75, 100], "color": "#2a0a0a"},
+                        ],
+                        "threshold": {
+                            "line": {"color": xai_color, "width": 3},
+                            "thickness": 0.75, "value": xai_score,
+                        },
+                    },
+                    number={"font": {"color": xai_color, "size": 40}},
+                ))
+                fig_xai.update_layout(
+                    height=200, margin=dict(t=30, b=0, l=10, r=10),
+                    paper_bgcolor="rgba(0,0,0,0)", font_color="#e2e8f0",
+                )
+                st.plotly_chart(fig_xai, use_container_width=True)
+
+            with col_x2:
+                triggers = xai_result["triggers"]
+                categories = [t["label"] for t in triggers]
+                raw_scores = [t["raw_score"] for t in triggers]
+                fig_radar = go.Figure()
+                fig_radar.add_trace(go.Scatterpolar(
+                    r=raw_scores + [raw_scores[0]],
+                    theta=categories + [categories[0]],
+                    fill="toself",
+                    name="Trigger Intensity",
+                    line_color="#3b82f6",
+                    fillcolor="rgba(59, 130, 246, 0.15)",
+                ))
+                fig_radar.update_layout(
+                    polar=dict(
+                        radialaxis=dict(visible=True, range=[0, 100],
+                                        tickcolor="#475569", gridcolor="#1e3a5f"),
+                        bgcolor="rgba(0,0,0,0)",
+                    ),
+                    height=200, margin=dict(t=10, b=10, l=30, r=30),
+                    paper_bgcolor="rgba(0,0,0,0)", font_color="#e2e8f0",
+                    showlegend=False,
+                )
+                st.plotly_chart(fig_radar, use_container_width=True)
+
+            st.markdown(
+                f"<p style='color:{xai_color};font-size:0.9rem;margin-bottom:12px'>"
+                f"{xai_result['trigger_count']} manipulation tactic(s) detected — "
+                f"{xai_result['overall_severity']} social engineering risk.</p>",
+                unsafe_allow_html=True
+            )
+
+            for t in triggers:
+                with st.expander(
+                    f"{t['icon']} {t['label']} — Score {t['raw_score']}/100 "
+                    f"(<span style='color:{t['severity_color']}'>{t['severity']}</span>)",
+                    expanded=t["raw_score"] >= 50
+                ):
+                    st.markdown(f"*{t['description']}*")
+                    if t.get("key_phrases"):
+                        st.markdown(
+                            "**Detected patterns:** " + ", ".join(
+                                f"`{p}`" for p in t["key_phrases"][:6]
+                            )
+                        )
+                    if t.get("evidence"):
+                        st.markdown("**Why this was flagged:**")
+                        for ev in t["evidence"][:4]:
+                            st.markdown(f"- {ev['explanation']}")
+
+            # Show XAI markdown report as downloadable context
+            st.markdown(
+                f"<details><summary style='color:#60a5fa;font-size:0.85rem;cursor:pointer'>"
+                f"📋 View full XAI explanation</summary>"
+                f"<div style='background:#0f172a;border:1px solid #1e3a5f;border-radius:8px;"
+                f"padding:16px;font-family:monospace;font-size:12px;color:#94a3b8;"
+                f"margin-top:8px;white-space:pre-wrap'>{format_xai_report(xai_result)}</div>"
+                f"</details>",
+                unsafe_allow_html=True
+            )
 
         # URL results
         if results["suspicious_urls"]:
@@ -530,6 +679,39 @@ with tab1:
             st.warning("🟡 **MEDIUM RISK** — Suspicious elements detected. Verify before acting.")
         else:
             st.success("🟢 **LOW RISK** — No major phishing indicators found. Stay vigilant.")
+
+        # ── Multi-LLM Jury Ensemble ──────────────────────────────────────────
+        jury_result = st.session_state.get("jury_result")
+        if jury_result and jury_result.get("ensemble"):
+            ens = jury_result["ensemble"]
+            st.markdown("<div class='section-title'>🧠 Multi-LLM Jury Consensus</div>",
+                        unsafe_allow_html=True)
+            col_j1, col_j2, col_j3, col_j4 = st.columns(4)
+            with col_j1:
+                delta_j = (ens.get("ensemble_score", 0)
+                           - jury_result.get("heuristic_score", 0))
+                st.metric("⚖️ Ensemble Score", f"{ens['ensemble_score']:.0f}/100",
+                          delta=f"{delta_j:+.0f} vs heuristic")
+            with col_j2:
+                jury_verdict = ens.get("verdict", "N/A")
+                st.metric("🎯 Consensus", jury_verdict)
+            with col_j3:
+                st.metric("🔤 Linguistic Jury",
+                          f"{jury_result['linguistic']['risk_score']:.0f}/100")
+            with col_j4:
+                st.metric("🏢 Corporate Jury",
+                          f"{jury_result['corporate']['risk_score']:.0f}/100")
+
+            if ens.get("ensemble_score", 0) > score + 15:
+                st.warning(
+                    "⚠️ The jury ensemble rates this email **significantly higher** "
+                    "than the heuristic scan. Consider it a priority threat."
+                )
+            elif ens.get("ensemble_score", 0) < score - 15:
+                st.info(
+                    "ℹ️ The jury ensemble rates this email **lower** than the heuristic scan. "
+                    "Heuristic flags may be false positives."
+                )
 
         # Export
         st.divider()
@@ -1078,6 +1260,38 @@ with billing_tab:
                     if st.button("⬆ Upgrade", key="bill_up_" + pkey, use_container_width=True):
                         st.session_state["show_upgrade"] = True
                         st.rerun()
+
+    # ── B2B Enterprise Gateway ──────────────────────────────────────────────
+    st.divider()
+    st.markdown("<div class='section-title'>🔐 B2B Enterprise Gateway</div>",
+                unsafe_allow_html=True)
+    tier_cfg = get_tier_config(plan)
+    st.markdown(
+        f"**Tier:** `{plan}` | **Plan label:** {tier_cfg['display_name']} | "
+        f"**Max QPS:** {tier_cfg['max_qps']} | "
+        f"**Burst:** {tier_cfg.get('burst_limit', 0)} | "
+        f"**Concurrent:** {tier_cfg['concurrent_limit']}"
+    )
+    col_b1, col_b2 = st.columns(2)
+    with col_b1:
+        st.markdown("**Feature access:**")
+        for feat, allowed in tier_cfg["features"].items():
+            icon = "✅" if allowed else "❌"
+            st.markdown(f"{icon} `{feat}`")
+    with col_b2:
+        st.markdown("**Rate limit simulation:**")
+        mock_gw = MockAPIGateway(plan)
+        result = mock_gw.call_endpoint("analyze")
+        st.code(f"Mock API /analyze → {result.get('status', 'N/A')} | "
+                f"{result.get('message', '')} | "
+                f"Remaining: {result.get('remaining', 'N/A')}",
+                language="text")
+        if result.get("retry_after"):
+            st.caption(f"Retry-After: {result['retry_after']}s")
+        if result.get("status") == 429:
+            st.warning("⛔ Rate limit hit! Upgrade or wait for window reset.")
+        else:
+            st.info("✅ Gateway healthy — within rate limits.")
 
     st.divider()
     st.markdown(
