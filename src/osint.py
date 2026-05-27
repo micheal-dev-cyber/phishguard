@@ -1,14 +1,10 @@
 import re
 import socket
 import requests
-import os
 from datetime import datetime
+from src.env import ENV
 
-try:
-    import streamlit as st
-    VT_API_KEY = st.secrets.get("VIRUSTOTAL_API_KEY", os.getenv("VIRUSTOTAL_API_KEY", ""))
-except Exception:
-    VT_API_KEY = os.getenv("VIRUSTOTAL_API_KEY", "")
+VT_API_KEY = ENV.VIRUSTOTAL_API_KEY
 
 
 # ── Extraction helpers ─────────────────────────────────────────────────────────
