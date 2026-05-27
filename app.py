@@ -35,8 +35,70 @@ from src.ratelimit import check_rate_limit, get_rate_limit_remaining
 from src.leaderboard import render_leaderboard, record_scan as lb_record_scan
 from src.env import ENV, get_config_status, log_config_status
 
+# ── Enterprise component imports (with guards for optional deps) ──
+try:
+    from src.threat_intel_sharing import (
+        check_collective_immunity, get_all_active_indicators,
+        broadcast_intel, immunise_from_analysis,
+    )
+    _HAS_STIX = True
+except Exception:
+    _HAS_STIX = False
+
+try:
+    from src.sender_profiler import (
+        get_or_create_profile, update_profile_after_scan,
+        detect_behavioural_anomaly, get_sender_history,
+        get_all_profiles_summary,
+    )
+    _HAS_SENDER_PROFILER = True
+except Exception:
+    _HAS_SENDER_PROFILER = False
+
+try:
+    from src.ocr_homograph import (
+        check_url_for_homograph, decode_punycode,
+        scan_ocr_text_for_threats,
+    )
+    _HAS_OCR = True
+except Exception:
+    _HAS_OCR = False
+
+try:
+    from src.url_sandbox import (
+        analyse_url_sandbox_sync, get_sandbox_history,
+    )
+    _HAS_URL_SANDBOX = True
+except Exception:
+    _HAS_URL_SANDBOX = False
+
 if not check_password():
     st.stop()
+
+# ── Data caching (60s TTL) ──────────────────────────────────────────────────
+@st.cache_data(ttl=60)
+def _cached_history(limit: int = 500):
+    return get_history(limit)
+
+@st.cache_data(ttl=60)
+def _cached_stats():
+    from src.admin import get_stats as _gs
+    return _gs()
+
+@st.cache_data(ttl=60)
+def _cached_threats(limit: int = 10):
+    from src.admin import get_recent_threats as _gt
+    return _gt(limit)
+
+@st.cache_data(ttl=60)
+def _cached_daily_counts(days: int = 14):
+    from src.admin import get_daily_counts as _gd
+    return _gd(days)
+
+@st.cache_data(ttl=60)
+def _cached_all_analyses(limit: int = 100):
+    from src.admin import get_all_analyses as _ga
+    return _ga(limit)
 
 st.markdown("""
 <style>
@@ -270,17 +332,25 @@ if st.session_state.get("show_upgrade") and plan != "enterprise":
     st.stop()
 
 # ── Tabs ─────────────────────────────────────────────────────────────────────
+# Positions (both):     1        2         3
+# Admin:                4        5         6     7      8      9       10      11       12       13      14
+# Non-admin:            4        5         6     7      8
+# Enterprise (both):    9/11    10/12     11/13  12/14
 if is_admin:
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12, tab13, tab14 = st.tabs([
         "🔍 Analyze Email", "📈 Analytics", "🤖 AI Copilot",
-        "⚙ Admin Dashboard", "👥 Clients", "💳 Billing",
-        "⚙ Settings", "🧪 Training", "🏆 Champions", "📊 History"
+        "⚙ Admin Dashboard", "👥 Clients",
+        "💳 Billing", "⚙ Settings", "🧪 Training", "🏆 Champions", "📊 History",
+        "🧬 STIX Intel", "📧 Sender Profiler", "🔗 URL Sandbox", "👁 OCR/Homograph",
     ])
+    tab_stix, tab_sender, tab_sandbox, tab_ocr = tab11, tab12, tab13, tab14
 else:
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12 = st.tabs([
         "🔍 Analyze Email", "📈 Analytics", "🤖 AI Copilot",
-        "💳 Billing", "⚙ Settings", "🧪 Training", "🏆 Champions", "📊 History"
+        "💳 Billing", "⚙ Settings", "🧪 Training", "🏆 Champions", "📊 History",
+        "🧬 STIX Intel", "📧 Sender Profiler", "🔗 URL Sandbox", "👁 OCR/Homograph",
     ])
+    tab_stix, tab_sender, tab_sandbox, tab_ocr = tab9, tab10, tab11, tab12
 
 # ═════════════════════════════════════════════════════════════════════════════
 # TAB 1 — ANALYZER
@@ -835,9 +905,12 @@ with tab1:
 with tab2:
     st.markdown("## 📈 Enterprise Analytics")
     st.caption("Real-time threat intelligence and scanning metrics.")
+    if st.button("🔄 Refresh Data", key="refresh_analytics"):
+        _cached_history.clear()
+        st.rerun()
     st.divider()
 
-    history = get_history(500)
+    history = _cached_history(500)
     if not history:
         st.info("No scan data yet. Go to Analyze and scan your first email.")
     else:
@@ -978,6 +1051,46 @@ with tab2:
                     f"Keywords: {kw} | URLs: {su}"
                 )
 
+        # ── Export options ──────────────────────────────────────────────────
+        st.divider()
+        st.markdown("#### 📥 Export Data")
+        col_ex1, col_ex2, col_ex3 = st.columns(3)
+        with col_ex1:
+            if history:
+                import csv, io
+                out = io.StringIO()
+                w = csv.writer(out)
+                w.writerow(["Timestamp", "Risk Score", "Severity",
+                             "Keyword Hits", "Suspicious URLs", "Preview"])
+                w.writerows(history)
+                st.download_button(
+                    "📥 Export CSV (All History)", out.getvalue(),
+                    "phishguard_analytics.csv", "text/csv",
+                    use_container_width=True,
+                )
+        with col_ex2:
+            if history:
+                import json
+                json_data = json.dumps(
+                    [{"timestamp": r[0], "risk_score": r[1], "severity": r[2],
+                      "keyword_hits": r[3], "suspicious_urls": r[4], "preview": r[5]}
+                     for r in history], indent=2
+                )
+                st.download_button(
+                    "📥 Export JSON (All History)", json_data,
+                    "phishguard_analytics.json", "application/json",
+                    use_container_width=True,
+                )
+        with col_ex3:
+            last_results = st.session_state.get("results")
+            if last_results:
+                import json
+                result_json = json.dumps(last_results, indent=2, default=str)
+                st.download_button(
+                    "📥 Export Last Analysis JSON", result_json,
+                    "phishguard_last_analysis.json", "application/json",
+                    use_container_width=True,
+                )
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -1106,9 +1219,14 @@ if is_admin:
             "<p style='color:#94a3b8'>Only visible to admin account</p>",
             unsafe_allow_html=True
         )
+        if st.button("🔄 Refresh", key="refresh_admin"):
+            _cached_stats.clear()
+            _cached_threats.clear()
+            _cached_daily_counts.clear()
+            st.rerun()
         st.divider()
 
-        stats = get_stats()
+        stats = _cached_stats()
         c1, c2, c3, c4 = st.columns(4)
         c1.markdown(
             "<div class='stat-card'>"
@@ -1143,7 +1261,7 @@ if is_admin:
 
         col_ch1, col_ch2 = st.columns(2)
         with col_ch1:
-            daily  = get_daily_counts(14)
+            daily  = _cached_daily_counts(14)
             dates  = [d["date"] for d in daily]
             counts = [d["count"] for d in daily]
             fig3 = go.Figure(go.Bar(
@@ -1181,7 +1299,7 @@ if is_admin:
 
         st.divider()
         st.markdown("### 🚨 Recent Critical & High Threats")
-        threats = get_recent_threats(10)
+        threats = _cached_threats(10)
         if not threats:
             st.info("No critical or high threats detected yet.")
         else:
@@ -1204,7 +1322,7 @@ if is_admin:
             if st.button("🔄 Refresh Dashboard", use_container_width=True):
                 st.rerun()
         with col_exp:
-            all_a = get_all_analyses(100)
+            all_a = _cached_all_analyses(100)
             if all_a:
                 import csv, io
                 out = io.StringIO()
@@ -1217,6 +1335,57 @@ if is_admin:
                     "phishguard_analyses.csv", "text/csv",
                     use_container_width=True
                 )
+
+        # ── API Gateway Management ──────────────────────────────────────────
+        st.divider()
+        st.markdown("### 🔐 REST API Gateway")
+        st.caption(
+            "Manage API keys for programmatic access. "
+            "Keys grant tier-based rate limits and feature access."
+        )
+
+        try:
+            import json
+            from pathlib import Path
+            keys_path = Path(__file__).parent / "api_gateway" / "api_keys.json"
+            if keys_path.exists():
+                with open(keys_path) as f:
+                    keys_data = json.load(f)
+                api_keys = keys_data.get("api_keys", [])
+            else:
+                api_keys = []
+        except Exception:
+            api_keys = []
+
+        if api_keys:
+            st.markdown("**Registered API Keys:**")
+            for ak in api_keys:
+                key_val = ak.get("key", "")[:16] + "..." if ak.get("key") else ""
+                tier = ak.get("tier", "trial")
+                client = ak.get("client", "unknown")
+                active = ak.get("active", False)
+                dot = "🟢" if active else "🔴"
+                st.markdown(
+                    f"<div style='background:#111827;border:1px solid #1e3a5f;"
+                    f"border-radius:8px;padding:8px 12px;margin:4px 0;font-size:13px'>"
+                    f"{dot} <code>{key_val}</code> · {client} · {tier} tier</div>",
+                    unsafe_allow_html=True,
+                )
+        else:
+            st.info("No API keys configured. Create `api_gateway/api_keys.json` to enable the REST API.")
+
+        st.markdown("**REST API Endpoints:**")
+        base_url = ENV.APP_URL or "https://phishguard.ai"
+        st.code(
+            f"# Analyse email via API\n"
+            f"curl -X POST {base_url}/api/v1/scan \\\n"
+            f"  -H \"X-API-Key: your-api-key\" \\\n"
+            f"  -H \"Content-Type: application/json\" \\\n"
+            f"  -d '{{\"text\": \"Suspicious email content...\"}}'\n\n"
+            f"# Health check\n"
+            f"curl {base_url}/health",
+            language="bash",
+        )
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -1605,14 +1774,61 @@ with settings_tab:
             sev_color = "#ff4444" if al_sev == "CRITICAL" else "#ff8800"
             st.markdown(
                 "<div style='background:#111827;border:1px solid #1e3a5f;"
-                "border-radius:10px;padding:12px 16px;margin:4px 0;"
-                "display:flex;justify-content:space-between;align-items:center'>"
-                "<span style='color:#e2e8f0'>" + dot + " " + al_subject[:50] + "</span>"
-                "<span style='color:" + sev_color + ";font-size:12px;font-weight:700'>" + al_sev + " " + str(al_score) + "/100</span>"
-                "<span style='color:#475569;font-size:11px;font-family:monospace'>" + al_sent[:16] + "</span>"
-                "</div>",
-                unsafe_allow_html=True
-            )
+                    "border-radius:10px;padding:12px 16px;margin:4px 0;"
+                    "display:flex;justify-content:space-between;align-items:center'>"
+                    "<span style='color:#e2e8f0'>" + dot + " " + al_subject[:50] + "</span>"
+                    "<span style='color:" + sev_color + ";font-size:12px;font-weight:700'>" + al_sev + " " + str(al_score) + "/100</span>"
+                    "<span style='color:#475569;font-size:11px;font-family:monospace'>" + al_sent[:16] + "</span>"
+                    "</div>",
+                    unsafe_allow_html=True
+                )
+
+    # ── IMAP Worker Configuration ───────────────────────────────────────────
+    st.divider()
+    st.markdown("### 📬 IMAP Auto-Scan Worker")
+    st.caption(
+        "Configure an IMAP mailbox to automatically scan incoming emails. "
+        "The worker fetches unseen messages, runs them through PhishGuard, "
+        "and replies with a security verdict."
+    )
+
+    if "imap_cfg" not in st.session_state:
+        st.session_state["imap_cfg"] = {
+            "host": os.getenv("IMAP_HOST", ""),
+            "user": os.getenv("IMAP_USER", ""),
+            "pass": os.getenv("IMAP_PASS", ""),
+        }
+
+    import os as _os
+    imap_cfg = st.session_state["imap_cfg"]
+    col_i1, col_i2, col_i3 = st.columns(3)
+    with col_i1:
+        imap_cfg["host"] = st.text_input("IMAP Host", value=imap_cfg["host"],
+                                          placeholder="imap.example.com",
+                                          key="imap_host")
+    with col_i2:
+        imap_cfg["user"] = st.text_input("IMAP Username", value=imap_cfg["user"],
+                                          placeholder="user@example.com",
+                                          key="imap_user")
+    with col_i3:
+        imap_cfg["pass"] = st.text_input("IMAP Password", type="password",
+                                          value="********" if imap_cfg["pass"] else "",
+                                          placeholder="password",
+                                          key="imap_pass")
+
+    if st.button("💾 Save IMAP Config", type="primary", use_container_width=True):
+        st.session_state["imap_cfg"] = imap_cfg
+        st.success("IMAP config saved to session. Run the worker via `python workers/imap_worker.py`")
+
+    st.markdown("**Worker command:**")
+    st.code(
+        "# Set env vars and run the IMAP worker\n"
+        f"set IMAP_HOST={imap_cfg['host'] or '<host>'}\n"
+        f"set IMAP_USER={imap_cfg['user'] or '<user>'}\n"
+        f"set IMAP_PASS=<password>\n"
+        f"python workers/imap_worker.py",
+        language="bash",
+    )
 
 # ═════════════════════════════════════════════════════════════════════════════
 # TAB 8/6 — TRAINING (Simulator + Screenshot Scanner)
@@ -1887,3 +2103,352 @@ with history_tab:
                     preview + "...</div>",
                     unsafe_allow_html=True
                 )
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# TAB — STIX 2.1 THREAT INTELLIGENCE SHARING
+# ═════════════════════════════════════════════════════════════════════════════
+with tab_stix:
+    st.markdown("## 🧬 STIX 2.1 Threat Intelligence Sharing")
+    st.markdown(
+        "<p style='color:#64748b;margin-top:-8px'>Collective immunity via "
+        "STIX 2.1 CTI bundles — broadcast confirmed threats to all tenants.</p>",
+        unsafe_allow_html=True,
+    )
+    st.divider()
+
+    if not _HAS_STIX:
+        st.warning("⚠ STIX Intel Sharing module unavailable. Check dependencies.")
+        st.stop()
+
+    col_s1, col_s2 = st.columns(2)
+    with col_s1:
+        st.markdown("#### 🔬 Collective Immunity Check")
+        st.caption("Check if an email hash matches any known threat indicator.")
+        immunity_text = st.text_area(
+            "Paste email text to check",
+            height=120,
+            label_visibility="collapsed",
+            placeholder="Paste the full email text here to check collective immunity...",
+            key="stix_immunity_input",
+        )
+        if st.button("🔍 Check Immunity", use_container_width=True, key="stix_check"):
+            if immunity_text.strip():
+                with st.spinner("Checking collective immunity..."):
+                    result = check_collective_immunity(immunity_text.strip())
+                if result.get("immunised"):
+                    st.success(
+                        f"✅ **IMMUNISED** — This exact threat was already "
+                        f"broadcast by **{result['matched_tenant']}** "
+                        f"({result['matched_severity']}, score {result['matched_score']}/100)."
+                    )
+                else:
+                    st.info("🟢 No collective immunity match — this appears to be a novel threat.")
+
+    with col_s2:
+        st.markdown("#### 📡 Broadcast Current Analysis")
+        st.caption("Immunise the last analysis to all connected tenants.")
+        if st.button("📡 Immunise Last Analysis", use_container_width=True,
+                     type="primary", key="stix_immunise"):
+            last_results = st.session_state.get("results")
+            last_email = st.session_state.get("email_text", "")
+            if last_results and last_email:
+                with st.spinner("Building STIX bundle and broadcasting..."):
+                    result = immunise_from_analysis(
+                        last_email, last_results,
+                        sender=last_results.get("sender", ""),
+                        subject=last_results.get("subject", ""),
+                    )
+                if result.get("broadcast_id"):
+                    st.success(
+                        f"✅ STIX bundle broadcast — ID `{result['broadcast_id']}`. "
+                        f"Linguistic hash: `{result.get('linguistic_hash', '')[:16]}...`"
+                    )
+                else:
+                    st.error(f"Broadcast failed: {result.get('error', 'Unknown')}")
+            else:
+                st.warning("No analysis in session. Run an analysis first.")
+
+    st.divider()
+    st.markdown("#### 📋 Active STIX Indicators")
+    indicators = get_all_active_indicators(limit=50)
+    if not indicators:
+        st.info("No active STIX indicators yet. Broadcast your first threat above.")
+    else:
+        for ind in indicators:
+            stid, stix_id, ind_type, pattern, lhash, sdom, sev, score, first, last, active, bcount, created = ind
+            sev_color = {"CRITICAL": "#ff4444", "HIGH": "#ff8800",
+                         "MEDIUM": "#ffaa00", "LOW": "#44aa44"}.get(sev, "#94a3b8")
+            st.markdown(
+                f"<div style='background:#111827;border:1px solid #1e3a5f;"
+                f"border-radius:10px;padding:12px 16px;margin:6px 0'>"
+                f"<div style='display:flex;justify-content:space-between'>"
+                f"<span style='color:{sev_color};font-weight:700'>{sev}</span>"
+                f"<span style='color:#94a3b8;font-size:12px'>Score {score}/100</span>"
+                f"<span style='color:#475569;font-size:11px'>Broadcast {bcount}x</span>"
+                f"</div>"
+                f"<div style='color:#64748b;font-size:12px;margin-top:4px'>"
+                f"{ind_type} · `{stix_id[:32]}...`</div>"
+                f"<div style='color:#475569;font-size:11px;margin-top:2px'>"
+                f"{first[:10]} → {last[:10] if last else 'ongoing'}</div>"
+                f"</div>", unsafe_allow_html=True
+            )
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# TAB — SENDER PROFILER
+# ═════════════════════════════════════════════════════════════════════════════
+with tab_sender:
+    st.markdown("## 📧 Behavioral Sender Profiler")
+    st.markdown(
+        "<p style='color:#64748b;margin-top:-8px'>Track sender baselines — "
+        "detect tone shifts, urgency spikes, and anomalous financial requests.</p>",
+        unsafe_allow_html=True,
+    )
+    st.divider()
+
+    if not _HAS_SENDER_PROFILER:
+        st.warning("⚠ Sender Profiler module unavailable. Check dependencies.")
+        st.stop()
+
+    col_p1, col_p2 = st.columns([1, 1])
+    with col_p1:
+        st.markdown("#### 🔍 Anomaly Check for Last Sender")
+        last_email = st.session_state.get("email_text", "")
+        if last_email:
+            import re
+            sender_match = re.search(r"From:\s*(\S+@\S+)", last_email)
+            sender = sender_match.group(1) if sender_match else ""
+            if sender:
+                st.caption(f"Last sender: `{sender}`")
+                if st.button("🧠 Detect Anomalies", use_container_width=True, key="sender_anomaly"):
+                    with st.spinner("Analyzing sender behavior..."):
+                        anomaly = detect_behavioural_anomaly(
+                            sender, "", last_email,
+                            risk_score=st.session_state.get("results", {}).get("risk_score", 0),
+                        )
+                    st.session_state["sender_anomaly"] = anomaly
+                    st.rerun()
+        else:
+            st.info("Run an analysis first to check sender behavior.")
+
+        anomaly = st.session_state.get("sender_anomaly")
+        if anomaly:
+            st.divider()
+            st.markdown("#### 📊 Anomaly Results")
+            is_anom = anomaly.get("is_anomalous", False)
+            if is_anom:
+                st.error(f"🚨 **Anomalous behavior detected** — Score {anomaly['anomaly_score']:.0f}/100")
+            else:
+                st.success(f"🟢 Baseline normal — Score {anomaly['anomaly_score']:.0f}/100")
+
+            col_a1, col_a2 = st.columns(2)
+            with col_a1:
+                st.metric("Urgency Spike", f"{anomaly.get('urgency_spike', 0):.1f}")
+                st.metric("Tone Shift", anomaly.get("tone_shift", "none"))
+            with col_a2:
+                st.metric("Financial Request", "⚠ Yes" if anomaly.get("first_financial_request") else "No")
+                st.metric("Salutation Change", "⚠ Yes" if anomaly.get("salutation_changed") else "No")
+
+            if anomaly.get("flags"):
+                for flag in anomaly["flags"]:
+                    st.warning(f"⚠ {flag}")
+
+    with col_p2:
+        st.markdown("#### 📋 All Sender Profiles")
+        profiles = get_all_profiles_summary(limit=30)
+        if not profiles:
+            st.info("No sender profiles yet. Run analyses to build them.")
+        else:
+            for prof in profiles:
+                semail, sdomain, sname, total, trust, avg_risk, last = prof[:7]
+                trust_color = "#44aa44" if trust >= 60 else "#ffaa00" if trust >= 40 else "#ff4444"
+                st.markdown(
+                    f"<div style='background:#111827;border:1px solid #1e3a5f;"
+                    f"border-radius:10px;padding:10px 14px;margin:4px 0'>"
+                    f"<div style='display:flex;justify-content:space-between'>"
+                    f"<span style='color:#e2e8f0;font-weight:500'>{sname or semail}</span>"
+                    f"<span style='color:{trust_color}'>{trust:.0f} trust</span>"
+                    f"</div>"
+                    f"<div style='color:#475569;font-size:11px'>{total} emails · "
+                    f"{avg_risk:.0f} avg risk · last {last[:10] if last else 'never'}</div>"
+                    f"</div>", unsafe_allow_html=True
+                )
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# TAB — URL SANDBOX
+# ═════════════════════════════════════════════════════════════════════════════
+with tab_sandbox:
+    st.markdown("## 🔗 Headless URL Sandbox")
+    st.markdown(
+        "<p style='color:#64748b;margin-top:-8px'>Isolate and analyse suspicious "
+        "URLs in a headless browser — capture redirect chains, login forms, and "
+        "LLM-based brand verification.</p>",
+        unsafe_allow_html=True,
+    )
+    st.divider()
+
+    if not _HAS_URL_SANDBOX:
+        st.warning(
+            "⚠ URL Sandbox requires Playwright + headless browser support. "
+            "Not available on HF Spaces — run locally.",
+        )
+        st.stop()
+
+    sandbox_url = st.text_input(
+        "URL to analyse",
+        placeholder="https://suspicious-link.example.com",
+        label_visibility="collapsed",
+        key="sandbox_url_input",
+    )
+    col_sb1, col_sb2, col_sb3 = st.columns([1, 1, 2])
+    with col_sb1:
+        sb_btn = st.button("🔍 Analyse URL", use_container_width=True, type="primary")
+    with col_sb2:
+        if st.button("📋 Load from Last Analysis", use_container_width=True):
+            last_results = st.session_state.get("results", {})
+            urls = last_results.get("urls_found", [])
+            if urls:
+                st.session_state["sandbox_url_input"] = urls[0]
+                st.rerun()
+            else:
+                st.warning("No URLs in last analysis.")
+
+    if sb_btn and sandbox_url.strip():
+        with st.spinner("Launching headless sandbox..."):
+            result = analyse_url_sandbox_sync(sandbox_url.strip(), use_llm=False)
+        st.session_state["sandbox_result"] = result
+        st.rerun()
+
+    sb_result = st.session_state.get("sandbox_result")
+    if sb_result:
+        st.divider()
+        st.markdown("#### 📊 Sandbox Results")
+        score_r = sb_result.get("risk_score", 0)
+        verdict = sb_result.get("verdict", "unknown")
+        vcolor = "#ff4444" if score_r >= 75 else "#ff8800" if score_r >= 50 else "#44aa44"
+        col_r1, col_r2, col_r3 = st.columns(3)
+        with col_r1:
+            st.metric("Risk Score", f"{score_r}/100")
+        with col_r2:
+            st.metric("Verdict", verdict)
+        with col_r3:
+            st.metric("Redirects", len(sb_result.get("redirect_chain", [])))
+
+        if sb_result.get("detected_login_form"):
+            st.error("🚨 **Login form detected** — possible credential harvesting page.")
+        if sb_result.get("detected_brand"):
+            st.warning(f"⚠ Brand detected: **{sb_result['detected_brand']}**")
+        if sb_result.get("final_url") and sb_result["final_url"] != sb_result.get("original_url"):
+            st.markdown(
+                f"**Redirect chain:** {' → '.join(sb_result['redirect_chain'])}"
+            )
+        if sb_result.get("error"):
+            st.error(f"Sandbox error: {sb_result['error']}")
+
+    st.divider()
+    st.markdown("#### 📋 Recent Sandbox History")
+    sb_history = get_sandbox_history(limit=20)
+    if not sb_history:
+        st.info("No sandbox runs yet.")
+    else:
+        for row in sb_history:
+            sid, ourl, furl, rchain, spath, title, lform, brand, lver, lconf, hhash, dsum, rscore, verd, atime, ts = row
+            sc = "#ff4444" if rscore >= 75 else "#ff8800" if rscore >= 50 else "#44aa44"
+            st.markdown(
+                f"<div style='background:#111827;border:1px solid #1e3a5f;"
+                f"border-radius:10px;padding:10px 14px;margin:4px 0'>"
+                f"<div style='display:flex;justify-content:space-between'>"
+                f"<span style='color:#e2e8f0;font-size:13px'>{ourl[:60]}</span>"
+                f"<span style='color:{sc};font-weight:700'>{rscore}/100</span>"
+                f"</div>"
+                f"<div style='color:#475569;font-size:11px'>{verd} · {ts[:16]}</div>"
+                f"</div>", unsafe_allow_html=True
+            )
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# TAB — OCR / HOMOGRAPH DETECTION
+# ═════════════════════════════════════════════════════════════════════════════
+with tab_ocr:
+    st.markdown("## 👁 OCR & Homograph Detection")
+    st.markdown(
+        "<p style='color:#64748b;margin-top:-8px'>Scan URLs for IDN homograph "
+        "attacks (Cyrillic/Latin confusables) and decode Punycode domains.</p>",
+        unsafe_allow_html=True,
+    )
+    st.divider()
+
+    if not _HAS_OCR:
+        st.warning(
+            "⚠ OCR/Homograph module requires easyocr or tesseract. "
+            "Not available on HF Spaces — run locally for image OCR.",
+        )
+        st.stop()
+
+    col_o1, col_o2 = st.columns(2)
+    with col_o1:
+        st.markdown("#### 🔗 URL Homograph Check")
+        ocr_url = st.text_input(
+            "Enter a URL to check",
+            placeholder="https://www.аpple.com (Cyrillic 'а')",
+            label_visibility="collapsed",
+            key="ocr_url_input",
+        )
+        if st.button("🔍 Check Homograph", use_container_width=True, key="ocr_check"):
+            if ocr_url.strip():
+                with st.spinner("Analysing URL for homograph attacks..."):
+                    h_result = check_url_for_homograph(ocr_url.strip())
+                st.session_state["h_result"] = h_result
+                st.rerun()
+
+        h_result = st.session_state.get("h_result")
+        if h_result:
+            st.divider()
+            is_homo = h_result.get("is_homograph", False)
+            if is_homo:
+                st.error(
+                    f"🚨 **Homograph attack detected** — "
+                    f"`{h_result['decoded_punycode'] or h_result['ascii_domain']}` "
+                    f"lookalike of `{h_result.get('visual_lookalike_of', 'unknown')}`"
+                )
+            else:
+                st.success("🟢 No homograph detected.")
+
+            st.markdown(
+                f"**Domain:** `{h_result.get('domain', '')}`  \n"
+                f"**ASCII:** `{h_result.get('ascii_domain', '')}`  \n"
+                f"**Punycode:** `{h_result.get('decoded_punycode', 'none')}`  \n"
+                f"**Risk score:** {h_result.get('risk_score', 0)}/100"
+            )
+
+    with col_o2:
+        st.markdown("#### 📋 Recent Homograph Alerts")
+        try:
+            import sqlite3
+            from pathlib import Path
+            db_path = Path(__file__).parent / "data" / "phishguard.db"
+            conn = sqlite3.connect(db_path)
+            c = conn.cursor()
+            c.execute(
+                "SELECT original_domain, homograph_type, visual_lookalike_of, "
+                "risk_score, timestamp FROM homograph_alerts ORDER BY id DESC LIMIT 20"
+            )
+            alerts = c.fetchall()
+            conn.close()
+            if alerts:
+                for ad, htype, lookalike, rscore, ts in alerts:
+                    st.markdown(
+                        f"<div style='background:#111827;border:1px solid #1e3a5f;"
+                        f"border-radius:10px;padding:8px 12px;margin:4px 0'>"
+                        f"<div style='color:#ff8888;font-size:12px'>{ad}</div>"
+                        f"<div style='color:#475569;font-size:11px'>{htype} → "
+                        f"{lookalike} · score {rscore}</div>"
+                        f"<div style='color:#334155;font-size:10px'>{ts[:16]}</div>"
+                        f"</div>", unsafe_allow_html=True
+                    )
+            else:
+                st.info("No homograph alerts yet.")
+        except Exception:
+            st.info("No homograph alerts yet.")
