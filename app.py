@@ -278,13 +278,12 @@ with tab1:
 
     with col_left:
         st.markdown("#### 📧 Paste Email Content")
-        email_text = st.text_area(
-            label="email", label_visibility="collapsed",
-            placeholder="Paste the full email here — subject, headers, body, links...",
-            height=260
-        )
 
-        # ── .eml / .msg file upload ────────────────────────────────────────
+        # Initialise session_state for email text if not set
+        if "email_input" not in st.session_state:
+            st.session_state["email_input"] = ""
+
+        # ── .eml / .msg file upload (must be before text_area to update it) ─
         st.markdown("##### 📎 Or upload an email file")
         uploaded_file = st.file_uploader(
             "Upload .eml or .msg",
@@ -298,16 +297,22 @@ with tab1:
             if parsed.get("error"):
                 st.error(f"Parse error: {parsed['error']}")
             else:
-                st.success(f"Parsed: {parsed.get('subject', '(no subject)')}")
                 combined = (
                     f"From: {parsed.get('from', '')}\n"
                     f"Subject: {parsed.get('subject', '')}\n"
                     f"To: {parsed.get('to', '')}\n\n"
                     f"{parsed.get('body', '')}"
                 )
-                if combined.strip() != email_text.strip():
-                    email_text = combined
-                    st.info("Email content loaded. Click Analyze to scan.")
+                if combined.strip() != st.session_state["email_input"].strip():
+                    st.session_state["email_input"] = combined
+                    st.rerun()
+
+        email_text = st.text_area(
+            label="email", label_visibility="collapsed",
+            placeholder="Paste the full email here — subject, headers, body, links...",
+            height=260,
+            key="email_input",
+        )
 
     with col_right:
         st.markdown("#### ⚙ Options")
@@ -682,32 +687,28 @@ with tab1:
 
         # ── Multi-LLM Jury Ensemble ──────────────────────────────────────────
         jury_result = st.session_state.get("jury_result")
-        if jury_result and jury_result.get("ensemble"):
-            ens = jury_result["ensemble"]
+        if jury_result and "final_score" in jury_result:
+            jr = jury_result
             st.markdown("<div class='section-title'>🧠 Multi-LLM Jury Consensus</div>",
                         unsafe_allow_html=True)
-            col_j1, col_j2, col_j3, col_j4 = st.columns(4)
+            col_j1, col_j2, col_j3 = st.columns(3)
             with col_j1:
-                delta_j = (ens.get("ensemble_score", 0)
-                           - jury_result.get("heuristic_score", 0))
-                st.metric("⚖️ Ensemble Score", f"{ens['ensemble_score']:.0f}/100",
+                delta_j = jr.get("final_score", 0) - score
+                st.metric("⚖️ Ensemble Score", f"{jr['final_score']:.0f}/100",
                           delta=f"{delta_j:+.0f} vs heuristic")
             with col_j2:
-                jury_verdict = ens.get("verdict", "N/A")
-                st.metric("🎯 Consensus", jury_verdict)
-            with col_j3:
                 st.metric("🔤 Linguistic Jury",
-                          f"{jury_result['linguistic']['risk_score']:.0f}/100")
-            with col_j4:
+                          f"{jr.get('linguistic_score', 0):.0f}/100")
+            with col_j3:
                 st.metric("🏢 Corporate Jury",
-                          f"{jury_result['corporate']['risk_score']:.0f}/100")
+                          f"{jr.get('corporate_score', 0):.0f}/100")
 
-            if ens.get("ensemble_score", 0) > score + 15:
+            if jr.get("final_score", 0) > score + 15:
                 st.warning(
                     "⚠️ The jury ensemble rates this email **significantly higher** "
                     "than the heuristic scan. Consider it a priority threat."
                 )
-            elif ens.get("ensemble_score", 0) < score - 15:
+            elif jr.get("final_score", 0) < score - 15:
                 st.info(
                     "ℹ️ The jury ensemble rates this email **lower** than the heuristic scan. "
                     "Heuristic flags may be false positives."
@@ -1266,30 +1267,37 @@ with billing_tab:
     st.markdown("<div class='section-title'>🔐 B2B Enterprise Gateway</div>",
                 unsafe_allow_html=True)
     tier_cfg = get_tier_config(plan)
+    features_list = tier_cfg.get("features", [])
     st.markdown(
-        f"**Tier:** `{plan}` | **Plan label:** {tier_cfg['display_name']} | "
-        f"**Max QPS:** {tier_cfg['max_qps']} | "
-        f"**Burst:** {tier_cfg.get('burst_limit', 0)} | "
-        f"**Concurrent:** {tier_cfg['concurrent_limit']}"
+        f"**Tier:** `{plan}` | **Plan label:** {tier_cfg['label']} | "
+        f"**Rate limit:** {tier_cfg['rate_per_minute']} req/min | "
+        f"**Concurrent:** {tier_cfg['concurrent_sessions']} sessions | "
+        f"**Monthly quota:** {tier_cfg['scans_per_month']}"
     )
     col_b1, col_b2 = st.columns(2)
     with col_b1:
         st.markdown("**Feature access:**")
-        for feat, allowed in tier_cfg["features"].items():
+        all_features = ["basic_scan", "threat_intel", "osint", "ai_report",
+                        "pdf_export", "email_alerts", "api_access",
+                        "team_access", "priority_support", "white_label",
+                        "sla", "custom_integration"]
+        for feat in all_features:
+            allowed = feat in features_list
             icon = "✅" if allowed else "❌"
             st.markdown(f"{icon} `{feat}`")
     with col_b2:
         st.markdown("**Rate limit simulation:**")
-        mock_gw = MockAPIGateway(plan)
-        result = mock_gw.call_endpoint("analyze")
-        st.code(f"Mock API /analyze → {result.get('status', 'N/A')} | "
-                f"{result.get('message', '')} | "
-                f"Remaining: {result.get('remaining', 'N/A')}",
+        mock_gw = MockAPIGateway()
+        mock_gw.register_key("demo_key", username, plan)
+        result = mock_gw.call_endpoint("demo_key", "/v1/analyze")
+        st.code(f"Mock API /v1/analyze → code={result.get('code', 'N/A')} | "
+                f"status={result.get('status', 'N/A')} | "
+                f"{result.get('message', '')}",
                 language="text")
-        if result.get("retry_after"):
-            st.caption(f"Retry-After: {result['retry_after']}s")
-        if result.get("status") == 429:
+        if result.get("code") == 429:
             st.warning("⛔ Rate limit hit! Upgrade or wait for window reset.")
+        elif result.get("code") == 403:
+            st.warning("⛔ Feature not available on current plan.")
         else:
             st.info("✅ Gateway healthy — within rate limits.")
 
