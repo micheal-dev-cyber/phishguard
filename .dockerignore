@@ -1,0 +1,36 @@
+# Git
+.git*
+.gitignore
+
+# Tests (not needed at runtime)
+tests/
+.pytest_cache/
+
+# Docs
+docs/
+
+# Extension (browser addon, not server-side)
+extension/
+
+# Docker / CI
+.dockerignore
+docker-compose.yml
+.github/
+
+# Local dev
+.env
+.env.*
+*.pyc
+__pycache__/
+*.egg-info/
+.venv/
+venv/
+
+# Data (auto-created)
+data/*.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo

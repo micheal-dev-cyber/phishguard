@@ -1,3 +1,4 @@
+import os
 import streamlit as st
 import plotly.graph_objects as go
 from datetime import datetime
@@ -1799,7 +1800,6 @@ with settings_tab:
             "pass": os.getenv("IMAP_PASS", ""),
         }
 
-    import os as _os
     imap_cfg = st.session_state["imap_cfg"]
     col_i1, col_i2, col_i3 = st.columns(3)
     with col_i1:
