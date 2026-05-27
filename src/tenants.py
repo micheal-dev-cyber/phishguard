@@ -47,17 +47,12 @@ def init_tenants():
     conn.close()
 
 
-def seed_from_secrets():
-    """One-time migration: import Streamlit secrets passwords as tenant records."""
-    try:
-        import streamlit as st
-        passwords = st.secrets.get("passwords", {})
-        for username, password in passwords.items():
-            is_admin = 1 if username == "admin" else 0
-            plan = "enterprise" if username == "admin" else "starter"
-            create_tenant(username, password, plan=plan, is_admin=is_admin)
-    except Exception:
-        pass
+def seed_admin_from_env():
+    """Seed the admin tenant from ENV.ADMIN_PASSWORD on first run."""
+    from src.env import ENV
+    pw = ENV.ADMIN_PASSWORD
+    if pw:
+        create_tenant("admin", pw, plan="enterprise", is_admin=1)
 
 
 def create_tenant(username: str, password: str, email: str = "",
