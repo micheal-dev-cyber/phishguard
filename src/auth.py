@@ -2,6 +2,7 @@
 import streamlit as st
 from src.tenants import verify_tenant, seed_from_secrets, init_tenants, PLANS
 
+
 def check_password() -> bool:
     if st.session_state.get("authenticated"):
         return True
@@ -10,7 +11,7 @@ def check_password() -> bool:
     seed_from_secrets()
 
     st.markdown("""
-    <div style='max-width:400px; margin:80px auto 0'>
+    <div style='max-width:400px;margin:80px auto 0'>
       <h1 style='color:#60a5fa;text-align:center;font-size:2rem'>🛡 PhishGuard AI</h1>
       <p style='color:#94a3b8;text-align:center;margin-bottom:32px'>
         AI-Powered Phishing Detection Platform
@@ -22,13 +23,15 @@ def check_password() -> bool:
     with col2:
         st.markdown("#### 🔐 Login")
         username = st.text_input("Username", placeholder="Enter username")
-        password = st.text_input("Password", type="password", placeholder="Enter password")
+        password = st.text_input("Password", type="password",
+                                 placeholder="Enter password")
         login_btn = st.button("Login", use_container_width=True, type="primary")
 
         if login_btn:
             if not username or not password:
                 st.error("Please enter username and password.")
                 return False
+
             tenant = verify_tenant(username, password)
             if tenant:
                 if not tenant["is_active"]:
@@ -41,14 +44,14 @@ def check_password() -> bool:
                 st.session_state["email"]         = tenant["email"]
                 st.rerun()
             else:
-                # Fallback: check Streamlit secrets (for backward compat)
+                # Fallback: check Streamlit secrets (backward compat)
                 try:
                     stored = st.secrets.get("passwords", {})
                     if username in stored and stored[username] == password:
                         st.session_state["authenticated"] = True
                         st.session_state["username"]      = username
                         st.session_state["plan"]          = "starter"
-                        st.session_state["is_admin"]      = username == "admin"
+                        st.session_state["is_admin"]      = (username == "admin")
                         st.session_state["email"]         = ""
                         st.rerun()
                     else:
@@ -58,6 +61,7 @@ def check_password() -> bool:
             return False
 
     return False
+
 
 def logout():
     for key in ["authenticated", "username", "plan", "is_admin", "email"]:
