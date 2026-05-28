@@ -208,6 +208,99 @@ def init_db():
         )
     """)
 
+    # 12. Campaign simulation tables
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS campaign_templates (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            name        TEXT NOT NULL,
+            subject     TEXT NOT NULL,
+            body        TEXT NOT NULL,
+            difficulty  TEXT DEFAULT 'medium',
+            category    TEXT DEFAULT 'general',
+            is_builtin  INTEGER DEFAULT 0,
+            created_at  TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS campaigns (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            name            TEXT NOT NULL,
+            template_id     INTEGER NOT NULL,
+            template_name   TEXT NOT NULL,
+            target_count    INTEGER DEFAULT 0,
+            sent_count      INTEGER DEFAULT 0,
+            opened_count    INTEGER DEFAULT 0,
+            clicked_count   INTEGER DEFAULT 0,
+            reported_count  INTEGER DEFAULT 0,
+            status          TEXT DEFAULT 'draft',
+            created_by      TEXT DEFAULT 'admin',
+            created_at      TEXT DEFAULT (datetime('now')),
+            launched_at     TEXT,
+            completed_at    TEXT
+        )
+    """)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS campaign_targets (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            campaign_id     INTEGER NOT NULL,
+            email           TEXT NOT NULL,
+            first_name      TEXT DEFAULT '',
+            last_name       TEXT DEFAULT '',
+            department      TEXT DEFAULT '',
+            company         TEXT DEFAULT '',
+            status          TEXT DEFAULT 'pending',
+            sent_at         TEXT,
+            opened_at       TEXT,
+            clicked_at      TEXT,
+            reported_at     TEXT,
+            risk_score      INTEGER DEFAULT 0
+        )
+    """)
+
+    # 13. API key management & usage
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS api_keys (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            key_hash    TEXT UNIQUE NOT NULL,
+            key_prefix  TEXT NOT NULL,
+            username    TEXT NOT NULL,
+            tier        TEXT NOT NULL DEFAULT 'free',
+            is_active   INTEGER DEFAULT 1,
+            created_at  TEXT DEFAULT (datetime('now')),
+            last_used   TEXT
+        )
+    """)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS api_usage (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            key_hash    TEXT NOT NULL,
+            endpoint    TEXT NOT NULL,
+            timestamp   REAL NOT NULL,
+            risk_score  INTEGER DEFAULT 0
+        )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_usage_key_time ON api_usage (key_hash, timestamp)")
+
+    # 14. Reported phish telemetry (Outlook/Gmail add-in webhook)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS reported_phish (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            reporter_email  TEXT NOT NULL,
+            raw_headers     TEXT,
+            raw_body        TEXT,
+            subject         TEXT,
+            sender          TEXT,
+            recipients      TEXT,
+            risk_score      INTEGER DEFAULT 0,
+            severity        TEXT DEFAULT 'UNKNOWN',
+            ai_probability  REAL DEFAULT 0,
+            aitm_confidence INTEGER DEFAULT 0,
+            dna_match       INTEGER DEFAULT 0,
+            source          TEXT DEFAULT 'webhook',
+            reported_at     TEXT DEFAULT (datetime('now'))
+        )
+    """)
+
     # Pre-provision master admin access key if empty to avoid system lockouts
     c.execute("SELECT * FROM users WHERE username='admin'")
     if not c.fetchone():
