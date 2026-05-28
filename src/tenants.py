@@ -1,6 +1,6 @@
-# src/tenants.py
 import sqlite3
-import hashlib
+import bcrypt
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -14,9 +14,37 @@ PLANS = {
     "enterprise": {"analyses_per_month": 99999, "label": "Enterprise", "price": "Custom"},
 }
 
+MAX_LOGIN_ATTEMPTS = 5
+LOCKOUT_WINDOW = 900  # 15 minutes
+
 
 def _hash(password: str) -> str:
-    return hashlib.sha256(password.encode()).hexdigest()
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+
+
+def _verify(password: str, password_hash: str) -> bool:
+    return bcrypt.checkpw(password.encode(), password_hash.encode())
+
+
+def _migrate_sha256():
+    """One-time migration: re-hash any SHA-256 passwords to bcrypt."""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT username, password_hash FROM tenants")
+    for username, pw_hash in c.fetchall():
+        if pw_hash and len(pw_hash) == 64:  # SHA-256 hex digest
+            import hashlib
+            if c.execute("SELECT 1 FROM tenants WHERE username = ? AND password_hash = ?",
+                        (username, hashlib.sha256(b"x").hexdigest()[:8] + pw_hash[8:])):
+                pass  # skip — already migrated
+            try:
+                new_hash = bcrypt.hashpw(pw_hash.encode(), bcrypt.gensalt()).decode()
+                c.execute("UPDATE tenants SET password_hash = ? WHERE username = ?",
+                          (new_hash, username))
+            except Exception:
+                pass
+    conn.commit()
+    conn.close()
 
 
 def init_tenants():
@@ -44,12 +72,46 @@ def init_tenants():
             risk_score INTEGER DEFAULT 0
         )
     """)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS login_attempts (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            username   TEXT NOT NULL,
+            success    INTEGER NOT NULL DEFAULT 0,
+            ip_address TEXT DEFAULT '',
+            timestamp  REAL NOT NULL
+        )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_login_attempts_user ON login_attempts (username, timestamp)")
+    conn.commit()
+    conn.close()
+    _migrate_sha256()
+
+
+def is_locked_out(username: str) -> bool:
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    cutoff = time.time() - LOCKOUT_WINDOW
+    c.execute(
+        "SELECT COUNT(*) FROM login_attempts WHERE username = ? AND success = 0 AND timestamp > ?",
+        (username, cutoff),
+    )
+    count = c.fetchone()[0]
+    conn.close()
+    return count >= MAX_LOGIN_ATTEMPTS
+
+
+def record_login_attempt(username: str, success: bool, ip_address: str = ""):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute(
+        "INSERT INTO login_attempts (username, success, ip_address, timestamp) VALUES (?, ?, ?, ?)",
+        (username, 1 if success else 0, ip_address, time.time()),
+    )
     conn.commit()
     conn.close()
 
 
 def seed_admin_from_env():
-    """Seed the admin tenant from ENV.ADMIN_PASSWORD on first run."""
     from src.env import ENV
     pw = ENV.ADMIN_PASSWORD
     if pw:
@@ -63,11 +125,9 @@ def create_tenant(username: str, password: str, email: str = "",
     c = conn.cursor()
     try:
         c.execute(
-            """
-            INSERT OR IGNORE INTO tenants
-            (username, password_hash, email, plan, is_active, is_admin, created_at, notes)
-            VALUES (?, ?, ?, ?, 1, ?, ?, ?)
-            """,
+            """INSERT OR IGNORE INTO tenants
+               (username, password_hash, email, plan, is_active, is_admin, created_at, notes)
+               VALUES (?, ?, ?, ?, 1, ?, ?, ?)""",
             (username, _hash(password), email, plan, is_admin,
              datetime.now().isoformat(), notes)
         )
@@ -79,29 +139,67 @@ def create_tenant(username: str, password: str, email: str = "",
         conn.close()
 
 
-def verify_tenant(username: str, password: str):
+def verify_tenant(username: str, password: str, ip_address: str = ""):
     init_tenants()
+    if is_locked_out(username):
+        remaining = _lockout_remaining(username)
+        return {"error": "locked_out", "remaining": remaining}
+
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute(
-        """
-        SELECT username, plan, is_active, is_admin, email, notes
-        FROM tenants WHERE username = ? AND password_hash = ?
-        """,
-        (username, _hash(password))
+        "SELECT username, password_hash, plan, is_active, is_admin, email, notes "
+        "FROM tenants WHERE username = ?",
+        (username,)
     )
     row = c.fetchone()
     conn.close()
-    if row and row[2] == 1:
-        return {
-            "username": row[0],
-            "plan":     row[1],
-            "is_active": row[2],
-            "is_admin": row[3],
-            "email":    row[4],
-            "notes":    row[5],
-        }
-    return None
+
+    if not row:
+        record_login_attempt(username, False, ip_address)
+        return None
+
+    user, pw_hash, plan, is_active, is_admin, email, notes = row
+    if not _verify(password, pw_hash):
+        record_login_attempt(username, False, ip_address)
+        return None
+
+    record_login_attempt(username, True, ip_address)
+
+    if not is_active:
+        return {"error": "suspended"}
+    return {
+        "username": user,
+        "plan":     plan,
+        "is_active": is_active,
+        "is_admin": is_admin,
+        "email":    email,
+        "notes":    notes,
+    }
+
+
+def _lockout_remaining(username: str) -> int:
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    cutoff = time.time() - LOCKOUT_WINDOW
+    c.execute(
+        "SELECT timestamp FROM login_attempts WHERE username = ? AND success = 0 AND timestamp > ? ORDER BY timestamp",
+        (username, cutoff),
+    )
+    rows = c.fetchall()
+    conn.close()
+    if len(rows) < MAX_LOGIN_ATTEMPTS:
+        return 0
+    earliest = rows[0][0]
+    return int(LOCKOUT_WINDOW - (time.time() - earliest))
+
+
+def unlock_user(username: str):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("DELETE FROM login_attempts WHERE username = ?", (username,))
+    conn.commit()
+    conn.close()
 
 
 def get_all_tenants() -> list:
@@ -109,10 +207,8 @@ def get_all_tenants() -> list:
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute(
-        """
-        SELECT id, username, email, plan, is_active, is_admin, created_at, notes
-        FROM tenants ORDER BY id
-        """
+        "SELECT id, username, email, plan, is_active, is_admin, created_at, notes "
+        "FROM tenants ORDER BY id"
     )
     rows = c.fetchall()
     conn.close()
@@ -175,10 +271,8 @@ def get_usage(username: str, month: str = None) -> dict:
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute(
-        """
-        SELECT COUNT(*) FROM usage_log
-        WHERE username = ? AND action = 'analysis' AND timestamp LIKE ?
-        """,
+        """SELECT COUNT(*) FROM usage_log
+           WHERE username = ? AND action = 'analysis' AND timestamp LIKE ?""",
         (username, month + "%")
     )
     count = c.fetchone()[0]
@@ -206,17 +300,11 @@ def get_usage_all_tenants() -> list:
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute(
-        """
-        SELECT t.username, t.plan, t.email, t.is_active,
-               COUNT(u.id) as analyses
-        FROM tenants t
-        LEFT JOIN usage_log u
-          ON t.username = u.username
-         AND u.action = 'analysis'
-         AND u.timestamp LIKE ?
-        GROUP BY t.username
-        ORDER BY analyses DESC
-        """,
+        """SELECT t.username, t.plan, t.email, t.is_active,
+                  COUNT(u.id) as analyses
+           FROM tenants t
+           LEFT JOIN usage_log u ON t.username = u.username AND u.action = 'analysis' AND u.timestamp LIKE ?
+           GROUP BY t.username ORDER BY analyses DESC""",
         (month + "%",)
     )
     rows = c.fetchall()

@@ -6,6 +6,40 @@ from datetime import datetime
 st.set_page_config(page_title="PhishGuard AI", page_icon="🛡",
                    layout="wide", initial_sidebar_state="collapsed")
 
+# ── PWA Manifest ────────────────────────────────────────────────────────────
+st.markdown(
+    '<link rel="manifest" href="/static/manifest.json">'
+    '<meta name="theme-color" content="#3b82f6">'
+    '<meta name="apple-mobile-web-app-capable" content="yes">',
+    unsafe_allow_html=True,
+)
+
+# ── SSO Callback Handler (OIDC redirect) ────────────────────────────────────
+_sso_code = st.query_params.get("code")
+_sso_state = st.query_params.get("state")
+if _sso_code and _sso_state:
+    try:
+        from src.sso import SSOManager
+        _sso = SSOManager()
+        _info = _sso.handle_callback(_sso_code)
+        if _info and _info.get("email"):
+            from src.tenants import verify_tenant, create_tenant
+            _username = _info["email"].split("@")[0].replace(".", "_")
+            _existing = verify_tenant(_username, _info["email"])
+            if not _existing or _existing.get("error") == "suspended":
+                pass
+            if not _existing:
+                create_tenant(_username, _info["email"], email=_info["email"], plan="trial")
+            st.session_state["authenticated"] = True
+            st.session_state["username"] = _username
+            st.session_state["plan"] = "trial"
+            st.session_state["is_admin"] = False
+            st.session_state["email"] = _info["email"]
+            st.query_params.clear()
+            st.rerun()
+    except Exception:
+        pass
+
 # ── All src.* imports go AFTER set_page_config to avoid Streamlit init issues ──
 from src.detector import analyze_email
 from src.database import init_db, save_analysis, get_history
@@ -454,6 +488,46 @@ if st.session_state.get("show_upgrade") and plan != "enterprise":
         st.stop()
     st.stop()
 
+# ── Onboarding Wizard (first-time users) ───────────────────────────────────
+_onboarding_key = f"onboarding_{username}"
+if _onboarding_key not in st.session_state:
+    st.session_state[_onboarding_key] = True
+    try:
+        from src.onboarding import get_onboarding_steps, complete_onboarding_step
+        _steps = get_onboarding_steps(username)
+        _incomplete = [s for s in _steps if not s["done"]]
+        if _incomplete:
+            with st.container():
+                st.markdown(
+                    "<div style='background:linear-gradient(135deg,#0f172a,#1e293b);"
+                    "border:1px solid #334155;border-radius:16px;padding:20px 24px;margin-bottom:16px'>"
+                    "<div style='color:#f0f6ff;font-weight:700;font-size:1.1rem;margin-bottom:12px'>"
+                    "🚀 Welcome! Let's get started</div>", unsafe_allow_html=True
+                )
+                for _s in _incomplete[:3]:
+                    col1, col2 = st.columns([4, 1])
+                    with col1:
+                        st.markdown(f"<div style='color:#94a3b8;font-size:13px'>→ {_s['label']}</div>",
+                                    unsafe_allow_html=True)
+                    with col2:
+                        if st.button("Done", key=f"onb_{_s['step']}", use_container_width=True):
+                            complete_onboarding_step(username, _s["step"])
+                            st.rerun()
+                st.markdown("</div>", unsafe_allow_html=True)
+    except Exception:
+        pass
+
+# ── Weekly Report Check ─────────────────────────────────────────────────────
+try:
+    from src.weekly_report import check_and_send_weekly
+    _email = st.session_state.get("email", "")
+    _wr_key = f"weekly_report_{username}"
+    if _email and _wr_key not in st.session_state:
+        st.session_state[_wr_key] = True
+        check_and_send_weekly(username, _email)
+except Exception:
+    pass
+
 # ── Tabs ─────────────────────────────────────────────────────────────────────
 # Positions (both):     1        2         3
 # Admin:                4        5         6     7      8      9       10      11       12       13      14
@@ -792,6 +866,44 @@ with tab1:
                 user_email = st.session_state.get("email", "")
                 if user_email and results["severity"] in ("CRITICAL", "HIGH"):
                     send_threat_alert(username, user_email, results)
+
+                # ── Automated Incident Response ────────────────────────────
+                try:
+                    from src.incident_response import IncidentResponder
+                    ir = IncidentResponder()
+                    ir_result = ir.respond(
+                        verdict=results,
+                        mailbox=user_email,
+                        sender_email=results.get("headers", {}).get("From", ""),
+                    )
+                    if ir_result["actions"]:
+                        st.toast(f"🛡 IR: {' → '.join(ir_result['actions'])}", icon="🛡")
+                except Exception:
+                    pass
+
+                # ── SIEM Dispatch ──────────────────────────────────────────
+                try:
+                    from src.siem_webhook import SIEMClient
+                    siem = SIEMClient()
+                    if siem.any_enabled:
+                        siem.dispatch({
+                            "timestamp": datetime.now().isoformat(),
+                            "username": username,
+                            "risk_score": results["risk_score"],
+                            "severity": results["severity"],
+                            "urls_found": results.get("urls_found", []),
+                            "sender": results.get("headers", {}).get("From", ""),
+                        })
+                except Exception:
+                    pass
+
+                # ── Auto-Training Assignment ───────────────────────────────
+                try:
+                    from src.auto_training import assign_training
+                    if results["risk_score"] >= 40:
+                        assign_training(username, results["risk_score"], results["severity"])
+                except Exception:
+                    pass
 
             vt_results = []
             vt_summary = {}
@@ -2809,6 +2921,62 @@ with settings_tab:
     alert_threshold = st.slider("Minimum risk score to trigger alert",
                                  0, 100, 50, key="alert_threshold")
     st.caption(f"Alerts will fire when risk score >= {alert_threshold}")
+
+    # ── Enterprise: Graph API / Gmail OAuth2 Settings ──────────────────────
+    st.divider()
+    st.markdown("### 🔐 Microsoft Graph API (Replace IMAP Passwords)")
+    st.caption("Configure OAuth2 via Microsoft Graph to scan mailboxes without storing IMAP passwords.")
+    _graph_key = f"graph_enabled_{username}"
+    if _graph_key not in st.session_state:
+        st.session_state[_graph_key] = False
+    st.checkbox("Enable Graph API scanning", key=_graph_key)
+    if st.session_state[_graph_key]:
+        _has_graph = bool(ENV.GRAPH_TENANT_ID and ENV.GRAPH_CLIENT_ID)
+        if _has_graph:
+            st.success("✅ Graph API credentials detected in environment.")
+        else:
+            st.info("Set GRAPH_TENANT_ID, GRAPH_CLIENT_ID, and GRAPH_CLIENT_SECRET in your .env file.")
+
+    # ── Enterprise: Weekly Report Settings ─────────────────────────────────
+    st.divider()
+    st.markdown("### 📅 Weekly Security Report")
+    st.caption("Receive a weekly PDF summary of threats detected in your organization.")
+    _wr_enabled_key = f"weekly_report_enabled_{username}"
+    if _wr_enabled_key not in st.session_state:
+        st.session_state[_wr_enabled_key] = False
+    st.checkbox("Enable weekly email report", key=_wr_enabled_key)
+    if st.session_state[_wr_enabled_key] and st.session_state.get("email"):
+        st.info(f"✅ Weekly reports will be sent to {st.session_state['email']}")
+
+    # ── Enterprise: SIEM Integration Status ────────────────────────────────
+    st.divider()
+    st.markdown("### 📡 SIEM Integration")
+    _siem_targets = []
+    if ENV.SIEM_SPLUNK_HEC_URL:
+        _siem_targets.append("Splunk")
+    if ENV.SIEM_ELASTIC_CLOUD_ID:
+        _siem_targets.append("Elastic")
+    if ENV.SIEM_QRAZAR_URL:
+        _siem_targets.append("QRadar")
+    if _siem_targets:
+        st.success(f"✅ SIEM connected: {', '.join(_siem_targets)}")
+    else:
+        st.info("Set SIEM_* env vars in .env to connect Splunk, Elastic, or QRadar.")
+
+    # ── PWA / Mobile ───────────────────────────────────────────────────────
+    st.divider()
+    st.markdown("### 📱 Mobile App (PWA)")
+    st.caption("Install PhishGuard as a mobile app for push notifications.")
+    st.markdown(
+        "<div style='background:#111827;border:1px solid #1e3a5f;border-radius:10px;"
+        "padding:16px;text-align:center'>"
+        "<div style='color:#94a3b8;font-size:13px;margin-bottom:8px'>"
+        "Open this page in Chrome/Safari and select "
+        "<strong>Add to Home Screen</strong> to install.</div>"
+        "<div style='color:#475569;font-size:11px'>"
+        "Or scan the QR code (coming soon)</div>"
+        "</div>", unsafe_allow_html=True
+    )
 
 # ═════════════════════════════════════════════════════════════════════════════
 # TAB 8/6 — TRAINING (Simulator + Screenshot Scanner)

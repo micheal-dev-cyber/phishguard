@@ -74,8 +74,18 @@ def _landing_page():
                 st.error("Enter username and password.")
             else:
                 tenant = verify_tenant(username, password)
-                if tenant:
-                    if not tenant["is_active"]:
+                if tenant is None:
+                    st.error("Invalid credentials.")
+                elif isinstance(tenant, dict) and "error" in tenant:
+                    if tenant["error"] == "locked_out":
+                        remaining = tenant.get("remaining", 0)
+                        st.error(f"🔒 Account locked. Try again in {remaining // 60}m {remaining % 60}s.")
+                    elif tenant["error"] == "suspended":
+                        st.error("Account suspended. Contact support.")
+                    else:
+                        st.error("Invalid credentials.")
+                else:
+                    if not tenant.get("is_active"):
                         st.error("Account suspended. Contact support.")
                     else:
                         st.session_state["authenticated"] = True
@@ -85,8 +95,15 @@ def _landing_page():
                         st.session_state["email"] = tenant["email"]
                         st.session_state.pop("show_login", None)
                         st.rerun()
-                else:
-                    st.error("Invalid credentials.")
+
+        # ── SSO Login Button ──────────────────────────────────────────────
+        try:
+            from src.sso import SSOManager
+            sso = SSOManager()
+            if sso.enabled:
+                st.markdown(sso.get_login_button_html(), unsafe_allow_html=True)
+        except Exception:
+            pass
 
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("← Back to home", use_container_width=True):
