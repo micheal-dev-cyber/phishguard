@@ -31,6 +31,15 @@ TIERS = {
         "features": ["basic_scan", "threat_intel", "osint", "ai_report", "pdf_export",
                      "email_alerts", "api_access", "team_access", "priority_support"],
     },
+    "consultant": {
+        "label": "Consultant",
+        "scans_per_month": 2000,
+        "concurrent_sessions": 10,
+        "rate_per_minute": 60,
+        "features": ["basic_scan", "threat_intel", "osint", "ai_report", "pdf_export",
+                     "email_alerts", "api_access", "team_access", "priority_support",
+                     "white_label", "custom_branding"],
+    },
     "enterprise": {
         "label": "Enterprise",
         "scans_per_month": 999999,

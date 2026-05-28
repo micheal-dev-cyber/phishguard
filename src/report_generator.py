@@ -4,19 +4,30 @@ from typing import Dict, Any, List, Optional
 
 
 class PhishGuardReport(FPDF):
+    def __init__(self, white_label: bool = False, custom_logo_path: Optional[str] = None):
+        super().__init__()
+        self.white_label = white_label
+        self.custom_logo_path = custom_logo_path
+        self.brand_name = "Confidential Security Report" if white_label else "SecOpsNode AI  |  PhishGuard"
+        self.brand_subtitle = "" if white_label else "Enterprise Threat Intelligence & Defense Platform"
+
     def header(self):
         self.set_fill_color(8, 12, 24)
         self.rect(0, 0, 210, 32, "F")
-        # Brand: SecOpsNode AI + PhishGuard
+        if self.custom_logo_path:
+            try:
+                self.image(self.custom_logo_path, x=12, y=4, w=30)
+            except Exception:
+                pass
         self.set_font("Helvetica", "B", 10)
         self.set_text_color(56, 132, 255)
         self.set_xy(12, 6)
-        self.cell(0, 8, "SecOpsNode AI  |  PhishGuard", ln=False)
-        self.set_font("Helvetica", "", 8)
-        self.set_text_color(100, 116, 139)
-        self.set_xy(12, 16)
-        self.cell(0, 6, "Enterprise Threat Intelligence & Defense Platform", ln=False)
-        # Right-aligned report badge
+        self.cell(0, 8, self.brand_name, ln=False)
+        if self.brand_subtitle:
+            self.set_font("Helvetica", "", 8)
+            self.set_text_color(100, 116, 139)
+            self.set_xy(12, 16)
+            self.cell(0, 6, self.brand_subtitle, ln=False)
         self.set_font("Helvetica", "B", 7)
         self.set_text_color(56, 132, 255)
         self.set_xy(160, 8)
@@ -30,8 +41,9 @@ class PhishGuardReport(FPDF):
         self.set_y(-14)
         self.set_font("Helvetica", "I", 7)
         self.set_text_color(71, 85, 105)
+        brand_footer = "Confidential Security Report" if self.white_label else "SecOpsNode AI — PhishGuard"
         self.cell(0, 8,
-                  "SecOpsNode AI — PhishGuard  |  Confidential Security Report  |  Page {0}".format(self.page_no()),
+                  f"{brand_footer}  |  Confidential Security Report  |  Page {self.page_no()}",
                   align="C")
 
     def section_title(self, title: str):
@@ -223,11 +235,12 @@ def _add_header_analysis(pdf: FPDF, results: Dict[str, Any]):
 
 
 def generate_pdf_report(results: dict, email_text: str,
-                         ai_report: str = "") -> bytes:
+                         ai_report: str = "",
+                         white_label: bool = False,
+                         custom_logo_path: Optional[str] = None) -> bytes:
     """Generate a comprehensive, branded PDF security report.
 
     Features:
-    - SecOpsNode AI / PhishGuard branding
     - Full threat summary with visual risk gauge
     - Semantic risk matrix table
     - Linguistic analysis breakdown
@@ -237,8 +250,10 @@ def generate_pdf_report(results: dict, email_text: str,
     - Full scanned email text
     - AI analysis (if provided)
     - Disclaimer and compliance footer
+    - White-label mode strips branding (Consultant tier)
+    - Custom logo support for white-label reports
     """
-    pdf = PhishGuardReport()
+    pdf = PhishGuardReport(white_label=white_label, custom_logo_path=custom_logo_path)
     pdf.set_auto_page_break(auto=True, margin=22)
     pdf.add_page()
     pdf.set_margins(12, 38, 12)
@@ -258,8 +273,9 @@ def generate_pdf_report(results: dict, email_text: str,
     # Report information
     pdf.section_title("REPORT INFORMATION")
     pdf.info_row("Generated:", datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC"))
-    pdf.info_row("Platform:", "SecOpsNode AI — PhishGuard")
-    pdf.info_row("Engine:", "v3.5 Enterprise Detection Engine")
+    if not pdf.white_label:
+        pdf.info_row("Platform:", "SecOpsNode AI — PhishGuard")
+        pdf.info_row("Engine:", "v3.5 Enterprise Detection Engine")
     pdf.info_row("Threat Level:", severity)
     pdf.ln(3)
 
@@ -369,8 +385,13 @@ def generate_pdf_report(results: dict, email_text: str,
     pdf.section_title("DISCLAIMER")
     pdf.set_font("Helvetica", "I", 7)
     pdf.set_text_color(71, 85, 105)
-    pdf.multi_cell(0, 4,
+    disclaimer = (
+        "This report was generated automatically by a security analysis engine. "
+        if pdf.white_label else
         "This report was generated automatically by PhishGuard AI (SecOpsNode AI). "
+    )
+    pdf.multi_cell(0, 4,
+        disclaimer +
         "It is intended for informational and educational purposes only. "
         "Always consult a qualified cybersecurity professional for critical security decisions. "
         "This report does not constitute a formal security audit or guarantee of threat detection.")
