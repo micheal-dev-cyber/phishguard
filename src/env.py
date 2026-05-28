@@ -47,6 +47,28 @@ class EnvConfig:
     SMTP_PASS: str = ""
     SMTP_FROM: str = ""
     paddle_configured: bool = False
+    # Enterprise SSO
+    OAUTH_CLIENT_ID: str = ""
+    OAUTH_CLIENT_SECRET: str = ""
+    OAUTH_AUTHORITY: str = ""
+    OAUTH_REDIRECT_URI: str = ""
+    # Microsoft Graph API
+    GRAPH_TENANT_ID: str = ""
+    GRAPH_CLIENT_ID: str = ""
+    GRAPH_CLIENT_SECRET: str = ""
+    # SIEM Webhooks
+    SIEM_SPLUNK_HEC_URL: str = ""
+    SIEM_SPLUNK_HEC_TOKEN: str = ""
+    SIEM_ELASTIC_CLOUD_ID: str = ""
+    SIEM_ELASTIC_API_KEY: str = ""
+    SIEM_QRAZAR_URL: str = ""
+    SIEM_QRAZAR_API_KEY: str = ""
+    # PostgreSQL (optional — HF Spaces default is SQLite)
+    PGHOST: str = ""
+    PGPORT: str = "5432"
+    PGUSER: str = ""
+    PGPASSWORD: str = ""
+    PGDATABASE: str = ""
 
     def __post_init__(self):
         self.paddle_configured = bool(
@@ -80,6 +102,28 @@ def load_env() -> EnvConfig:
         SMTP_USER=_read_env("SMTP_USER"),
         SMTP_PASS=_read_env("SMTP_PASS"),
         SMTP_FROM=_read_env("SMTP_FROM"),
+        # Enterprise SSO
+        OAUTH_CLIENT_ID=_read_env("OAUTH_CLIENT_ID"),
+        OAUTH_CLIENT_SECRET=_read_env("OAUTH_CLIENT_SECRET"),
+        OAUTH_AUTHORITY=_read_env("OAUTH_AUTHORITY"),
+        OAUTH_REDIRECT_URI=_read_env("OAUTH_REDIRECT_URI"),
+        # Microsoft Graph API
+        GRAPH_TENANT_ID=_read_env("GRAPH_TENANT_ID"),
+        GRAPH_CLIENT_ID=_read_env("GRAPH_CLIENT_ID"),
+        GRAPH_CLIENT_SECRET=_read_env("GRAPH_CLIENT_SECRET"),
+        # SIEM Webhooks
+        SIEM_SPLUNK_HEC_URL=_read_env("SIEM_SPLUNK_HEC_URL"),
+        SIEM_SPLUNK_HEC_TOKEN=_read_env("SIEM_SPLUNK_HEC_TOKEN"),
+        SIEM_ELASTIC_CLOUD_ID=_read_env("SIEM_ELASTIC_CLOUD_ID"),
+        SIEM_ELASTIC_API_KEY=_read_env("SIEM_ELASTIC_API_KEY"),
+        SIEM_QRAZAR_URL=_read_env("SIEM_QRAZAR_URL"),
+        SIEM_QRAZAR_API_KEY=_read_env("SIEM_QRAZAR_API_KEY"),
+        # PostgreSQL (optional)
+        PGHOST=_read_env("PGHOST"),
+        PGPORT=_read_env("PGPORT", "5432"),
+        PGUSER=_read_env("PGUSER"),
+        PGPASSWORD=_read_env("PGPASSWORD"),
+        PGDATABASE=_read_env("PGDATABASE"),
     )
 
 

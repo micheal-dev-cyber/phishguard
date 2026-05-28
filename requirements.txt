@@ -45,6 +45,14 @@ pre-commit>=3.7.0,<4.0.0
 # ── Configuration ─────────────────────────────────────────────────────────────
 python-dotenv>=1.0.0,<2.0.0
 
+# ── Security ──────────────────────────────────────────────────────────────────
+bcrypt>=4.1.0,<5.0.0
+
+# ── Optional (install as needed for enterprise features) ──────────────────────
+# psycopg2-binary>=2.9.0,<3.0.0     # PostgreSQL support
+# authlib>=1.3.0,<2.0.0              # OAuth/SSO server-side (for auth_code flow)
+# msal>=1.28.0,<2.0.0               # Microsoft Authentication Library
+
 # ──────────────────────────────────────────────────────────────────────────────
 # The following packages are EXCLUDED because they require system-level
 # binaries or heavy ML runtimes that will crash HF Spaces builds:
