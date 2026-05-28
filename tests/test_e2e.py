@@ -191,6 +191,15 @@ class TestAPIProxy:
         cls.thread = None
         cls.port = 19876  # High port to avoid conflicts
 
+        # Generate a test API key
+        from src.api_keys import generate_api_key, init_api_keys_table
+        init_api_keys_table()
+        cls.api_key_data = generate_api_key("test_proxy", tier="enterprise")
+        if "api_key" in cls.api_key_data:
+            cls.api_key = cls.api_key_data["api_key"]
+        else:
+            cls.api_key = None
+
         # Import and start
         import api_proxy
         from http.server import HTTPServer
@@ -217,11 +226,16 @@ class TestAPIProxy:
 
     def test_scan_endpoint(self):
         import urllib.request
+        if not self.api_key:
+            pytest.skip("No test API key available")
         body = json.dumps({"text": "URGENT: verify your account now"}).encode()
         req = urllib.request.Request(
             f"http://127.0.0.1:{self.port}/api/v1/scan",
             data=body,
-            headers={"Content-Type": "application/json"},
+            headers={
+                "Content-Type": "application/json",
+                "X-PhishGuard-Key": self.api_key,
+            },
         )
         resp = urllib.request.urlopen(req)
         assert resp.status == 200

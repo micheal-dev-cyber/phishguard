@@ -107,7 +107,11 @@ def generate_api_key(username: str, tier: str = "free") -> dict:
 
 def authenticate_request(headers: dict) -> dict:
     init_api_keys_table()
-    raw_key = (headers.get("X-PhishGuard-Key") or "").strip()
+    raw_key = ""
+    for k, v in headers.items():
+        if k.lower() == "x-phishguard-key":
+            raw_key = v.strip()
+            break
     if not raw_key:
         return {"allowed": False, "status": 401, "error": "Missing X-PhishGuard-Key header"}
 
