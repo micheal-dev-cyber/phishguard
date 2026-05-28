@@ -210,6 +210,41 @@ with col_quota:
         "</div></div>"
     )
     st.markdown(quota_html, unsafe_allow_html=True)
+
+    # ── Pay-Per-Scan Credit Counter ───────────────────────────────────────
+    if "sandbox_credits" not in st.session_state:
+        st.session_state["sandbox_credits"] = 3
+    credits = st.session_state["sandbox_credits"]
+    credit_pct = int(credits / 100 * 100)  # visual meter out of 100 max
+    credit_color = "#22c55e" if credits > 20 else "#eab308" if credits > 5 else "#ef4444"
+    st.markdown(
+        "<div style='margin-top:8px;padding:10px 14px;background:#111827;"
+        "border-radius:10px;border:1px solid #1e3a5f'>"
+        "<div style='display:flex;justify-content:space-between;font-size:12px;"
+        "color:#94a3b8;margin-bottom:4px'>"
+        "<span>🔬 Deep Sandbox Credits</span>"
+        "<span style='color:" + credit_color + ";font-weight:700'>"
+        + str(credits) + " / 100</span></div>"
+        "<div style='background:#1e3a5f;border-radius:4px;height:5px'>"
+        "<div style='background:" + credit_color + ";border-radius:4px;height:5px;"
+        "width:min(" + str(credit_pct) + "%,100%)'></div></div>"
+        "</div>", unsafe_allow_html=True
+    )
+    col_cc1, col_cc2 = st.columns(2)
+    with col_cc1:
+        if st.button("💰 Buy 100 Credits ($10)", key="buy_credits", use_container_width=True):
+            st.session_state["show_credit_checkout"] = True
+    with col_cc2:
+        if st.button("🔁 Reset Demo", key="reset_credits", use_container_width=True):
+            st.session_state["sandbox_credits"] = 3
+            st.rerun()
+    if st.session_state.get("show_credit_checkout"):
+        st.info(
+            "🛒 Checkout simulation: 100 Advanced Sandbox Credits for $10. "
+            "In production this would redirect to Stripe/Paddle checkout.",
+            icon="💳"
+        )
+
     if st.button("⬆ Upgrade Plan", key="upgrade_btn", use_container_width=True):
         st.session_state["show_upgrade"] = True
         st.rerun()
@@ -1693,6 +1728,29 @@ with tab3:
     with col_cr2:
         cr_days = st.slider("Report period (days)", 7, 365, 90, key="cr_days")
 
+    # ── White-Label Toggle ─────────────────────────────────────────────────
+    whitelabel_enabled = st.checkbox(
+        "🔏 Enable White-Label (Remove PhishGuard Branding)",
+        key="whitelabel_toggle",
+        help="Generate reports without PhishGuard watermarks for client delivery.",
+    )
+    if whitelabel_enabled:
+        is_consultant = st.session_state.get("plan") in ("enterprise", "business")
+        if not is_consultant:
+            st.markdown(
+                "<div style='background:linear-gradient(135deg,#1a0a1a,#2a0f2a);"
+                "border:2px solid #a855f7;border-radius:16px;padding:24px 20px;"
+                "text-align:center;margin:12px 0'>"
+                "<div style='font-size:2rem;margin-bottom:6px'>💼</div>"
+                "<div style='color:#f0f6ff;font-size:1rem;font-weight:700;"
+                "margin-bottom:4px'>Consultant License Required</div>"
+                "<div style='color:#94a3b8;font-size:0.85rem'>White-label reports "
+                "are exclusive to the <strong>Consultant License ($149/mo)</strong>. "
+                "Rebrand threat intelligence reports with your own company logo "
+                "for commercial client delivery.</div>"
+                "</div>", unsafe_allow_html=True
+            )
+
     if st.button("📄 Generate Compliance Report", type="primary", use_container_width=True):
         from src.compliance_reports import ComplianceReport
         with st.spinner(f"Generating {cr_standard.upper()} report..."):
@@ -1704,9 +1762,10 @@ with tab3:
         st.rerun()
 
     if st.session_state.get("compliance_report"):
+        label = "🕊 Download White-Label Report" if whitelabel_enabled else "📥 Download PDF Report"
         st.success(f"{st.session_state['compliance_standard'].upper()} report ready!")
         st.download_button(
-            "📥 Download PDF Report",
+            label,
             st.session_state["compliance_report"],
             f"phishguard_{st.session_state['compliance_standard']}_{datetime.now().strftime('%Y%m%d')}.pdf",
             "application/pdf",
@@ -2648,7 +2707,7 @@ with training_tab:
     )
     st.divider()
 
-    sub_tab1, sub_tab2 = st.tabs(["🎣 Phishing Simulator", "📷 Screenshot Scanner"])
+    sub_tab1, sub_tab2, sub_tab3 = st.tabs(["🎣 Phishing Simulator", "📷 Screenshot Scanner", "🎓 AI Training Academy"])
 
     # ── Sub-tab 1: Phishing Simulation / Campaign Engine ───────────────────
     with sub_tab1:
@@ -2994,6 +3053,154 @@ with training_tab:
                 st.markdown("### 🛡️ Recommended Actions")
                 st.success(remediation)
 
+    # ── Sub-tab 3: AI Training Academy ─────────────────────────────────────
+    with sub_tab3:
+        st.markdown("### 🎓 Employee Security Awareness Academy")
+        st.markdown(
+            "<p style='color:#64748b;margin-top:-8px'>Test your team's phishing "
+            "detection skills with AI-generated quizzes. "
+            "Earn ISO-Compliance certificates for your organisation.</p>",
+            unsafe_allow_html=True
+        )
+        st.divider()
+
+        # Generate quiz state
+        if "quiz_questions" not in st.session_state:
+            import random as _rnd
+            questions = [
+                {"q": "What is the safest action when you receive an unexpected email with an attachment?",
+                 "options": ["Open it immediately", "Scan it with antivirus first",
+                             "Verify the sender through a separate channel, then scan",
+                             "Forward it to all colleagues"],
+                 "answer": 2, "explanation": "Always verify the sender through a separate channel before opening attachments."},
+                {"q": "Which of these is a sign of a phishing email?",
+                 "options": ["Personalised greeting with your name",
+                             "Urgent language demanding immediate action",
+                             "Professional company logo",
+                             "Correct grammar and spelling"],
+                 "answer": 1, "explanation": "Urgency tactics like 'act now or your account will be closed' are classic phishing indicators."},
+                {"q": "What does a homograph attack do?",
+                 "options": ["Encrypts your files for ransom",
+                             "Uses lookalike characters to spoof domains",
+                             "Steals your Wi-Fi password",
+                             "Cracks your email password"],
+                 "answer": 1, "explanation": "Homograph attacks replace Latin letters with visually similar Cyrillic or Unicode characters."},
+                {"q": "What is the purpose of DMARC?",
+                 "options": ["Encrypts email content",
+                             "Prevents email spoofing by authenticating sender domains",
+                             "Blocks all spam automatically",
+                             "Creates backups of your emails"],
+                 "answer": 1, "explanation": "DMARC (Domain-based Message Authentication) prevents attackers from spoofing your domain."},
+                {"q": "You receive an SMS from 'your CEO' asking you to buy gift cards. What is this?",
+                 "options": ["A legitimate request from your boss",
+                             "A CEO fraud / business email compromise (BEC) attack",
+                             "A company morale-building exercise",
+                             "An IT security test"],
+                 "answer": 1, "explanation": "CEO fraud (whaling) is a targeted BEC attack where the attacker impersonates senior leadership."},
+            ]
+            _rnd.shuffle(questions)
+            st.session_state["quiz_questions"] = questions[:4]
+            st.session_state["quiz_answers"] = {}
+            st.session_state["quiz_submitted"] = False
+
+        questions = st.session_state["quiz_questions"]
+        for i, q_data in enumerate(questions):
+            q_key = f"quiz_q_{i}"
+            st.markdown(f"**Q{i+1}:** {q_data['q']}")
+            selected = st.radio(
+                "Select answer",
+                q_data["options"],
+                index=None,
+                key=q_key,
+                label_visibility="collapsed",
+            )
+            if selected is not None:
+                st.session_state["quiz_answers"][i] = q_data["options"].index(selected)
+
+        col_q1, col_q2 = st.columns(2)
+        with col_q1:
+            if st.button("✅ Submit Quiz", type="primary", use_container_width=True):
+                st.session_state["quiz_submitted"] = True
+        with col_q2:
+            if st.button("🔄 New Quiz", use_container_width=True):
+                for k in list(st.session_state.keys()):
+                    if k.startswith("quiz_"):
+                        del st.session_state[k]
+                st.rerun()
+
+        if st.session_state.get("quiz_submitted"):
+            st.divider()
+            answers = st.session_state["quiz_answers"]
+            correct_count = 0
+            for i, q_data in enumerate(questions):
+                user_ans = answers.get(i)
+                correct = q_data["answer"]
+                is_correct = user_ans == correct
+                if is_correct:
+                    correct_count += 1
+                status_icon = "✅" if is_correct else "❌"
+                answer_text = f"Wrong. Correct answer: {q_data['options'][correct]}"
+                correct_text = "Correct!"
+                display_text = correct_text if is_correct else answer_text
+                st.markdown(
+                    f"<div style='background:#111827;border:1px solid #1e3a5f;"
+                    f"border-radius:10px;padding:12px 16px;margin:6px 0'>"
+                    f"<div style='color:#e2e8f0;font-weight:600'>{status_icon} Q{i+1}: {q_data['q']}</div>"
+                    f"<div style='color:{'#22c55e' if is_correct else '#ef4444'};font-size:13px'>"
+                    f"{display_text}</div>"
+                    f"<div style='color:#64748b;font-size:12px;margin-top:4px'>"
+                    f"💡 {q_data['explanation']}</div></div>", unsafe_allow_html=True
+                )
+
+            score_pct = int(correct_count / len(questions) * 100)
+            st.markdown(
+                f"<div style='background:linear-gradient(135deg,#0a1a0a,#0f2a0f);"
+                f"border:2px solid #22c55e;border-radius:16px;padding:20px;"
+                f"text-align:center;margin:16px 0'>"
+                f"<div style='font-size:2rem;font-weight:800;color:#22c55e'>"
+                f"{correct_count}/{len(questions)}</div>"
+                f"<div style='color:#94a3b8'>Score: {score_pct}%</div>"
+                f"</div>", unsafe_allow_html=True
+            )
+
+            is_premium_quiz = st.session_state.get("plan") in ("enterprise", "business")
+            if is_premium_quiz:
+                st.success("✅ Premium plan active — certificate generation included.")
+                st.download_button(
+                    "📜 Download ISO-Compliance Certificate",
+                    f"Certificate of Completion\n\nEmployee: {username}\n"
+                    f"Score: {score_pct}%\nDate: {datetime.now().strftime('%Y-%m-%d')}\n"
+                    f"Standard: ISO 27001 — Phishing Awareness",
+                    f"phishing_awareness_cert_{username}.txt",
+                    use_container_width=True,
+                )
+            else:
+                st.markdown(
+                    "<div style='background:linear-gradient(135deg,#1a1a0a,#2a2a0f);"
+                    "border:2px solid #eab308;border-radius:16px;padding:24px 20px;"
+                    "text-align:center;margin:16px 0'>"
+                    "<div style='font-size:2rem;margin-bottom:6px'>🎓</div>"
+                    "<div style='color:#f0f6ff;font-size:1rem;font-weight:700;"
+                    "margin-bottom:4px'>Generate Official Corporate ISO-Compliance Certificate</div>"
+                    "<div style='color:#94a3b8;font-size:0.85rem;margin-bottom:12px'>"
+                    "$5 per employee <span style='color:#475569'>or included in "
+                    "<strong>Premium Annual Plans</strong></span></div>"
+                    "<div style='display:flex;gap:8px;justify-content:center'>"
+                    "<span style='background:#2a2a0f;color:#eab308;padding:4px 14px;"
+                    "border-radius:100px;font-size:12px'>💳 Buy 1 Certificate ($5)</span>"
+                    "<span style='background:#111827;color:#94a3b8;padding:4px 14px;"
+                    "border-radius:100px;font-size:12px'>📦 Included in Premium ($99/mo)</span>"
+                    "</div></div>", unsafe_allow_html=True
+                )
+                if st.button("💳 Purchase Certificate — $5", use_container_width=True):
+                    st.session_state["show_cert_checkout"] = True
+                if st.session_state.get("show_cert_checkout"):
+                    st.info(
+                        "🛒 Checkout simulation: ISO-Compliance Certificate for "
+                        f"{username}. In production this would redirect to Stripe.",
+                        icon="💳"
+                    )
+
 # ═════════════════════════════════════════════════════════════════════════════
 # TAB — SECURITY CHAMPIONS LEADERBOARD
 # ═════════════════════════════════════════════════════════════════════════════
@@ -3313,6 +3520,88 @@ with tab_sandbox:
                 f"<div style='color:#475569;font-size:11px'>{verd} · {ts[:16]}</div>"
                 f"</div>", unsafe_allow_html=True
             )
+
+    # ── Premium Domain Monitoring Hub ──────────────────────────────────────
+    st.divider()
+    st.markdown("### 🏢 Brand Protection — Domain Monitoring")
+    st.markdown(
+        "<p style='color:#64748b;font-size:13px'>Monitor your corporate domain "
+        "for lookalike homograph attacks, typosquatting, and brand impersonation.</p>",
+        unsafe_allow_html=True
+    )
+    monitored_domain = st.text_input(
+        "Your Corporate Domain", placeholder="example.com",
+        key="monitored_domain"
+    )
+    col_mon1, col_mon2 = st.columns(2)
+    with col_mon1:
+        if st.button("🔍 Scan for Lookalikes", type="primary", use_container_width=True, key="mon_scan"):
+            if monitored_domain.strip():
+                domain = monitored_domain.strip().lower()
+                common_tlds = [".com", ".net", ".org", ".co", ".io", ".biz", ".info"]
+                homograph_subs = ["a\u0430", "e\u0435", "o\u043e", "p\u0440", "c\u0441",
+                                  "i\u0456", "x\u0445", "y\u0443"]
+                lookalikes = []
+                for tld in common_tlds:
+                    if not domain.endswith(tld):
+                        lookalikes.append(domain.replace(".com", "") + tld)
+                for sub in homograph_subs:
+                    if sub[0] in domain:
+                        lookalikes.append(domain.replace(sub[0], sub[1], 1))
+                st.session_state["monitored_lookalikes"] = list(set(lookalikes))[:8]
+                st.session_state["monitored_domain"] = domain
+                st.rerun()
+    with col_mon2:
+        if st.button("🔄 Start Continuous Monitoring", use_container_width=True, key="mon_start"):
+            st.session_state["monitoring_active"] = True
+            st.rerun()
+    if st.session_state.get("monitoring_active"):
+        st.info("⏳ Continuous monitoring running — new lookalikes detected within 24-48h.")
+    lookalikes = st.session_state.get("monitored_lookalikes")
+    if lookalikes:
+        st.markdown(
+            f"<div style='background:#111827;border:1px solid #1e3a5f;"
+            f"border-radius:12px;padding:16px;margin:12px 0'>"
+            f"<div style='display:flex;justify-content:space-between;align-items:center'>"
+            f"<span style='color:#e2e8f0;font-weight:600'>Found {len(lookalikes)} "
+            f"potential impersonations</span>"
+            f"<span style='color:#ef4444;font-size:12px;background:#2a0a0a;"
+            f"padding:2px 10px;border-radius:100px'>⚠ ACTIVE</span></div>",
+            unsafe_allow_html=True
+        )
+        for ld in lookalikes:
+            risk = "HIGH" if any(c in ld for c in ["\u0430", "\u0435", "\u043e"]) else "MEDIUM"
+            color = "#ef4444" if risk == "HIGH" else "#eab308"
+            st.markdown(
+                f"<div style='display:flex;justify-content:space-between;"
+                f"background:#0f172a;border:1px solid #1e3a5f;border-radius:8px;"
+                f"padding:8px 14px;margin:4px 0'>"
+                f"<span style='color:#e2e8f0;font-family:monospace'>{ld}</span>"
+                f"<span style='color:{color}'>{risk}</span></div>",
+                unsafe_allow_html=True
+            )
+        is_premium = plan in ("enterprise", "business")
+        if not is_premium:
+            st.markdown(
+                "<div style='background:linear-gradient(135deg,#1a0a0a,#2a0f0f);"
+                "border:2px solid #ef4444;border-radius:16px;padding:28px 24px;"
+                "text-align:center;margin:20px 0'>"
+                "<div style='font-size:2.5rem;margin-bottom:8px'>🔒</div>"
+                "<div style='color:#f0f6ff;font-size:1.1rem;font-weight:700;"
+                "margin-bottom:6px'>Continuous Brand Protection Active</div>"
+                "<div style='color:#ef4444;font-size:0.85rem;margin-bottom:16px;"
+                "background:#2a0a0a;display:inline-block;padding:4px 16px;"
+                "border-radius:100px'>⚠ PREVIEW MODE</div>"
+                "<div style='color:#94a3b8;font-size:0.9rem;margin-bottom:20px'>"
+                "Upgrade to <strong>Enterprise Plan ($99/mo)</strong> to enable "
+                "live automated takedown requests for malicious domains.</div>"
+                "<a href='#billing-tab' style='display:inline-block;"
+                "background:#3b82f6;color:#fff;padding:10px 32px;border-radius:10px;"
+                "text-decoration:none;font-weight:600'>⬆ Upgrade Now</a>"
+                "</div>", unsafe_allow_html=True
+            )
+        else:
+            st.success("✅ Enterprise plan active — automated takedown requests enabled.")
 
 
 # ═════════════════════════════════════════════════════════════════════════════
