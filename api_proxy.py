@@ -91,16 +91,31 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
                 self._send_json({"error": "Missing cid or email"}, 400)
             return
 
+        if parsed.path == "/api/v1/openapi.json":
+            return self._serve_openapi()
+
         if parsed.path == "/":
             return self._send_json({
                 "service": "PhishGuard AI — API Proxy",
                 "endpoints": {
-                    "POST /api/v1/scan":         "Multi-layered phishing scan (key required)",
-                    "POST /api/v1/report-phish":  "Report phish webhook for add-ins (key required)",
-                    "GET /health":                "Health check",
+                    "POST /api/v1/scan":          "Multi-layered phishing scan (key required)",
+                    "POST /api/v1/report-phish":   "Report phish webhook for add-ins (key required)",
+                    "GET /api/v1/openapi.json":    "OpenAPI 3.0 specification",
+                    "GET /health":                 "Health check",
                 },
             })
         self._send_json({"error": "Not found"}, 404)
+
+    def _serve_openapi(self):
+        path = Path(__file__).parent / "openapi.yaml"
+        if path.exists():
+            import yaml
+            try:
+                spec = yaml.safe_load(path.read_text(encoding="utf-8"))
+                return self._send_json(spec)
+            except Exception:
+                pass
+        return self._send_json({"error": "Spec not available"}, 500)
 
     def do_POST(self):
         parsed = urlparse(self.path)

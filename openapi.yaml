@@ -1,0 +1,155 @@
+openapi: "3.0.3"
+info:
+  title: PhishGuard Enterprise API
+  version: "3.0.0"
+  description: Multi-layered phishing detection API with AitM, AI-text, heuristic, and OSINT analysis.
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+  - url: https://api.phishguard.ai
+    description: Production
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      operationId: healthCheck
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+                  service: { type: string, example: phishguard-api-proxy }
+                  version: { type: string, example: "3.0.0" }
+
+  /api/v1/scan:
+    post:
+      summary: Multi-layered phishing scan
+      operationId: scanEmail
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                text: { type: string, description: Email body text to analyze }
+                sender: { type: string, description: Sender email address }
+                subject: { type: string, description: Email subject line }
+                urls: { type: array, items: { type: string }, description: Pre-extracted URLs }
+                enable_vt: { type: boolean, default: false }
+                enable_osint: { type: boolean, default: false }
+              required: [text]
+      responses:
+        "200":
+          description: Scan complete
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  verdict:
+                    type: object
+                    properties:
+                      is_phishing: { type: boolean }
+                      risk_score: { type: integer, minimum: 0, maximum: 100 }
+                      severity: { type: string, enum: [SAFE, LOW, MEDIUM, HIGH, CRITICAL] }
+                      confidence: { type: number, format: float }
+                      ai_written_probability: { type: number, format: float }
+                      aitm_confidence: { type: number, format: float }
+                      matched_keywords: { type: array, items: { type: string } }
+                  layers:
+                    type: object
+                    properties:
+                      heuristic: { type: object }
+                      ai_text_detection: { type: object }
+                      aitm_detection: { type: object }
+                  reputation:
+                    type: object
+                    properties:
+                      sender: { type: string }
+                      domain_age_days: { type: integer }
+                      is_suspicious: { type: boolean }
+                  meta:
+                    type: object
+                    properties:
+                      model_version: { type: string }
+                      processing_time_ms: { type: integer }
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
+        "401":
+          description: Missing or invalid API key
+        "429":
+          description: Rate limit exceeded
+
+  /api/v1/report-phish:
+    post:
+      summary: Report phishing email via add-in
+      operationId: reportPhish
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                raw_email: { type: string, description: Raw .eml text }
+                headers: { type: string, description: Raw email headers }
+                subject: { type: string }
+                sender: { type: string }
+                recipients: { type: string }
+                reporter: { type: string, description: Reporting user email }
+      responses:
+        "200":
+          description: Phish report logged
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: logged }
+                  verdict: { type: object }
+                  layers: { type: object }
+                  dna_matched: { type: boolean }
+
+  /api/v1/campaign/track/open:
+    get:
+      summary: Tracking pixel for campaign open detection
+      operationId: trackOpen
+      parameters:
+        - name: cid
+          in: query
+          required: true
+          schema: { type: integer }
+        - name: email
+          in: query
+          required: true
+          schema: { type: string, format: email }
+      responses:
+        "204":
+          description: Open recorded (empty 1x1 pixel)
+        "400":
+          description: Missing parameters
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-PhishGuard-Key
+      description: API key generated from the PhishGuard Billing dashboard.

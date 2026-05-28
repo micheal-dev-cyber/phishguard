@@ -1,57 +1,47 @@
+version: "3.9"
+
 services:
-  streamlit:
+  phishguard:
     build: .
-    container_name: phishguard-streamlit
+    container_name: phishguard
     ports:
       - "8501:8501"
+      - "8080:8080"
     volumes:
       - ./data:/app/data
-      - ./api_gateway/api_keys.json:/app/api_keys.json:ro
-    env_file:
-      - .env
+      - ./.env:/app/.env:ro
+    environment:
+      - STREAMLIT_SERVER_PORT=8501
+      - STREAMLIT_SERVER_ADDRESS=0.0.0.0
+      - API_PROXY_PORT=8080
+      - TZ=UTC
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8501/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - phishguard-net
 
-  api-gateway:
+  api-proxy:
     build: .
     container_name: phishguard-api
+    command: python api_proxy.py --port 8080
     ports:
       - "8080:8080"
     volumes:
       - ./data:/app/data
-      - ./api_gateway/api_keys.json:/app/api_keys.json:ro
-    env_file:
-      - .env
-    restart: unless-stopped
-
-  webhook:
-    build: .
-    container_name: phishguard-webhook
-    ports:
-      - "5000:5000"
-    volumes:
-      - ./data:/app/data
-    env_file:
-      - .env
+      - ./.env:/app/.env:ro
     environment:
-      - PORT=5000
-    command: python webhook.py
+      - API_PROXY_PORT=8080
+      - TZ=UTC
     restart: unless-stopped
+    depends_on:
+      - phishguard
+    networks:
+      - phishguard-net
 
-  imap-worker:
-    build: .
-    container_name: phishguard-imap
-    volumes:
-      - ./data:/app/data
-    env_file:
-      - .env
-    environment:
-      - IMAP_HOST=${IMAP_HOST}
-      - IMAP_USER=${IMAP_USER}
-      - IMAP_PASS=${IMAP_PASS}
-      - SMTP_HOST=${SMTP_HOST}
-      - SMTP_USER=${SMTP_USER}
-      - SMTP_PASS=${SMTP_PASS}
-    command: python workers/imap_worker.py
-    restart: unless-stopped
-    profiles:
-      - imap
+networks:
+  phishguard-net:
+    driver: bridge

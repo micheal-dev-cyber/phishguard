@@ -386,23 +386,142 @@ if st.session_state.get("show_upgrade") and plan != "enterprise":
 # Non-admin:            4        5         6     7      8
 # Enterprise (both):    9/11    10/12     11/13  12/14
 if is_admin:
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12, tab13, tab14 = st.tabs([
-        "🔍 Analyze Email", "📈 Analytics", "🤖 AI Copilot",
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12, tab13, tab14, tab15 = st.tabs([
+        "🔍 Analyze Email", "📥 Inbox Scanner", "📈 Analytics", "🤖 AI Copilot",
         "⚙ Admin Dashboard", "👥 Clients",
         "💳 Billing", "⚙ Settings", "🧪 Training", "🏆 Champions", "📊 History",
         "🧬 STIX Intel", "📧 Sender Profiler", "🔗 URL Sandbox", "👁 OCR/Homograph",
     ])
-    tab_stix, tab_sender, tab_sandbox, tab_ocr = tab11, tab12, tab13, tab14
+    tab_stix, tab_sender, tab_sandbox, tab_ocr = tab12, tab13, tab14, tab15
 else:
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12 = st.tabs([
-        "🔍 Analyze Email", "📈 Analytics", "🤖 AI Copilot",
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12, tab13 = st.tabs([
+        "🔍 Analyze Email", "📥 Inbox Scanner", "📈 Analytics", "🤖 AI Copilot",
         "💳 Billing", "⚙ Settings", "🧪 Training", "🏆 Champions", "📊 History",
         "🧬 STIX Intel", "📧 Sender Profiler", "🔗 URL Sandbox", "👁 OCR/Homograph",
     ])
-    tab_stix, tab_sender, tab_sandbox, tab_ocr = tab9, tab10, tab11, tab12
+    tab_stix, tab_sender, tab_sandbox, tab_ocr = tab10, tab11, tab12, tab13
 
 # ═════════════════════════════════════════════════════════════════════════════
 # TAB 1 — ANALYZER
+# ═════════════════════════════════════════════════════════════════════════════
+# ═════════════════════════════════════════════════════════════════════════════
+# TAB 2 — INBOX SCANNER
+# ═════════════════════════════════════════════════════════════════════════════
+with tab2:
+    from src.inbox_scanner import scan_inbox, scan_unseen
+
+    st.markdown("## 📥 Inbox Scanner")
+    st.markdown(
+        "<p style='color:#64748b;margin-top:-8px'>Connect to your email account "
+        "via IMAP to scan real inbox messages. Supports Gmail (App Password) "
+        "and Outlook 365.</p>",
+        unsafe_allow_html=True
+    )
+    st.divider()
+
+    with st.expander("🔌 Connection Settings", expanded=True):
+        col_imap1, col_imap2, col_imap3 = st.columns([2, 1, 1])
+        with col_imap1:
+            imap_host = st.text_input("IMAP Server", "imap.gmail.com", key="imap_host")
+        with col_imap2:
+            imap_port = st.number_input("Port", 993, key="imap_port")
+        with col_imap3:
+            imap_ssl = st.checkbox("SSL/TLS", True, key="imap_ssl")
+        col_imap4, col_imap5, col_imap6 = st.columns(2)
+        with col_imap4:
+            imap_user = st.text_input("Email Address", key="imap_user")
+        with col_imap5:
+            imap_pass = st.text_input("Password / App Password", type="password", key="imap_pass")
+        with col_imap6:
+            imap_folder = st.text_input("Folder", "INBOX", key="imap_folder")
+        col_imap7, col_imap8 = st.columns(2)
+        with col_imap7:
+            imap_hours = st.slider("Look back (hours)", 1, 168, 24, key="imap_hours")
+        with col_imap8:
+            imap_max = st.slider("Max emails", 1, 100, 20, key="imap_max")
+
+    col_scan1, col_scan2 = st.columns(2)
+    with col_scan1:
+        if st.button("📩 Fetch Recent Emails", type="primary", use_container_width=True):
+            if not imap_user or not imap_pass:
+                st.error("Email and password required.")
+                st.stop()
+            with st.spinner("Connecting and fetching..."):
+                emails = scan_inbox(imap_host, imap_port, imap_user, imap_pass,
+                                    imap_folder, imap_hours, imap_max)
+            st.session_state["scanned_emails"] = emails
+            st.session_state["scan_results"] = []
+            st.rerun()
+    with col_scan2:
+        if st.button("📩 Fetch Unseen Only", use_container_width=True):
+            if not imap_user or not imap_pass:
+                st.error("Email and password required.")
+                st.stop()
+            with st.spinner("Scanning for unseen messages..."):
+                emails = scan_unseen(imap_host, imap_port, imap_user, imap_pass,
+                                     imap_folder, imap_max)
+            st.session_state["scanned_emails"] = emails
+            st.session_state["scan_results"] = []
+            st.rerun()
+
+    if st.button("🔌 Disconnect", use_container_width=True):
+        st.session_state.pop("scanned_emails", None)
+        st.session_state.pop("scan_results", None)
+        st.rerun()
+
+    st.divider()
+
+    scanned = st.session_state.get("scanned_emails", [])
+    if scanned:
+        st.markdown(f"**{len(scanned)} email(s) fetched**")
+        email_options = [f"[{e.get('date', '')[:17]}] {e.get('subject', '(no subject)')} "
+                         f"— {e.get('sender', '')}" for e in scanned]
+        selected_idx = st.selectbox("Select an email to scan", range(len(email_options)),
+                                    format_func=lambda i: email_options[i] if i < len(email_options) else "",
+                                    key="imap_select")
+
+        if selected_idx is not None and selected_idx < len(scanned):
+            sel = scanned[selected_idx]
+            st.markdown(f"**From:** {sel.get('sender', '')}")
+            st.markdown(f"**Subject:** {sel.get('subject', '')}")
+            st.markdown(f"**Date:** {sel.get('date', '')}")
+            with st.expander("📄 View Body", expanded=False):
+                st.text(sel.get('body', '')[:2000])
+
+            if st.button("🔍 Scan This Email", type="primary", use_container_width=True):
+                from src.enterprise_api import handle_scan_request
+                body = sel.get('body', '')
+                with st.spinner("Running multi-layered analysis..."):
+                    result = handle_scan_request({"text": body, "sender": sel.get('sender', '')})
+                st.session_state["imap_scan_result"] = result
+                st.rerun()
+
+        if st.session_state.get("imap_scan_result"):
+            r = st.session_state["imap_scan_result"]
+            v = r.get("verdict", {})
+            st.divider()
+            score = v.get("risk_score", 0)
+            severity = v.get("severity", "UNKNOWN")
+            color = {"SAFE": "#22c55e", "LOW": "#3b82f6", "MEDIUM": "#eab308",
+                     "HIGH": "#f97316", "CRITICAL": "#ef4444"}.get(severity, "#94a3b8")
+            st.markdown(
+                f"<div style='background:#111827;border:1px solid #1e3a5f;"
+                f"border-radius:12px;padding:20px;margin:12px 0'>"
+                f"<div style='display:flex;justify-content:space-between;align-items:center'>"
+                f"<span style='color:{color};font-size:1.4rem;font-weight:800'>"
+                f"{severity}</span>"
+                f"<span style='color:#94a3b8;font-size:2rem;font-weight:800'>"
+                f"{score}/100</span></div>"
+                f"<div style='margin-top:12px'>"
+                f"<span class='tag'>AI-written: {v.get('ai_written_probability', 0):.0%}</span>"
+                f"<span class='tag'>AitM: {v.get('aitm_confidence', 0):.0%}</span>"
+                f"<span class='tag'>Confidence: {v.get('confidence', 0):.0%}</span>"
+                f"</div></div>", unsafe_allow_html=True
+            )
+    else:
+        st.info("Connect and fetch emails to begin scanning.")
+    st.stop()
+
 # ═════════════════════════════════════════════════════════════════════════════
 with tab1:
     q = check_quota(username, plan)
@@ -1265,9 +1384,9 @@ with tab1:
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# TAB 2 — ENTERPRISE ANALYTICS DASHBOARD
+# TAB 3 — ENTERPRISE ANALYTICS DASHBOARD
 # ═════════════════════════════════════════════════════════════════════════════
-with tab2:
+with tab3:
     st.markdown("## 📈 SOC Analytics Dashboard")
     st.caption("Real-time threat intelligence, security metrics, and phishing trend analysis.")
     col_refresh, col_range = st.columns([1, 3])
@@ -1555,11 +1674,50 @@ with tab2:
                     use_container_width=True,
                 )
 
+    # ── Compliance Reports ────────────────────────────────────────────────
+    st.divider()
+    st.markdown("### 📋 Compliance Reports")
+    st.markdown(
+        "<p style='color:#64748b;font-size:13px'>Generate SOC 2, GDPR, or HIPAA "
+        "PDF reports summarizing your phishing defense posture.</p>",
+        unsafe_allow_html=True
+    )
+
+    col_cr1, col_cr2 = st.columns(2)
+    with col_cr1:
+        cr_standard = st.selectbox(
+            "Standard", ["soc2", "gdpr", "hipaa"],
+            format_func=lambda x: x.upper(),
+            key="cr_standard"
+        )
+    with col_cr2:
+        cr_days = st.slider("Report period (days)", 7, 365, 90, key="cr_days")
+
+    if st.button("📄 Generate Compliance Report", type="primary", use_container_width=True):
+        from src.compliance_reports import ComplianceReport
+        with st.spinner(f"Generating {cr_standard.upper()} report..."):
+            report = ComplianceReport(standard=cr_standard, org_name=username,
+                                      date_range_days=cr_days)
+            pdf_bytes = report.generate()
+        st.session_state["compliance_report"] = pdf_bytes
+        st.session_state["compliance_standard"] = cr_standard
+        st.rerun()
+
+    if st.session_state.get("compliance_report"):
+        st.success(f"{st.session_state['compliance_standard'].upper()} report ready!")
+        st.download_button(
+            "📥 Download PDF Report",
+            st.session_state["compliance_report"],
+            f"phishguard_{st.session_state['compliance_standard']}_{datetime.now().strftime('%Y%m%d')}.pdf",
+            "application/pdf",
+            use_container_width=True,
+        )
+
 
 # ═════════════════════════════════════════════════════════════════════════════
-# TAB 3 — AI COPILOT
+# TAB 4 — AI COPILOT
 # ═════════════════════════════════════════════════════════════════════════════
-with tab3:
+with tab4:
     from src.providers import get_available_provider
     _active = get_available_provider()
     _badge = {"groq": "🟢 Groq (free)", "openrouter": "🟢 OpenRouter (free)", "openai": "🟡 OpenAI", "anthropic": "🟡 Anthropic", "none": "🔴 No AI provider"}.get(_active, "🔴 No AI provider")
@@ -1683,7 +1841,7 @@ with tab3:
 # TAB 3 — ADMIN DASHBOARD
 # ═════════════════════════════════════════════════════════════════════════════
 if is_admin:
-    with tab4:
+    with tab5:
         st.markdown("## ⚙ Admin Dashboard")
         st.markdown(
             "<p style='color:#94a3b8'>Only visible to admin account</p>",
@@ -1857,12 +2015,63 @@ if is_admin:
             language="bash",
         )
 
+    # ── Feedback Loop ─────────────────────────────────────────────────────
+    st.divider()
+    st.markdown("### 🔄 Feedback Loop (FP/FN Tracking)")
+    st.markdown(
+        "<p style='color:#64748b;font-size:13px'>Track false positives and false "
+        "negatives to improve detection accuracy over time.</p>",
+        unsafe_allow_html=True
+    )
+
+    from src.feedback import mark_feedback, get_feedback_stats, get_feedback_history
+
+    fb_stats = get_feedback_stats()
+    col_fb1, col_fb2, col_fb3, col_fb4 = st.columns(4)
+    with col_fb1:
+        st.metric("Total Feedback", fb_stats["total"])
+    with col_fb2:
+        st.metric("False Positives", fb_stats["false_positives"])
+    with col_fb3:
+        st.metric("False Negatives", fb_stats["false_negatives"])
+    with col_fb4:
+        st.metric("Accuracy", f'{fb_stats["accuracy"]}%')
+
+    st.markdown("#### Recent Feedback")
+    fb_history = get_feedback_history(50)
+    if fb_history:
+        import pandas as pd
+        df = pd.DataFrame(fb_history)
+        st.dataframe(
+            df[["id", "email_preview", "user_label", "risk_score", "created_at"]],
+            use_container_width=True, hide_index=True,
+        )
+    else:
+        st.info("No feedback recorded yet.")
+
+    st.divider()
+    st.markdown("#### Submit Feedback")
+    col_fb5, col_fb6, col_fb7 = st.columns([1, 1, 2])
+    with col_fb5:
+        fb_analysis_id = st.number_input("Analysis ID", min_value=0, step=1, key="fb_aid")
+    with col_fb6:
+        fb_label = st.selectbox("Label", ["fp", "fn", "correct"], key="fb_label")
+    with col_fb7:
+        fb_notes = st.text_input("Notes (optional)", key="fb_notes")
+    if st.button("💾 Submit Feedback", type="primary", use_container_width=True):
+        result = mark_feedback(int(fb_analysis_id), fb_label, fb_notes)
+        if result["status"] == "ok":
+            st.success(f"Feedback #{result['feedback_id']} recorded!")
+            st.rerun()
+        else:
+            st.error(f"Error: {result.get('error')}")
+
 
 # ═════════════════════════════════════════════════════════════════════════════
 # TAB 4 — CLIENT MANAGEMENT
 # ═════════════════════════════════════════════════════════════════════════════
 if is_admin:
-    with tab5:
+    with tab6:
         st.markdown("## 👥 Client Management")
         st.divider()
 
@@ -2012,7 +2221,7 @@ if is_admin:
 # ═════════════════════════════════════════════════════════════════════════════
 # TAB 6/4 — BILLING & SUBSCRIPTION
 # ═════════════════════════════════════════════════════════════════════════════
-billing_tab = tab6 if is_admin else tab4
+billing_tab = tab7 if is_admin else tab5
 
 with billing_tab:
     st.markdown("## 💳 Billing & Subscription")
@@ -2169,7 +2378,7 @@ with billing_tab:
 # ═════════════════════════════════════════════════════════════════════════════
 # TAB 7/5 — SETTINGS
 # ═════════════════════════════════════════════════════════════════════════════
-settings_tab = tab7 if is_admin else tab5
+settings_tab = tab8 if is_admin else tab6
 
 with settings_tab:
     st.markdown("## ⚙ Account Settings")
@@ -2369,10 +2578,66 @@ with settings_tab:
         language="bash",
     )
 
+    # ── Alerting Configuration ────────────────────────────────────────────
+    st.divider()
+    st.markdown("### 🔔 Alerting Configuration")
+    st.markdown(
+        "<p style='color:#64748b;font-size:13px'>Configure real-time alerts "
+        "when phishing is detected. Supports Slack, Email, and Webhook.</p>",
+        unsafe_allow_html=True
+    )
+
+    alert_method = st.selectbox("Alert Method", ["Slack", "Email", "Webhook"], key="alert_method")
+    if alert_method == "Slack":
+        slack_url = st.text_input("Slack Webhook URL", type="password",
+                                  value=os.getenv("SLACK_WEBHOOK_URL", ""),
+                                  key="slack_url")
+        if st.button("🔔 Test Slack Alert", use_container_width=True):
+            from src.alerting import send_slack
+            res = send_slack(slack_url, "✅ Test alert from PhishGuard AI")
+            if res["status"] == "ok":
+                st.success("Slack test sent!")
+            else:
+                st.error(f"Slack error: {res.get('error')}")
+    elif alert_method == "Email":
+        col_ae1, col_ae2 = st.columns(2)
+        with col_ae1:
+            smtp_host = st.text_input("SMTP Host", os.getenv("SMTP_HOST", "smtp.gmail.com"),
+                                      key="smtp_host")
+            smtp_user = st.text_input("SMTP User", os.getenv("SMTP_USER", ""), key="smtp_user")
+        with col_ae2:
+            smtp_port = st.number_input("SMTP Port", int(os.getenv("SMTP_PORT", "587")),
+                                        key="smtp_port")
+            smtp_pass = st.text_input("SMTP Password", type="password", key="smtp_pass")
+        alert_recipient = st.text_input("Alert Recipient Email", key="alert_rcpt")
+        if st.button("🔔 Test Email Alert", use_container_width=True):
+            from src.alerting import send_email
+            res = send_email(smtp_host, int(smtp_port), smtp_user, smtp_pass,
+                             smtp_user, [alert_recipient],
+                             "PhishGuard Test Alert",
+                             "This is a test alert from PhishGuard AI.")
+            if res["status"] == "ok":
+                st.success("Test email sent!")
+            else:
+                st.error(f"Email error: {res.get('error')}")
+    elif alert_method == "Webhook":
+        webhook_url = st.text_input("Webhook URL", key="webhook_url")
+        if st.button("🔔 Test Webhook", use_container_width=True):
+            from src.alerting import send_webhook, build_alert
+            res = send_webhook(webhook_url, {"test": True, "message": "PhishGuard test"})
+            if res["status"] == "ok":
+                st.success("Webhook test sent!")
+            else:
+                st.error(f"Webhook error: {res.get('error')}")
+
+    alert_threshold = st.slider("Minimum risk score to trigger alert",
+                                 0, 100, 50, key="alert_threshold")
+    st.caption(f"Alerts will fire when risk score >= {alert_threshold}")
+
 # ═════════════════════════════════════════════════════════════════════════════
 # TAB 8/6 — TRAINING (Simulator + Screenshot Scanner)
 # ═════════════════════════════════════════════════════════════════════════════
-training_tab = tab8 if is_admin else tab6
+training_tab = tab9 if is_admin else tab7
 
 with training_tab:
     st.markdown("## 🧪 Security Training Tools")
