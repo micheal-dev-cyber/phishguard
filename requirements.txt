@@ -9,11 +9,10 @@
 # ──────────────────────────────────────────────────────────────────────────────
 
 # ── Web framework ──────────────────────────────────────────────────────────────
-# NOTE: Must be >=1.45.0 — version 1.44.0 and earlier have a race condition that
-# causes "Bad message format / SessionInfo before initialization" on reconnect
-# (streamlit/issues/9767, fixed in #9886 via 1.45.0).
-# HF Spaces SDK >=1.23.0 uses upstream PyPI (JS + Python from same package), so
-# there is no version mismatch between server-side and client-side assets.
+# NOTE: sdk_version in README.md must match this constraint.  HF's build command
+# pins `streamlit=={sdk_version}` and this constraint must allow that version.
+# Version 1.44.0 and earlier have a race condition causing "Bad message format /
+# SessionInfo before initialization" on reconnect (streamlit#9767, fixed in 1.45.0).
 streamlit>=1.45.0,<2.0.0
 
 # ── LLM / AI APIs ─────────────────────────────────────────────────────────────
