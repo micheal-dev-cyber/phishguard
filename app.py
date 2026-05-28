@@ -677,6 +677,19 @@ with tab2:
 
 # ═════════════════════════════════════════════════════════════════════════════
 with tab1:
+    # ── Email Verification Banner ──────────────────────────────────────────
+    try:
+        from src.email_verify import is_email_verified
+        if not is_email_verified(username):
+            st.warning(
+                "📧 **Email not verified.** You must verify your email before scanning. "
+                "[Resend verification email](#) — check your inbox.",
+                icon="⚠️"
+            )
+            st.stop()
+    except Exception:
+        pass
+
     q = check_quota(username, plan)
     if q["over_limit"] and plan != "enterprise":
         limit_val = q["limit"]
@@ -2395,11 +2408,35 @@ if is_admin:
                     with col_l3:
                         if st.button("🔓 Unlock", key=f"unlock_{_lu_name}",
                                      use_container_width=True):
+                            from src.audit_log import log_action
                             unlock_user(_lu_name)
+                            log_action(username, "unlock_user", target=_lu_name,
+                                       detail="Manual unlock by admin")
                             st.success(f"Unlocked {_lu_name}")
                             st.rerun()
             else:
                 st.success("No users currently locked out")
+
+        # ── Audit Log ─────────────────────────────────────────────────────
+        st.divider()
+        with st.expander("📋 Audit Log", expanded=False):
+            st.caption("Track all admin actions for compliance and forensics.")
+            from src.audit_log import get_audit_log, log_action
+            audit_rows = get_audit_log(limit=200)
+            if not audit_rows:
+                st.info("No audit events recorded yet.")
+            else:
+                for a_row in audit_rows:
+                    st.markdown(
+                        f"<div style='background:#111827;border:1px solid #1e3a5f;"
+                        f"border-radius:6px;padding:6px 10px;margin:3px 0;font-size:12px'>"
+                        f"<span style='color:#475569;font-family:monospace'>{a_row['timestamp'][:19]}</span> "
+                        f"<span style='color:#60a5fa'>{a_row['actor']}</span> "
+                        f"<span style='color:#e2e8f0'>→ {a_row['action']}</span>"
+                        f"{' · <span style=\"color:#94a3b8\">' + a_row['target'] + '</span>' if a_row['target'] else ''}"
+                        f"</div>",
+                        unsafe_allow_html=True
+                    )
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -2464,6 +2501,18 @@ if is_admin:
                         new_plan, notes=new_notes
                     )
                     if ok:
+                        from src.audit_log import log_action
+                        log_action(username, "create_user", target=new_username,
+                                   detail=f"plan={new_plan}")
+                        # Send verification email if email provided
+                        if new_email:
+                            try:
+                                from src.email_verify import create_verification, send_verification_email
+                                base = st.secrets.get("base_url", "http://localhost:8501")
+                                vt = create_verification(new_username, new_email)
+                                send_verification_email(new_email, f"{base}/?verify={vt['token']}")
+                            except Exception:
+                                pass
                         st.success(
                             f'Client "{new_username}" created on '
                             f'{PLANS[new_plan]["label"]} plan.'
@@ -2501,7 +2550,10 @@ if is_admin:
                         format_func=lambda k: PLANS[k]["label"]
                     )
                     if st.button("💾 Save Plan", key="save_" + uname):
+                        from src.audit_log import log_action
                         update_tenant(uname, plan=new_plan_val)
+                        log_action(username, "change_plan", target=uname,
+                                   detail=f"{uplan} → {new_plan_val}")
                         st.success(f'Plan updated to {PLANS[new_plan_val]["label"]}')
                         st.rerun()
 
@@ -2511,7 +2563,9 @@ if is_admin:
                     )
                     if st.button("🔑 Reset Password", key="rpw_" + uname):
                         if new_pw:
+                            from src.audit_log import log_action
                             set_password(uname, new_pw)
+                            log_action(username, "reset_password", target=uname)
                             st.success("Password updated.")
                         else:
                             st.warning("Enter a new password first.")
@@ -2519,16 +2573,22 @@ if is_admin:
                 b1, b2, b3 = st.columns(3)
                 if uactive:
                     if b1.button("⏸ Suspend", key="sus_" + uname):
+                        from src.audit_log import log_action
                         update_tenant(uname, is_active=0)
+                        log_action(username, "suspend_user", target=uname)
                         st.warning(f"{uname} suspended.")
                         st.rerun()
                 else:
                     if b1.button("▶ Reactivate", key="act_" + uname):
+                        from src.audit_log import log_action
                         update_tenant(uname, is_active=1)
+                        log_action(username, "reactivate_user", target=uname)
                         st.success(f"{uname} reactivated.")
                         st.rerun()
                 if b3.button("🗑 Delete", key="del_" + uname):
+                    from src.audit_log import log_action
                     delete_tenant(uname)
+                    log_action(username, "delete_user", target=uname)
                     st.error(f"{uname} deleted.")
                     st.rerun()
 
@@ -2673,26 +2733,50 @@ with billing_tab:
         unsafe_allow_html=True
     )
 
-    from src.api_keys import create_api_key, revoke_api_key, list_user_keys
+    from src.api_keys import generate_api_key, delete_api_key, init_api_keys_table
+    import sqlite3
+    from pathlib import Path
+    api_db = Path(__file__).parent / "data" / "phishguard.db"
+    init_api_keys_table()
+    conn = sqlite3.connect(str(api_db))
+    c = conn.cursor()
+    c.execute("SELECT id, key_prefix, tier, is_active, created_at FROM api_keys WHERE username = ? ORDER BY id DESC", (username,))
+    user_keys = c.fetchall()
+    conn.close()
 
-    user_keys = list_user_keys(username)
     if user_keys:
         st.markdown("**Your API Keys:**")
-        for k in user_keys:
+        for k_row in user_keys:
+            kid, kprefix, ktier, kactive, kcreated = k_row
+            status = "🟢 Active" if kactive else "🔴 Revoked"
             col_k1, col_k2, col_k3, col_k4 = st.columns([3, 1, 1, 1])
-            col_k1.code(k["key"], language="text")
-            col_k2.markdown(f"`{k['tier']}`")
-            col_k3.markdown(f"_{k['status']}_")
-            if col_k4.button("🗑 Revoke", key=f"revoke_{k['id']}"):
-                revoke_api_key(k["id"])
+            col_k1.code(f"{kprefix}...", language="text")
+            col_k2.markdown(f"`{ktier}`")
+            col_k3.markdown(status)
+            if col_k4.button("🗑 Revoke", key=f"revoke_{kid}"):
+                from src.audit_log import log_action
+                conn2 = sqlite3.connect(str(api_db))
+                c2 = conn2.cursor()
+                c2.execute("SELECT key_hash FROM api_keys WHERE id = ?", (kid,))
+                row2 = c2.fetchone()
+                conn2.close()
+                if row2:
+                    delete_api_key(row2[0])
+                    log_action(username, "revoke_api_key", detail=f"key_id={kid}")
                 st.rerun()
     else:
         st.info("No API keys yet. Generate one below.")
-
-    if st.button("🔑 Generate New API Key", type="primary", use_container_width=True):
-        new_key = create_api_key(username, plan)
-        st.session_state["new_api_key"] = new_key
-        st.rerun()
+    col_gen, col_tier = st.columns([2, 1])
+    with col_gen:
+        if st.button("🔑 Generate New API Key", type="primary", use_container_width=True):
+            result = generate_api_key(username, plan)
+            if "api_key" in result:
+                st.session_state["new_api_key"] = result["api_key"]
+                st.rerun()
+            else:
+                st.error(result.get("error", "Failed to generate key"))
+    with col_tier:
+        st.caption(f"Tier: `{plan}`")
 
     if st.session_state.get("new_api_key"):
         st.success("Key generated! Copy it now — it won't be shown again.")
@@ -2744,6 +2828,24 @@ with settings_tab:
         if current_email:
             st.caption(f"Current: {current_email}")
             st.info("💡 Alerts fire automatically when an analysis scores HIGH or CRITICAL.")
+        # Email verification status
+        try:
+            from src.email_verify import is_email_verified, create_verification, send_verification_email
+            if not is_email_verified(username):
+                if current_email:
+                    st.warning("📧 Email not verified. Some features are restricted.")
+                    if st.button("📨 Resend Verification Email", use_container_width=True):
+                        base = st.secrets.get("base_url", "http://localhost:8501")
+                        vt = create_verification(username, current_email)
+                        r = send_verification_email(vt["email"], f"{base}/?verify={vt['token']}")
+                        if r.get("success"):
+                            st.success("Verification email sent!")
+                        else:
+                            st.error(f"Failed to send: {r.get('error', 'SMTP not configured')}")
+                else:
+                    st.info("📧 Save an email above to enable email verification.")
+        except Exception:
+            pass
 
     with col_s2:
         st.markdown("### 🔑 Security")
@@ -2760,6 +2862,65 @@ with settings_tab:
             else:
                 set_password(username, pw1)
                 st.success("✅ Password updated successfully.")
+
+        st.divider()
+        st.markdown("#### 🔐 Multi-Factor Auth (TOTP)")
+        try:
+            from src.mfa import setup_mfa, enable_mfa, disable_mfa, is_mfa_enabled
+            mfa_enrolled = is_mfa_enabled(username)
+            if mfa_enrolled:
+                st.success("✅ MFA is enabled on your account.")
+                if st.button("🗑 Disable MFA", use_container_width=True):
+                    disable_mfa(username)
+                    st.rerun()
+            else:
+                if "mfa_setup_secret" not in st.session_state:
+                    if st.button("🔐 Set up MFA", use_container_width=True):
+                        mfa_setup = setup_mfa(username)
+                        st.session_state["mfa_setup_secret"] = mfa_setup["secret"]
+                        st.session_state["mfa_setup_uri"] = mfa_setup["uri"]
+                        st.rerun()
+                else:
+                    secret = st.session_state["mfa_setup_secret"]
+                    uri = st.session_state["mfa_setup_uri"]
+                    st.markdown(
+                        "<div style='background:#0f172a;border:1px solid #1e3a5f;"
+                        "border-radius:12px;padding:16px;text-align:center'>"
+                        "<p style='color:#94a3b8;font-size:12px'>Scan with Google Authenticator, "
+                        "Authy, or any TOTP app</p>",
+                        unsafe_allow_html=True
+                    )
+                    st.code(secret, language="text")
+                    from urllib.parse import quote
+                    qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=200x200&data={quote(uri)}"
+                    st.markdown(
+                        f"<div style='text-align:center'><img src='{qr_url}' "
+                        f"width='180' alt='QR Code'></div>",
+                        unsafe_allow_html=True
+                    )
+                    verify_code = st.text_input("Enter 6-digit code to verify",
+                                                 max_chars=6, label_visibility="collapsed",
+                                                 key="mfa_verify_code")
+                    col_mfa1, col_mfa2 = st.columns(2)
+                    with col_mfa1:
+                        if st.button("✅ Verify & Enable", use_container_width=True):
+                            if verify_code:
+                                if enable_mfa(username, verify_code):
+                                    st.session_state.pop("mfa_setup_secret", None)
+                                    st.session_state.pop("mfa_setup_uri", None)
+                                    st.success("MFA enabled!")
+                                    st.rerun()
+                                else:
+                                    st.error("Invalid code. Try again.")
+                            else:
+                                st.error("Enter the code from your authenticator app.")
+                    with col_mfa2:
+                        if st.button("Cancel", use_container_width=True):
+                            st.session_state.pop("mfa_setup_secret", None)
+                            st.session_state.pop("mfa_setup_uri", None)
+                            st.rerun()
+        except Exception:
+            st.caption("MFA not available (pyotp not installed).")
 
         st.divider()
         st.markdown("#### Session")
