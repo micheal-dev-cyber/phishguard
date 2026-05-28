@@ -310,9 +310,296 @@ def init_db():
             INSERT INTO users (username, password_hash, email, paddle_order_id, status, role, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?)
         """, ('admin', hashed, 'admin@phishguard.ai', 'SYSTEM_MASTER', 'active', 'admin', datetime.now().isoformat()))
-        
+
+    # 15. Scan consumption metering per user
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS scan_consumption (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            username    TEXT NOT NULL,
+            scans_used  INTEGER DEFAULT 0,
+            scans_limit INTEGER DEFAULT 100,
+            period_start TEXT,
+            period_end  TEXT,
+            UNIQUE(username, period_start)
+        )
+    """)
+
+    # 16. Spending caps
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS spending_caps (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            username    TEXT UNIQUE NOT NULL,
+            hard_cap_usd REAL DEFAULT 0,
+            current_spend REAL DEFAULT 0,
+            paused      INTEGER DEFAULT 0
+        )
+    """)
+
+    # 17. Referral codes
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS referral_codes (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            username    TEXT NOT NULL,
+            code        TEXT UNIQUE NOT NULL,
+            created_at  TEXT DEFAULT (datetime('now')),
+            is_active   INTEGER DEFAULT 1
+        )
+    """)
+
+    # 18. Referral redemptions
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS referral_redemptions (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            referrer    TEXT NOT NULL,
+            referred    TEXT NOT NULL,
+            code        TEXT NOT NULL,
+            referrer_credited INTEGER DEFAULT 0,
+            referred_credited INTEGER DEFAULT 0,
+            redeemed_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+
     conn.commit()
     conn.close()
+
+
+# ── Consumption Metering ──────────────────────────────────────────────────
+
+def ensure_scan_consumption(username: str, scans_limit: int = 100):
+    """Ensure a scan consumption record exists for the current month."""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    now = datetime.now()
+    period_start = now.strftime("%Y-%m-01")
+    period_end = now.strftime("%Y-%m-%d")
+    c.execute(
+        "INSERT OR IGNORE INTO scan_consumption (username, scans_used, scans_limit, period_start, period_end) "
+        "VALUES (?, 0, ?, ?, ?)",
+        (username, scans_limit, period_start, period_end),
+    )
+    conn.commit()
+    conn.close()
+
+
+def consume_scan(username: str) -> dict:
+    """Mark one scan as used. Returns remaining or error."""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    now = datetime.now()
+    period_start = now.strftime("%Y-%m-01")
+    c.execute(
+        "SELECT scans_used, scans_limit FROM scan_consumption "
+        "WHERE username = ? AND period_start = ?",
+        (username, period_start),
+    )
+    row = c.fetchone()
+    if not row:
+        ensure_scan_consumption(username)
+        c.execute(
+            "SELECT scans_used, scans_limit FROM scan_consumption "
+            "WHERE username = ? AND period_start = ?",
+            (username, period_start),
+        )
+        row = c.fetchone()
+    used, limit = row
+    if used >= limit:
+        conn.close()
+        return {"allowed": False, "used": used, "limit": limit, "remaining": 0}
+    c.execute(
+        "UPDATE scan_consumption SET scans_used = scans_used + 1 "
+        "WHERE username = ? AND period_start = ?",
+        (username, period_start),
+    )
+    conn.commit()
+    conn.close()
+    return {"allowed": True, "used": used + 1, "limit": limit, "remaining": limit - (used + 1)}
+
+
+def check_scan_quota(username: str) -> dict:
+    """Check current scan usage without consuming."""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    now = datetime.now()
+    period_start = now.strftime("%Y-%m-01")
+    c.execute(
+        "SELECT scans_used, scans_limit FROM scan_consumption "
+        "WHERE username = ? AND period_start = ?",
+        (username, period_start),
+    )
+    row = c.fetchone()
+    conn.close()
+    if not row:
+        ensure_scan_consumption(username)
+        return {"used": 0, "limit": 100, "remaining": 100, "allowed": True}
+    used, limit = row
+    return {"used": used, "limit": limit, "remaining": limit - used, "allowed": used < limit}
+
+
+def buy_credits(username: str, additional: int):
+    """Add prepaid scan credits to the user's current limit."""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    now = datetime.now()
+    period_start = now.strftime("%Y-%m-01")
+    c.execute(
+        "INSERT OR IGNORE INTO scan_consumption (username, scans_used, scans_limit, period_start, period_end) "
+        "VALUES (?, 0, 0, ?, ?)",
+        (username, period_start, now.strftime("%Y-%m-%d")),
+    )
+    c.execute(
+        "UPDATE scan_consumption SET scans_limit = scans_limit + ? "
+        "WHERE username = ? AND period_start = ?",
+        (additional, username, period_start),
+    )
+    conn.commit()
+    conn.close()
+
+
+# ── Spending Caps ─────────────────────────────────────────────────────────
+
+def get_spending_cap(username: str) -> dict:
+    """Get the user's hard spending cap configuration."""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute(
+        "SELECT hard_cap_usd, current_spend, paused FROM spending_caps WHERE username = ?",
+        (username,),
+    )
+    row = c.fetchone()
+    conn.close()
+    if not row:
+        return {"hard_cap_usd": 0, "current_spend": 0, "paused": False}
+    return {"hard_cap_usd": row[0], "current_spend": row[1], "paused": bool(row[2])}
+
+
+def set_spending_cap(username: str, hard_cap_usd: float):
+    """Set or update the user's hard spending cap."""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute(
+        "INSERT OR REPLACE INTO spending_caps (username, hard_cap_usd, current_spend, paused) "
+        "VALUES (?, ?, COALESCE((SELECT current_spend FROM spending_caps WHERE username = ?), 0), 0)",
+        (username, hard_cap_usd, username),
+    )
+    conn.commit()
+    conn.close()
+
+
+def record_spend(username: str, amount_usd: float) -> dict:
+    """Record a spend and check if cap is hit."""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    cap = get_spending_cap(username)
+    if cap["paused"]:
+        conn.close()
+        return {"allowed": False, "reason": "PAUSED", "cap": cap}
+    new_spend = cap["current_spend"] + amount_usd
+    if cap["hard_cap_usd"] > 0 and new_spend > cap["hard_cap_usd"]:
+        c.execute(
+            "UPDATE spending_caps SET paused = 1 WHERE username = ?",
+            (username,),
+        )
+        conn.commit()
+        conn.close()
+        return {"allowed": False, "reason": "CAP_REACHED", "cap": {**cap, "current_spend": new_spend}}
+    c.execute(
+        "UPDATE spending_caps SET current_spend = ? WHERE username = ?",
+        (new_spend, username),
+    )
+    conn.commit()
+    conn.close()
+    return {"allowed": True, "cap": {**cap, "current_spend": new_spend}}
+
+
+# ── B2B Referral System ───────────────────────────────────────────────────
+
+def _generate_code(username: str) -> str:
+    """Generate a unique referral code."""
+    import random, string
+    suffix = ''.join(random.choices(string.ascii_uppercase + string.digits, k=5))
+    return f"REF-{username[:4].upper()}{suffix}"
+
+
+def generate_referral_code(username: str) -> str:
+    """Create a referral code for a user if none exists, or return existing."""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT code FROM referral_codes WHERE username = ? AND is_active = 1", (username,))
+    row = c.fetchone()
+    if row:
+        conn.close()
+        return row[0]
+    code = _generate_code(username)
+    c.execute(
+        "INSERT INTO referral_codes (username, code) VALUES (?, ?)",
+        (username, code),
+    )
+    conn.commit()
+    conn.close()
+    return code
+
+
+def apply_referral_code(referrer_code: str, referred_username: str) -> dict:
+    """Apply a referral code. Credits both parties with $20 in scan credits."""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT username FROM referral_codes WHERE code = ? AND is_active = 1", (referrer_code,))
+    row = c.fetchone()
+    if not row:
+        conn.close()
+        return {"status": "error", "error": "Invalid or inactive referral code."}
+    referrer = row[0]
+    if referrer == referred_username:
+        conn.close()
+        return {"status": "error", "error": "Cannot use your own referral code."}
+    c.execute(
+        "SELECT id FROM referral_redemptions WHERE referrer = ? AND referred = ?",
+        (referrer, referred_username),
+    )
+    if c.fetchone():
+        conn.close()
+        return {"status": "error", "error": "Referral already used."}
+    # Credit both with 20 additional scan credits
+    for user in [referrer, referred_username]:
+        now = datetime.now()
+        period_start = now.strftime("%Y-%m-01")
+        c.execute(
+            "INSERT OR IGNORE INTO scan_consumption (username, scans_used, scans_limit, period_start, period_end) "
+            "VALUES (?, 0, 0, ?, ?)",
+            (user, period_start, now.strftime("%Y-%m-%d")),
+        )
+        c.execute(
+            "UPDATE scan_consumption SET scans_limit = scans_limit + 20 "
+            "WHERE username = ? AND period_start = ?",
+            (user, period_start),
+        )
+    c.execute(
+        "INSERT INTO referral_redemptions (referrer, referred, code, referrer_credited, referred_credited) "
+        "VALUES (?, ?, ?, 1, 1)",
+        (referrer, referred_username, referrer_code),
+    )
+    conn.commit()
+    conn.close()
+    return {"status": "ok", "referrer": referrer, "credit": 20}
+
+
+def get_referral_balance(username: str) -> dict:
+    """Get referral stats for a user."""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    code = generate_referral_code(username)
+    c.execute(
+        "SELECT COUNT(*) FROM referral_redemptions WHERE referrer = ?",
+        (username,),
+    )
+    total_refs = c.fetchone()[0]
+    c.execute(
+        "SELECT COALESCE(SUM(referrer_credited * 20), 0) FROM referral_redemptions WHERE referrer = ?",
+        (username,),
+    )
+    total_credits = c.fetchone()[0]
+    conn.close()
+    return {"code": code, "total_referrals": total_refs, "total_credits_earned": total_credits}
 
 def save_analysis(results, email_text, ai_report=""):
     """Save analysis results from the detector dict format."""

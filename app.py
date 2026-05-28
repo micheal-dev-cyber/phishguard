@@ -245,6 +245,45 @@ with col_quota:
             icon="💳"
         )
 
+    # ── Consumption Metering & Hard Spending Cap ───────────────────────────
+    from src.database import check_scan_quota, get_spending_cap, set_spending_cap
+    quota_status = check_scan_quota(username)
+    cap_status = get_spending_cap(username)
+    st.markdown(
+        "<div style='margin-top:8px;padding:10px 14px;background:#111827;"
+        "border-radius:10px;border:1px solid #1e3a5f'>"
+        "<div style='display:flex;justify-content:space-between;font-size:12px;"
+        "color:#94a3b8;margin-bottom:4px'>"
+        "<span>📊 Monthly Scans</span>"
+        "<span style='font-weight:700'>" + str(quota_status["used"]) + " / "
+        + str(quota_status["limit"]) + "</span></div>"
+        "<div style='background:#1e3a5f;border-radius:4px;height:5px'>"
+        "<div style='background:#60a5fa;border-radius:4px;height:5px;"
+        "width:min(" + str(int(quota_status["used"] / max(quota_status["limit"], 1) * 100)) + "%,100%)'></div></div>"
+        "</div>", unsafe_allow_html=True
+    )
+    if cap_status["paused"]:
+        st.warning("⛔ Spending cap reached — scanning paused. Increase your cap to continue.")
+    st.markdown(
+        "<div style='margin-top:6px;padding:8px 14px;background:#111827;"
+        "border-radius:10px;border:1px solid #1e3a5f'>"
+        "<div style='display:flex;justify-content:space-between;font-size:12px;"
+        "color:#94a3b8;margin-bottom:4px'>"
+        "<span>💵 Hard Spending Cap</span>"
+        "<span>$" + f"{cap_status['current_spend']:.2f}" + " / $"
+        + f"{cap_status['hard_cap_usd']:.0f}" + "</span></div>"
+        "</div>", unsafe_allow_html=True
+    )
+    cap_val = st.slider(
+        "Set monthly cap ($)",
+        min_value=0, max_value=500, value=int(cap_status["hard_cap_usd"]),
+        step=10, key="cap_slider",
+        label_visibility="collapsed",
+    )
+    if cap_val != int(cap_status["hard_cap_usd"]):
+        set_spending_cap(username, float(cap_val))
+        st.rerun()
+
     if st.button("⬆ Upgrade Plan", key="upgrade_btn", use_container_width=True):
         st.session_state["show_upgrade"] = True
         st.rerun()
@@ -726,8 +765,21 @@ with tab1:
                 remaining = get_rate_limit_remaining(rl_key, max_requests=15, window=60)
                 st.error(f"⏳ Rate limit reached. Please wait before submitting another analysis. ({remaining} remaining)")
                 st.stop()
-
             with st.spinner("Scanning for threats..."):
+                # Consumption metering check
+                from src.database import consume_scan, get_spending_cap as _gsc
+                _scan_ok = consume_scan(username)
+                _cap = _gsc(username)
+                if not _scan_ok["allowed"]:
+                    st.error(
+                        "⛔ **Monthly scan limit reached.** "
+                        f"({_scan_ok['used']}/{_scan_ok['limit']} used). "
+                        "Purchase additional credits or upgrade your plan to continue."
+                    )
+                    st.stop()
+                if _cap["paused"]:
+                    st.error("⛔ **Hard spending cap reached.** Increase your cap in settings to continue.")
+                    st.stop()
                 results = analyze_email(email_text)
                 save_analysis(results, email_text)
                 log_usage(username, "analysis", results["risk_score"])
@@ -1357,64 +1409,129 @@ with tab1:
                     st.session_state.pop("honeypot", None)
                     st.rerun()
 
-        # Export
-        st.divider()
-        st.markdown("<div class='section-title'>📄 Export & AI Analysis</div>",
-                    unsafe_allow_html=True)
-        col_ai, col_pdf, col_stix = st.columns(3)
+        # ── Abrupt Visibility Cutoff Paywall Gate ──────────────────────────
+        user_tier = st.session_state.get("plan", "trial")
+        is_restricted = user_tier in ("trial", "starter") and results.get("risk_score", 0) >= 75
 
-        with col_ai:
-            if st.button("🤖 Generate AI Security Report",
-                         use_container_width=True, type="secondary"):
-                try:
-                    with st.spinner("AI is writing your security report..."):
-                        ai_report = generate_ai_report(email_text_saved, results)
-                    st.session_state["ai_report"] = ai_report
-                    save_analysis(results, email_text_saved, ai_report)
-                except Exception as e:
-                    st.error(f"AI analysis failed: {e}")
-
-        with col_pdf:
-            ai_report_text = st.session_state.get("ai_report", "")
-            pdf_bytes = generate_pdf_report(results, email_text_saved, ai_report_text)
-            sev_lower = results["severity"].lower()
-            st.download_button(
-                label="📥 Download PDF Report",
-                data=pdf_bytes,
-                file_name=f"phishguard_report_{sev_lower}.pdf",
-                mime="application/pdf",
-                use_container_width=True,
-                type="primary"
+        if is_restricted:
+            st.divider()
+            st.markdown(
+                "<div style='background:linear-gradient(145deg,#0a0f1a,#0f1a2a);"
+                "border:3px solid #eab308;border-radius:20px;padding:32px 28px;"
+                "text-align:center;margin:12px 0 24px 0;position:relative;overflow:hidden'>"
+                # Blur overlay background effect
+                "<div style='position:absolute;top:0;left:0;right:0;bottom:0;"
+                "background:rgba(10,15,26,0.85);backdrop-filter:blur(4px);z-index:0'></div>"
+                # Content on top
+                "<div style='position:relative;z-index:1'>"
+                "<div style='font-size:3rem;margin-bottom:8px'>🔒</div>"
+                "<div style='color:#f0f6ff;font-size:1.5rem;font-weight:800;"
+                "margin-bottom:4px'>Premium Analysis Restricted</div>"
+                "<div style='color:#94a3b8;font-size:0.9rem;margin-bottom:20px'>"
+                "AI Security Audit, Threat Links, and PDF Reports are locked on your current plan.</div>"
+                # Breach Cost ROI Calculator
+                "<div style='background:rgba(234,179,8,0.08);border:1px solid rgba(234,179,8,0.3);"
+                "border-radius:14px;padding:20px;margin:0 auto 20px auto;max-width:400px'>"
+                "<div style='color:#eab308;font-weight:700;font-size:1.1rem;margin-bottom:12px'>"
+                "💰 Breach Cost ROI Calculator</div>"
+                "<div style='color:#94a3b8;font-size:12px;margin-bottom:8px'>"
+                "Your company size:</div>"
+                + "<div style='margin:0 auto;max-width:300px'>__BREACH_SLIDER__</div>"
+                + "<div style='color:#e2e8f0;font-size:0.9rem;margin-top:12px'>"
+                "Estimated cost of a single successful BEC breach at your firm:</div>"
+                "<div style='color:#ef4444;font-size:2rem;font-weight:800;margin:8px 0'>"
+                "__BREACH_COST__</div>"
+                "<div style='color:#64748b;font-size:0.8rem'>"
+                "Protect your company today for just <strong>$99/mo</strong>.</div>"
+                "</div>"
+                "<a href='#billing-tab' style='display:inline-block;"
+                "background:linear-gradient(135deg,#eab308,#f59e0b);color:#0a0f1a;"
+                "padding:12px 40px;border-radius:12px;text-decoration:none;font-weight:700;"
+                "font-size:1rem'>⬆ Upgrade to Business Tier</a>"
+                "</div></div>",
+                unsafe_allow_html=False  # we build it below
             )
-
-        with col_stix:
-            import json as _json_stix
-            from src.stix_exporter import build_enterprise_stix_bundle
-            _att_result = st.session_state.get("att_scan_result")
-            _sender_anom = st.session_state.get("sender_anomaly")
-            _perplex = st.session_state.get("perplexity_result")
-            stix_bundle = build_enterprise_stix_bundle(
-                email_text=email_text_saved,
-                results=results,
-                osint_data=osint_data,
-                vt_results=vt_results,
-                attachment_result=_att_result,
-                sender_anomaly=_sender_anom,
-                perplexity_result=_perplex,
+            # Build breach cost slider + result dynamically
+            breach_employees = st.slider("Employees", 10, 500, 50, key="breach_slider",
+                                         label_visibility="collapsed")
+            breach_cost = breach_employees * 900
+            st.markdown(
+                f"<div style='text-align:center;margin:-20px 0 20px 0;"
+                f"background:#111827;border:1px solid #1e3a5f;border-radius:12px;"
+                f"padding:16px;max-width:400px;margin-left:auto;margin-right:auto'>"
+                f"<div style='color:#94a3b8;font-size:13px'>Estimated cost of a single "
+                f"successful BEC breach at your firm:</div>"
+                f"<div style='color:#ef4444;font-size:2.2rem;font-weight:800'>"
+                f"${breach_cost:,}</div>"
+                f"<div style='color:#64748b;font-size:11px;margin-top:4px'>"
+                f"Based on {breach_employees} employees × $900 avg cost per employee</div>"
+                f"</div>",
+                unsafe_allow_html=True
             )
-            stix_json = _json_stix.dumps(stix_bundle, indent=2)
-            st.download_button(
-                label="📤 Export STIX 2.1 Threat Intel",
-                data=stix_json,
-                file_name=f"phishguard_stix_{sev_lower}.json",
-                mime="application/json",
-                use_container_width=True,
-                type="secondary",
-            )
-
-        if "ai_report" in st.session_state:
-            st.markdown("<div class='section-title'>🤖 AI Security Analysis</div>",
+        else:
+            # Export — full access
+            st.divider()
+            st.markdown("<div class='section-title'>📄 Export & AI Analysis</div>",
                         unsafe_allow_html=True)
+            col_ai, col_pdf, col_stix = st.columns(3)
+
+            with col_ai:
+                if st.button("🤖 Generate AI Security Report",
+                             use_container_width=True, type="secondary"):
+                    try:
+                        with st.spinner("AI is writing your security report..."):
+                            ai_report = generate_ai_report(email_text_saved, results)
+                        st.session_state["ai_report"] = ai_report
+                        save_analysis(results, email_text_saved, ai_report)
+                    except Exception as e:
+                        st.error(f"AI analysis failed: {e}")
+
+            with col_pdf:
+                ai_report_text = st.session_state.get("ai_report", "")
+                # Check for consultant white-label
+                is_consultant = user_tier == "consultant"
+                wl_flag = st.session_state.get("whitelabel_pdf", False) and is_consultant
+                wl_logo = st.session_state.get("consultant_logo_path") if is_consultant else None
+                pdf_bytes = generate_pdf_report(results, email_text_saved, ai_report_text,
+                                                white_label=wl_flag, custom_logo_path=wl_logo)
+                sev_lower = results["severity"].lower()
+                st.download_button(
+                    label="📥 Download PDF Report",
+                    data=pdf_bytes,
+                    file_name=f"phishguard_report_{sev_lower}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True,
+                    type="primary"
+                )
+
+            with col_stix:
+                import json as _json_stix
+                from src.stix_exporter import build_enterprise_stix_bundle
+                _att_result = st.session_state.get("att_scan_result")
+                _sender_anom = st.session_state.get("sender_anomaly")
+                _perplex = st.session_state.get("perplexity_result")
+                stix_bundle = build_enterprise_stix_bundle(
+                    email_text=email_text_saved,
+                    results=results,
+                    osint_data=osint_data,
+                    vt_results=vt_results,
+                    attachment_result=_att_result,
+                    sender_anomaly=_sender_anom,
+                    perplexity_result=_perplex,
+                )
+                stix_json = _json_stix.dumps(stix_bundle, indent=2)
+                st.download_button(
+                    label="📤 Export STIX 2.1 Threat Intel",
+                    data=stix_json,
+                    file_name=f"phishguard_stix_{sev_lower}.json",
+                    mime="application/json",
+                    use_container_width=True,
+                    type="secondary",
+                )
+
+            if "ai_report" in st.session_state:
+                st.markdown("<div class='section-title'>🤖 AI Security Analysis</div>",
+                            unsafe_allow_html=True)
             st.markdown(st.session_state["ai_report"])
 
 

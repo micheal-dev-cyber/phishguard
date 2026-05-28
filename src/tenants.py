@@ -10,6 +10,7 @@ PLANS = {
     "trial":      {"analyses_per_month": 10,    "label": "Trial",      "price": "Free"},
     "starter":    {"analyses_per_month": 100,   "label": "Starter",    "price": "$29/mo"},
     "business":   {"analyses_per_month": 500,   "label": "Business",   "price": "$99/mo"},
+    "consultant": {"analyses_per_month": 2000,  "label": "Consultant", "price": "$149/mo"},
     "enterprise": {"analyses_per_month": 99999, "label": "Enterprise", "price": "Custom"},
 }
 
