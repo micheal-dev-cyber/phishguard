@@ -69,6 +69,8 @@ class EnvConfig:
     PGUSER: str = ""
     PGPASSWORD: str = ""
     PGDATABASE: str = ""
+    STRIPE_SECRET_KEY: str = ""
+    STRIPE_WEBHOOK_SECRET: str = ""
 
     def __post_init__(self):
         self.paddle_configured = bool(
@@ -124,6 +126,8 @@ def load_env() -> EnvConfig:
         PGUSER=_read_env("PGUSER"),
         PGPASSWORD=_read_env("PGPASSWORD"),
         PGDATABASE=_read_env("PGDATABASE"),
+        STRIPE_SECRET_KEY=_read_env("STRIPE_SECRET_KEY"),
+        STRIPE_WEBHOOK_SECRET=_read_env("STRIPE_WEBHOOK_SECRET"),
     )
 
 
