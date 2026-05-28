@@ -9,9 +9,12 @@
 # ──────────────────────────────────────────────────────────────────────────────
 
 # ── Web framework ──────────────────────────────────────────────────────────────
-# NOTE: streamlit is NOT listed here — HF Spaces with SDK: streamlit pre-installs
-# it at version 1.41.1.  Listing it causes version mismatch between server-side
-# Python code and client-side JS assets served by HF.
+# NOTE: Must be >=1.45.0 — version 1.44.0 and earlier have a race condition that
+# causes "Bad message format / SessionInfo before initialization" on reconnect
+# (streamlit/issues/9767, fixed in #9886 via 1.45.0).
+# HF Spaces SDK >=1.23.0 uses upstream PyPI (JS + Python from same package), so
+# there is no version mismatch between server-side and client-side assets.
+streamlit>=1.45.0,<2.0.0
 
 # ── LLM / AI APIs ─────────────────────────────────────────────────────────────
 openai>=1.30.0,<2.0.0
