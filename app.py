@@ -626,6 +626,14 @@ with tab1:
             from src.perplexity_analyzer import compute_perplexity_score
             perplexity_result = compute_perplexity_score(email_text)
 
+            # ── AitM & OTP Harvester Detector ─────────────────────────────
+            from src.aitm_detector import detect_aitm_harvester
+            aitm_result = detect_aitm_harvester(
+                email_text=email_text,
+                urls=results.get("urls_found", []),
+                osint_data=osint_data,
+            )
+
             # ── Combined Threat Score (linguistic + VT reputation) ─────────
             combined_score = compute_combined_threat_score(
                 results.get("risk_score", 0),
@@ -688,6 +696,7 @@ with tab1:
             st.session_state["dna_match"]        = dna_match
             st.session_state["dna_known"]        = dna_known
             st.session_state["perplexity_result"] = perplexity_result
+            st.session_state["aitm_result"]      = aitm_result
             st.session_state.pop("ai_report", None)
 
     if "results" in st.session_state:
@@ -696,6 +705,7 @@ with tab1:
         vt_results       = st.session_state.get("vt_results", [])
         osint_data       = st.session_state.get("osint_data", {})
         header_auth      = st.session_state.get("header_auth", {})
+        aitm_result      = st.session_state.get("aitm_result", {})
 
         st.divider()
         quarantine_badge = ""
@@ -772,6 +782,33 @@ with tab1:
                 f"</div>",
                 unsafe_allow_html=True,
             )
+
+        # ── AitM & OTP Harvester Detection ─────────────────────────────────
+        if aitm_result and aitm_result.get("detected"):
+            _ac = {"CRITICAL": "#ff4444", "HIGH": "#ff8800", "MEDIUM": "#ffaa00", "LOW": "#94a3b8"}.get(
+                aitm_result.get("severity", ""), "#94a3b8"
+            )
+            _ai = {"CRITICAL": "🔴", "HIGH": "🟠", "MEDIUM": "🟡", "LOW": "⚪"}.get(
+                aitm_result.get("severity", ""), "⚪"
+            )
+            st.markdown(
+                f"<div style='background:#1a0a0a;border:1px solid {_ac};border-radius:10px;"
+                f"padding:12px 18px;margin:10px 0'>"
+                f"<div style='display:flex;align-items:center;gap:10px'>"
+                f"<span style='font-size:1.3rem'>{_ai} 🕵️</span>"
+                f"<div><strong style='color:{_ac}'>{aitm_result.get('label', '')}</strong>"
+                f"<br><span style='color:#94a3b8;font-size:13px'>"
+                f"Confidence: {aitm_result['confidence']}/100 · "
+                f"URL: {aitm_result.get('url_score',0)} · "
+                f"Body: {aitm_result.get('body_score',0)} · "
+                f"Domain: {aitm_result.get('domain_score',0)}</span></div></div>",
+                unsafe_allow_html=True,
+            )
+            if aitm_result.get("indicators"):
+                with st.expander(f"📋 AitM Indicators ({len(aitm_result['indicators'])})"):
+                    for ind in aitm_result["indicators"]:
+                        st.markdown(f"- {ind}")
+            st.markdown("</div>", unsafe_allow_html=True)
 
         # ── Email Authentication (SPF/DKIM/DMARC) ──────────────────────────
         if header_auth:
@@ -1170,7 +1207,7 @@ with tab1:
         st.divider()
         st.markdown("<div class='section-title'>📄 Export & AI Analysis</div>",
                     unsafe_allow_html=True)
-        col_ai, col_pdf = st.columns(2)
+        col_ai, col_pdf, col_stix = st.columns(3)
 
         with col_ai:
             if st.button("🤖 Generate AI Security Report",
@@ -1196,6 +1233,31 @@ with tab1:
                 type="primary"
             )
 
+        with col_stix:
+            import json as _json_stix
+            from src.stix_exporter import build_enterprise_stix_bundle
+            _att_result = st.session_state.get("att_scan_result")
+            _sender_anom = st.session_state.get("sender_anomaly")
+            _perplex = st.session_state.get("perplexity_result")
+            stix_bundle = build_enterprise_stix_bundle(
+                email_text=email_text_saved,
+                results=results,
+                osint_data=osint_data,
+                vt_results=vt_results,
+                attachment_result=_att_result,
+                sender_anomaly=_sender_anom,
+                perplexity_result=_perplex,
+            )
+            stix_json = _json_stix.dumps(stix_bundle, indent=2)
+            st.download_button(
+                label="📤 Export STIX 2.1 Threat Intel",
+                data=stix_json,
+                file_name=f"phishguard_stix_{sev_lower}.json",
+                mime="application/json",
+                use_container_width=True,
+                type="secondary",
+            )
+
         if "ai_report" in st.session_state:
             st.markdown("<div class='section-title'>🤖 AI Security Analysis</div>",
                         unsafe_allow_html=True)
@@ -1206,38 +1268,101 @@ with tab1:
 # TAB 2 — ENTERPRISE ANALYTICS DASHBOARD
 # ═════════════════════════════════════════════════════════════════════════════
 with tab2:
-    st.markdown("## 📈 Enterprise Analytics")
-    st.caption("Real-time threat intelligence and scanning metrics.")
-    if st.button("🔄 Refresh Data", key="refresh_analytics"):
-        _cached_history.clear()
-        st.rerun()
+    st.markdown("## 📈 SOC Analytics Dashboard")
+    st.caption("Real-time threat intelligence, security metrics, and phishing trend analysis.")
+    col_refresh, col_range = st.columns([1, 3])
+    with col_refresh:
+        if st.button("🔄 Refresh", key="refresh_analytics"):
+            _cached_history.clear()
+            st.rerun()
+    with col_range:
+        lookback_days = st.selectbox(
+            "Time range", ["All Time", "Last 30 Days", "Last 7 Days"],
+            index=0, key="soc_range", label_visibility="collapsed",
+        )
     st.divider()
 
     history = _cached_history(500)
     if not history:
         st.info("No scan data yet. Go to Analyze and scan your first email.")
     else:
-        # ── Compute metrics ────────────────────────────────────────────────
         scores = [row[1] for row in history]
         severities = [row[2] for row in history]
         timestamps = [row[0] for row in history]
 
+        if lookback_days != "All Time":
+            limit = 30 if "30" in lookback_days else 7
+            cutoff = (datetime.now() - __import__("datetime").timedelta(days=limit)).strftime("%Y-%m-%d")
+            filtered = [(ts, sc, sev) for ts, sc, sev, *_ in history if ts[:10] >= cutoff]
+            if filtered:
+                scores = [r[1] for r in filtered]
+                severities = [r[2] for r in filtered]
+                timestamps = [r[0] for r in filtered]
+
         total_scans = len(history)
-        avg_score = round(sum(scores) / total_scans, 1) if total_scans else 0
+        filtered_count = len(scores)
+        avg_score = round(sum(scores) / filtered_count, 1) if filtered_count else 0
         critical_count = sum(1 for s in severities if s == "CRITICAL")
         high_count = sum(1 for s in severities if s == "HIGH")
+        medium_count = sum(1 for s in severities if s == "MEDIUM")
         safe_count = sum(1 for s in severities if s == "LOW")
+        threats_neutralized = critical_count + high_count
 
-        # ── KPI cards ──────────────────────────────────────────────────────
-        col_k1, col_k2, col_k3, col_k4 = st.columns(4)
-        col_k1.metric("Total Scans", total_scans)
+        # ── SOC KPI cards ──────────────────────────────────────────────────
+        st.markdown("#### 🎯 Key SOC Metrics")
+        col_k1, col_k2, col_k3, col_k4, col_k5 = st.columns(5)
+        col_k1.metric("Total Scans", filtered_count, delta=total_scans - filtered_count if filtered_count != total_scans else None)
         col_k2.metric("Avg Risk Score", f"{avg_score}/100")
-        col_k3.metric("Critical Threats", critical_count)
-        col_k4.metric("Safe Emails", safe_count)
+        col_k3.metric("Threats Neutralized", threats_neutralized, delta_color="inverse")
+        col_k4.metric("Critical", critical_count, delta_color="inverse")
+        col_k5.metric("Safe %", f"{round(safe_count / filtered_count * 100, 1) if filtered_count else 0}%")
         st.divider()
 
-        # ── Line chart: daily scan volumes and threat distribution ─────────
-        st.markdown("#### 📅 Daily Scan Volume & Threat Distribution")
+        # ── Row: Donut (threat distribution) + Bar (threat level breakdown) ─
+        col_d1, col_d2 = st.columns([1, 1])
+        with col_d1:
+            st.markdown("#### 🛡 Threat Level Distribution")
+            fig_donut = go.Figure(go.Pie(
+                labels=["Safe (LOW)", "Medium", "High", "Critical"],
+                values=[safe_count, medium_count, high_count, critical_count],
+                hole=0.5,
+                marker_colors=["#44aa44", "#ffaa00", "#ff8800", "#ff4444"],
+                textinfo="label+percent",
+                textfont=dict(size=11, color="#e2e8f0"),
+                rotation=90,
+                pull=[0, 0, 0.05, 0.08],
+            ))
+            fig_donut.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)", font_color="#e2e8f0",
+                height=290, margin=dict(t=10, b=10, l=10, r=10),
+                showlegend=False,
+            )
+            st.plotly_chart(fig_donut, use_container_width=True)
+
+        with col_d2:
+            st.markdown("#### 📊 Threat Severity Counts")
+            fig_bar_sev = go.Figure(go.Bar(
+                x=["Safe", "Medium", "High", "Critical"],
+                y=[safe_count, medium_count, high_count, critical_count],
+                marker_color=["#44aa44", "#ffaa00", "#ff8800", "#ff4444"],
+                text=[str(safe_count), str(medium_count), str(high_count), str(critical_count)],
+                textposition="outside",
+                textfont=dict(color="#e2e8f0", size=13),
+            ))
+            fig_bar_sev.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                font_color="#e2e8f0", height=290,
+                margin=dict(t=10, b=10, l=10, r=10),
+                xaxis=dict(gridcolor="#1e3a5f"),
+                yaxis=dict(gridcolor="#1e3a5f", title="Count"),
+                showlegend=False,
+            )
+            st.plotly_chart(fig_bar_sev, use_container_width=True)
+
+        st.divider()
+
+        # ── Timeline chart: phishing trends ────────────────────────────────
+        st.markdown("#### 📅 Phishing Trend Timeline")
         from collections import Counter
         daily_counts = Counter()
         daily_critical = Counter()
@@ -1256,107 +1381,124 @@ with tab2:
             crit_vals  = [daily_critical.get(d, 0) for d in days_sorted]
             high_vals  = [daily_high.get(d, 0) for d in days_sorted]
 
-            fig_line = go.Figure()
-            fig_line.add_trace(go.Scatter(
-                x=days_sorted, y=total_vals, mode="lines+markers",
-                name="Total Scans", line=dict(color="#60a5fa", width=2),
-                fill="tozeroy", fillcolor="rgba(96, 165, 250, 0.08)"
-            ))
-            fig_line.add_trace(go.Scatter(
-                x=days_sorted, y=crit_vals, mode="lines+markers",
-                name="Critical", line=dict(color="#ff4444", width=2)
-            ))
-            fig_line.add_trace(go.Scatter(
-                x=days_sorted, y=high_vals, mode="lines+markers",
-                name="High", line=dict(color="#ff8800", width=2)
-            ))
-            fig_line.update_layout(
-                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                font_color="#e2e8f0", height=300,
-                margin=dict(t=20, b=20, l=20, r=20),
-                legend=dict(orientation="h", y=1.1),
-                xaxis=dict(gridcolor="#1e3a5f", tickangle=-45),
-                yaxis=dict(gridcolor="#1e3a5f", title="Count"),
-            )
-            st.plotly_chart(fig_line, use_container_width=True)
+            col_t1, col_t2 = st.columns([3, 1])
+            with col_t1:
+                fig_line = go.Figure()
+                fig_line.add_trace(go.Scatter(
+                    x=days_sorted, y=total_vals, mode="lines+markers",
+                    name="Total Scans", line=dict(color="#60a5fa", width=2),
+                    fill="tozeroy", fillcolor="rgba(96, 165, 250, 0.08)"
+                ))
+                fig_line.add_trace(go.Scatter(
+                    x=days_sorted, y=crit_vals, mode="lines+markers",
+                    name="Critical", line=dict(color="#ff4444", width=2)
+                ))
+                fig_line.add_trace(go.Scatter(
+                    x=days_sorted, y=high_vals, mode="lines+markers",
+                    name="High", line=dict(color="#ff8800", width=2)
+                ))
+                fig_line.update_layout(
+                    paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                    font_color="#e2e8f0", height=320,
+                    margin=dict(t=10, b=20, l=20, r=20),
+                    legend=dict(orientation="h", y=1.1),
+                    xaxis=dict(gridcolor="#1e3a5f", tickangle=-45),
+                    yaxis=dict(gridcolor="#1e3a5f", title="Count"),
+                    hovermode="x unified",
+                )
+                st.plotly_chart(fig_line, use_container_width=True)
+
+            with col_t2:
+                st.markdown("##### 📊 Summary")
+                st.metric("Total Threats", threats_neutralized)
+                today_str = datetime.now().strftime("%Y-%m-%d")
+                today_threats = sum(1 for ts, sev in zip(timestamps, severities) if ts[:10] == today_str and sev in ("CRITICAL", "HIGH"))
+                st.metric("Today's Threats", today_threats)
+                highest_risk = max(scores) if scores else 0
+                st.metric("Highest Risk", f"{highest_risk}/100")
+                recent_avg = round(sum(scores[-20:]) / min(len(scores), 20), 1) if scores else 0
+                st.metric("Last 20 Avg", f"{recent_avg}/100")
 
         st.divider()
 
-        # ── Pie: Safe vs Phishing ──────────────────────────────────────────
-        col_p1, col_p2 = st.columns(2)
-        with col_p1:
-            st.markdown("#### 🛡 Safe vs Phishing Encounters")
-            phish_count = critical_count + high_count
-            medium_count = sum(1 for s in severities if s == "MEDIUM")
-            fig_pie = go.Figure(go.Pie(
-                labels=["Safe (LOW)", "Medium Risk", "High Risk", "Critical"],
-                values=[safe_count, medium_count, high_count, critical_count],
-                hole=0.45,
-                marker_colors=["#44aa44", "#ffaa00", "#ff8800", "#ff4444"],
-                textinfo="label+percent",
-                textfont=dict(size=11, color="#e2e8f0"),
-            ))
-            fig_pie.update_layout(
-                paper_bgcolor="rgba(0,0,0,0)",
-                font_color="#e2e8f0", height=280,
-                margin=dict(t=10, b=10, l=10, r=10),
-                showlegend=False,
-            )
-            st.plotly_chart(fig_pie, use_container_width=True)
+        # ── Bottom row: XAI triggers + AI authorship trend ─────────────────
+        col_b1, col_b2 = st.columns(2)
+        with col_b1:
+            st.markdown("#### 🧠 Psychological Triggers (Last Scan)")
+            from src.xai_analyzer import TRIGGER_DEFINITIONS
+            last_xai = st.session_state.get("xai_result", {})
+            if last_xai and last_xai.get("triggers"):
+                trig_labels = [t["label"] for t in last_xai["triggers"]]
+                trig_scores = [t["raw_score"] for t in last_xai["triggers"]]
+                trig_colors = [t["severity_color"] for t in last_xai["triggers"]]
 
-        # ── Horizontal bar: psychological triggers ─────────────────────────
-        with col_p2:
-            st.markdown("#### 🧠 Most Frequent Psychological Triggers")
-            # Compute trigger frequencies from xai_analyzer
-            st.info(
-                "Trigger frequency data recorded per scan. "
-                "Run analyses with XAI enabled to populate this chart."
-            )
+                fig_bar = go.Figure(go.Bar(
+                    x=trig_scores[::-1],
+                    y=trig_labels[::-1],
+                    orientation="h",
+                    marker_color=trig_colors[::-1],
+                    text=[f"{s}/100" for s in trig_scores[::-1]],
+                    textposition="outside",
+                ))
+                fig_bar.update_layout(
+                    paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                    font_color="#e2e8f0", height=280,
+                    margin=dict(t=10, b=10, l=10, r=60),
+                    xaxis=dict(range=[0, 105], gridcolor="#1e3a5f", title="Score"),
+                    yaxis=dict(gridcolor="#1e3a5f"),
+                )
+                st.plotly_chart(fig_bar, use_container_width=True)
+            else:
+                st.info("Run an analysis with XAI enabled to see trigger data.")
 
-        st.divider()
-
-        # ── Trigger breakdown bar chart (computed from stored session) ─────
-        st.markdown("#### 📊 Trigger Category Breakdown (Last Analysis)")
-        from src.xai_analyzer import TRIGGER_DEFINITIONS
-        last_xai = st.session_state.get("xai_result", {})
-        if last_xai and last_xai.get("triggers"):
-            trig_labels = [t["label"] for t in last_xai["triggers"]]
-            trig_scores = [t["raw_score"] for t in last_xai["triggers"]]
-            trig_colors = [t["severity_color"] for t in last_xai["triggers"]]
-
-            fig_bar = go.Figure(go.Bar(
-                x=trig_scores[::-1],
-                y=trig_labels[::-1],
-                orientation="h",
-                marker_color=trig_colors[::-1],
-                text=[f"{s}/100" for s in trig_scores[::-1]],
-                textposition="outside",
-            ))
-            fig_bar.update_layout(
-                title="Psychological Trigger Intensity (from XAI engine)",
-                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                font_color="#e2e8f0", height=300,
-                margin=dict(t=30, b=10, l=10, r=60),
-                xaxis=dict(range=[0, 105], gridcolor="#1e3a5f", title="Score"),
-                yaxis=dict(gridcolor="#1e3a5f"),
-            )
-            st.plotly_chart(fig_bar, use_container_width=True)
-
-        st.divider()
-
-        # ── Threat trend mini-table ────────────────────────────────────────
-        with st.expander("📋 Recent Threat Summary (Last 20 Scans)"):
+        with col_b2:
+            st.markdown("#### 🤖 AI-Generated Text Trend")
+            st.caption("Probability that scanned emails were AI-written (last 20 scans).")
+            _perplex_hist = []
             for row in history[:20]:
+                _p = st.session_state.get(f"_perplex_{row[0]}", None)
+                _perplex_hist.append(_p)
+            if any(v is not None for v in _perplex_hist):
+                valid = [(i, v) for i, v in enumerate(_perplex_hist) if v is not None]
+                if len(valid) >= 2:
+                    xs, ys = zip(*valid)
+                    fig_ai = go.Figure(go.Scatter(
+                        x=list(xs), y=list(ys), mode="lines+markers",
+                        line=dict(color="#aa44ff", width=2),
+                        fill="tozeroy", fillcolor="rgba(170, 68, 255, 0.08)",
+                    ))
+                    fig_ai.add_hline(y=50, line_dash="dash", line_color="#ff8800",
+                                     annotation_text="Threshold")
+                    fig_ai.update_layout(
+                        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                        font_color="#e2e8f0", height=280,
+                        margin=dict(t=10, b=10, l=10, r=10),
+                        xaxis=dict(gridcolor="#1e3a5f", title="Scan #"),
+                        yaxis=dict(gridcolor="#1e3a5f", title="AI Probability", range=[0, 100]),
+                        showlegend=False,
+                    )
+                    st.plotly_chart(fig_ai, use_container_width=True)
+                else:
+                    st.info("More AI-text data needed.")
+            else:
+                st.info("Run analyses to populate AI authorship trend.")
+
+        st.divider()
+
+        # ── Recent threats table ────────────────────────────────────────────
+        with st.expander(f"📋 Threat Log — Recent {min(filtered_count, 50)} Scans"):
+            _sev_emoji = {"CRITICAL": "🔴", "HIGH": "🟠", "MEDIUM": "🟡", "LOW": "🟢"}
+            for row in history[:50]:
                 ts, sc, sev, kw, su, preview = row
-                emoji = {"CRITICAL": "🔴", "HIGH": "🟠", "MEDIUM": "🟡", "LOW": "🟢"}.get(sev, "⚪")
+                emoji = _sev_emoji.get(sev, "⚪")
                 st.markdown(
                     f"{emoji} **{sev}** | Score {sc}/100 | {ts[:16]} | "
-                    f"Keywords: {kw} | URLs: {su}"
+                    f"KW: {kw} | URLs: {su} | `{preview[:50]}`"
                 )
 
         # ── Weekly Digest ───────────────────────────────────────────────────
         st.divider()
-        st.markdown("#### 📬 Weekly Digest")
+        st.markdown("#### 📬 Weekly Digest (Last 7 Days)")
         st.caption("Summary of the last 7 days.")
         weekly_scores = [row[1] for row in history if (datetime.now() - datetime.strptime(row[0][:10], "%Y-%m-%d")).days < 7] if history else []
         if weekly_scores:
@@ -1978,6 +2120,43 @@ with billing_tab:
         else:
             st.info("✅ Gateway healthy — within rate limits.")
 
+    # ── API Key Management ─────────────────────────────────────────────────
+    st.divider()
+    st.markdown("### 🔑 API Key Management")
+    st.markdown(
+        "<p style='color:#64748b;font-size:13px'>Generate and manage X-PhishGuard-Key "
+        "credentials for programmatic access to the API proxy.</p>",
+        unsafe_allow_html=True
+    )
+
+    from src.api_keys import create_api_key, revoke_api_key, list_user_keys
+
+    user_keys = list_user_keys(username)
+    if user_keys:
+        st.markdown("**Your API Keys:**")
+        for k in user_keys:
+            col_k1, col_k2, col_k3, col_k4 = st.columns([3, 1, 1, 1])
+            col_k1.code(k["key"], language="text")
+            col_k2.markdown(f"`{k['tier']}`")
+            col_k3.markdown(f"_{k['status']}_")
+            if col_k4.button("🗑 Revoke", key=f"revoke_{k['id']}"):
+                revoke_api_key(k["id"])
+                st.rerun()
+    else:
+        st.info("No API keys yet. Generate one below.")
+
+    if st.button("🔑 Generate New API Key", type="primary", use_container_width=True):
+        new_key = create_api_key(username, plan)
+        st.session_state["new_api_key"] = new_key
+        st.rerun()
+
+    if st.session_state.get("new_api_key"):
+        st.success("Key generated! Copy it now — it won't be shown again.")
+        st.code(st.session_state["new_api_key"], language="text")
+        if st.button("✅ Done — Clear key from screen"):
+            st.session_state.pop("new_api_key", None)
+            st.rerun()
+
     st.divider()
     st.markdown(
         "<p style='color:#475569;font-size:0.8rem;text-align:center'>"
@@ -2206,117 +2385,260 @@ with training_tab:
 
     sub_tab1, sub_tab2 = st.tabs(["🎣 Phishing Simulator", "📷 Screenshot Scanner"])
 
-    # ── Sub-tab 1: Phishing Simulator ────────────────────────────────────────
+    # ── Sub-tab 1: Phishing Simulation / Campaign Engine ───────────────────
     with sub_tab1:
-        st.markdown("### 🎣 Phishing Simulation Generator")
-        st.markdown(
-            "<p style='color:#64748b;margin-top:-8px'>Generate context-specific "
-            "phishing simulations targeting real corporate departments. "
-            "Use these to test and train your team.</p>",
-            unsafe_allow_html=True
-        )
-
-        col_sim_dept, col_sim_vec = st.columns(2)
-        with col_sim_dept:
-            department = st.selectbox(
-                "Target Department",
-                options=["Finance", "HR", "IT Support"],
-                index=0,
-                label_visibility="collapsed",
-                key="sim_dept"
-            )
-        with col_sim_vec:
-            attack_vector = st.selectbox(
-                "Attack Vector",
-                options=["Urgent Invoice", "Password Reset", "Fake HR Policy"],
-                index=0,
-                label_visibility="collapsed",
-                key="sim_vector"
+        if is_admin:
+            # ── Enterprise Campaign Engine for Admins ──────────────────────
+            from src.campaign_engine import (
+                CAMPAIGN_TEMPLATES, generate_llm_template,
+                launch_campaign, get_campaign_results,
+                save_template, list_templates, delete_template,
             )
 
-        dept_icons = {"Finance": "🏦", "HR": "📋", "IT Support": "🖥"}
-        vec_icons = {"Urgent Invoice": "📄", "Password Reset": "🔑", "Fake HR Policy": "📜"}
-
-        st.markdown(
-            f"<div style='background:#0f172a;border:1px solid #1e3a5f;"
-            f"border-radius:10px;padding:14px 18px;margin:8px 0 16px 0;"
-            f"color:#94a3b8;font-size:13px'>"
-            f"Scenario: {dept_icons.get(department, '')} <b>{department}</b> "
-            f"via {vec_icons.get(attack_vector, '')} <b>{attack_vector}</b></div>",
-            unsafe_allow_html=True
-        )
-
-        if st.button("🎲 Generate Simulation", type="primary", use_container_width=True):
-            with st.spinner("Generating context-specific phishing simulation..."):
-                sim = simulate_phishing(department, attack_vector)
-            st.session_state["simulation"] = sim
-            st.session_state["sim_reveal"] = False
-
-        sim = st.session_state.get("simulation")
-        if sim:
-            st.divider()
-            st.markdown("### 📧 Simulated Email")
-
-            col_sim1, col_sim2 = st.columns([1, 3])
-            with col_sim1:
-                st.markdown("**From:**")
-                st.markdown("**Subject:**")
-                st.markdown("**Body:**")
-            with col_sim2:
-                st.markdown(f"`{sim.get('sender', 'unknown@example.com')}`")
-                st.markdown(f"**{sim.get('subject', '(no subject)')}**")
-                st.markdown(
-                    "<div style='background:#0f172a;border:1px solid #1e3a5f;"
-                    "border-radius:10px;padding:16px;font-family:monospace;"
-                    "font-size:13px;color:#94a3b8;line-height:1.6;margin-top:4px;"
-                    "max-height:300px;overflow-y:auto'>"
-                    + sim.get("body", "").replace("\n", "<br>") +
-                    "</div>",
-                    unsafe_allow_html=True
-                )
-
+            st.markdown("## 🎣 Enterprise Phishing Campaign Engine")
+            st.markdown(
+                "<p style='color:#64748b;margin-top:-8px'>Create, launch, and monitor "
+                "corporate phishing simulation campaigns with open/click tracking.</p>",
+                unsafe_allow_html=True
+            )
             st.divider()
 
-            reveal = st.session_state.get("sim_reveal", False)
-            if not reveal:
-                if st.button("🔍 Reveal Phishing Clues", type="primary", use_container_width=True):
-                    st.session_state["sim_reveal"] = True
-                    st.rerun()
-            else:
-                clues = sim.get("clues", [])
-                remediation = sim.get("remediation", "")
+            camp_t1, camp_t2, camp_t3 = st.tabs(["📝 Templates", "🚀 Launch Campaign", "📊 Results"])
 
-                st.markdown("### 🚩 Phishing Indicators")
-                for clue in clues:
-                    st.markdown(
-                        "<div style='background:#2a0a0a;border:1px solid #ff444444;"
-                        "border-radius:8px;padding:10px 14px;margin:6px 0;"
-                        "color:#ff8888;font-size:13px'>🚨 " + clue + "</div>",
-                        unsafe_allow_html=True
-                    )
-
-                st.markdown("### 🛡️ Remediation")
-                st.success(remediation)
+            # ── Templates ───────────────────────────────────────────────────
+            with camp_t1:
+                st.markdown("### Template Library")
+                saved_templates = list_templates()
+                if saved_templates:
+                    for t in saved_templates:
+                        with st.expander(f"{' 📜'} {t['name']}", expanded=False):
+                            st.markdown(f"**Subject:** {t.get('subject', 'N/A')}")
+                            st.markdown(f"**Body preview:** `{t.get('body', '')[:200]}...`")
+                            st.markdown(f"**Category:** {t.get('category', 'General')}")
+                            if st.button(f"🗑 Delete", key=f"del_tmpl_{t['id']}"):
+                                delete_template(t["id"])
+                                st.rerun()
+                else:
+                    st.info("No saved templates yet. Use the builder below.")
 
                 st.divider()
-                st.markdown("### 📊 What to Look For")
+                st.markdown("### Build Template")
+                tmpl_name = st.text_input("Template Name", key="tmpl_name")
+                tmpl_category = st.selectbox("Category", ["Fake Invoice", "Password Reset", "Shared Document", "Voicemail", "Package Delivery"], key="tmpl_cat")
+                tmpl_sender = st.text_input("Sender Email (spoofed)", "noreply@acme-verify.com", key="tmpl_sender")
+                tmpl_subject = st.text_input("Email Subject", "Your invoice is overdue", key="tmpl_subj")
+                tmpl_body = st.text_area("Email Body (plain text)", height=200, key="tmpl_body")
+
+                col_t1, col_t2 = st.columns(2)
+                with col_t1:
+                    if st.button("💾 Save Template", type="primary", use_container_width=True):
+                        save_template(tmpl_name, tmpl_category, tmpl_sender, tmpl_subject, tmpl_body)
+                        st.success(f"Template '{tmpl_name}' saved!")
+                        st.rerun()
+                with col_t2:
+                    if st.button("🤖 Generate with AI", use_container_width=True):
+                        with st.spinner("Generating template via LLM..."):
+                            generated = generate_llm_template(tmpl_category)
+                            st.session_state["generated_template"] = generated
+                        st.rerun()
+
+                if st.session_state.get("generated_template"):
+                    gen = st.session_state["generated_template"]
+                    st.markdown("### AI-Generated Preview")
+                    st.markdown(f"**From:** `{gen.get('sender', '')}`")
+                    st.markdown(f"**Subject:** **{gen.get('subject', '')}**")
+                    st.markdown(
+                        "<div style='background:#0f172a;border:1px solid #1e3a5f;"
+                        "border-radius:10px;padding:16px;font-family:monospace;"
+                        "font-size:13px;color:#94a3b8;max-height:300px;overflow-y:auto'>"
+                        + gen.get("body", "").replace("\n", "<br>") + "</div>",
+                        unsafe_allow_html=True
+                    )
+                    if st.button("📥 Save Generated Template", use_container_width=True):
+                        save_template(
+                            f"AI: {gen.get('subject', '')}",
+                            tmpl_category,
+                            gen.get("sender", ""),
+                            gen.get("subject", ""),
+                            gen.get("body", ""),
+                        )
+                        st.success("AI-generated template saved!")
+                        st.rerun()
+
+            # ── Launch Campaign ─────────────────────────────────────────────
+            with camp_t2:
+                st.markdown("### Launch Campaign")
+
+                all_templates = list_templates()
+                template_options = [f"{t['id']}: {t['name']}" for t in all_templates]
+                if not template_options:
+                    st.warning("Create a template first in the Templates tab.")
+                    st.stop()
+
+                selected_template = st.selectbox("Select Template", template_options, key="camp_tmpl")
+
+                st.markdown("#### Target Recipients")
                 st.markdown(
-                    "- **Urgency tactics** — phrases like 'act now', 'limited time', "
-                    "'suspended' are red flags\n"
-                    "- **Spoofed domains** — check the sender domain carefully, "
-                    "phishers use similar-looking addresses\n"
-                    "- **Generic greetings** — real companies use your name\n"
-                    "- **Suspicious links** — hover before clicking, check the real URL\n"
-                    "- **Requests for credentials** — legitimate companies never ask "
-                    "for passwords or personal info\n"
-                    "- **Poor grammar/spelling** — many phishing emails originate "
-                    "from non-native speakers"
+                    "<p style='color:#64748b;font-size:13px'>Enter one email per line, "
+                    "or paste a comma-separated list.</p>", unsafe_allow_html=True
+                )
+                target_input = st.text_area(
+                    "Recipients",
+                    "alice@company.com\nbob@company.com",
+                    height=100, key="camp_targets"
                 )
 
-                if st.button("🔄 Try Another Scenario", use_container_width=True):
-                    st.session_state.pop("simulation", None)
-                    st.session_state.pop("sim_reveal", None)
+                targets = [t.strip() for t in target_input.replace(",", "\n").split("\n") if t.strip()]
+                st.markdown(f"**{len(targets)} recipient(s)**")
+
+                smtp_server = st.text_input("SMTP Server", os.getenv("SMTP_HOST", "smtp.example.com"), key="camp_smtp")
+                smtp_port = st.number_input("SMTP Port", value=int(os.getenv("SMTP_PORT", "587")), key="camp_port")
+                smtp_user = st.text_input("SMTP Username", os.getenv("SMTP_USER", ""), key="camp_user")
+                smtp_pass = st.text_input("SMTP Password", type="password", key="camp_pass")
+
+                if st.button("🚀 Launch Campaign", type="primary", use_container_width=True):
+                    tmpl_id = int(selected_template.split(":")[0])
+                    result = launch_campaign(
+                        template_id=tmpl_id,
+                        target_emails=targets,
+                        smtp_server=smtp_server,
+                        smtp_port=int(smtp_port),
+                        smtp_username=smtp_user,
+                        smtp_password=smtp_pass,
+                    )
+                    st.session_state["campaign_result"] = result
                     st.rerun()
+
+                if st.session_state.get("campaign_result"):
+                    cres = st.session_state["campaign_result"]
+                    if cres.get("status") == "launched":
+                        st.success(
+                            f"Campaign **{cres.get('campaign_id')}** launched! "
+                            f"{cres.get('emails_sent', 0)} emails sent."
+                        )
+                    else:
+                        st.error(f"Launch failed: {cres.get('error', 'Unknown error')}")
+
+            # ── Results ─────────────────────────────────────────────────────
+            with camp_t3:
+                st.markdown("### Campaign Results")
+                results = get_campaign_results()
+                if isinstance(results, list) and results:
+                    for r in results:
+                        total = r.get("total_targets", 0)
+                        opened = r.get("opened_count", 0)
+                        clicked = r.get("clicked_count", 0)
+                        open_rate = (opened / total * 100) if total else 0
+                        click_rate = (clicked / total * 100) if total else 0
+
+                        with st.expander(
+                            f"📊 Campaign #{r['id']} — {r.get('template_name', 'N/A')} "
+                            f"({open_rate:.0f}% open, {click_rate:.0f}% click)",
+                            expanded=False
+                        ):
+                            st.markdown(f"**Launched:** {r.get('launched_at', 'N/A')}")
+                            st.markdown(f"**Total targets:** {total}")
+                            st.markdown(f"**Opened:** {opened}")
+                            st.markdown(f"**Clicked:** {clicked}")
+                            st.progress(open_rate / 100, text=f"Open rate: {open_rate:.1f}%")
+                            st.progress(click_rate / 100, text=f"Click rate: {click_rate:.1f}%")
+
+                            st.markdown("---")
+                            st.markdown("#### Per-Target Breakdown")
+                            targets_list = r.get("targets", [])
+                            if targets_list:
+                                import pandas as pd
+                                df = pd.DataFrame(targets_list)
+                                st.dataframe(
+                                    df[["email", "opened", "clicked"]],
+                                    use_container_width=True, hide_index=True,
+                                )
+                else:
+                    st.info("No campaigns launched yet.")
+
+        else:
+            # ── Non-admin: Simple Simulation Generator ──────────────────────
+            st.markdown("### 🎣 Phishing Simulation Generator")
+            st.markdown(
+                "<p style='color:#64748b;margin-top:-8px'>Generate context-specific "
+                "phishing simulations for self-training.</p>",
+                unsafe_allow_html=True
+            )
+
+            col_sim_dept, col_sim_vec = st.columns(2)
+            with col_sim_dept:
+                department = st.selectbox(
+                    "Department", ["Finance", "HR", "IT Support"],
+                    index=0, label_visibility="collapsed", key="sim_dept"
+                )
+            with col_sim_vec:
+                attack_vector = st.selectbox(
+                    "Attack Vector", ["Urgent Invoice", "Password Reset", "Fake HR Policy"],
+                    index=0, label_visibility="collapsed", key="sim_vector"
+                )
+
+            dept_icons = {"Finance": "🏦", "HR": "📋", "IT Support": "🖥"}
+            vec_icons = {"Urgent Invoice": "📄", "Password Reset": "🔑", "Fake HR Policy": "📜"}
+
+            st.markdown(
+                f"<div style='background:#0f172a;border:1px solid #1e3a5f;"
+                f"border-radius:10px;padding:14px 18px;margin:8px 0 16px 0;"
+                f"color:#94a3b8;font-size:13px'>"
+                f"Scenario: {dept_icons.get(department, '')} <b>{department}</b> "
+                f"via {vec_icons.get(attack_vector, '')} <b>{attack_vector}</b></div>",
+                unsafe_allow_html=True
+            )
+
+            if st.button("🎲 Generate Simulation", type="primary", use_container_width=True):
+                with st.spinner("Generating..."):
+                    sim = simulate_phishing(department, attack_vector)
+                st.session_state["simulation"] = sim
+                st.session_state["sim_reveal"] = False
+
+            sim = st.session_state.get("simulation")
+            if sim:
+                st.divider()
+                st.markdown("### 📧 Simulated Email")
+                col_sim1, col_sim2 = st.columns([1, 3])
+                with col_sim1:
+                    st.markdown("**From:**")
+                    st.markdown("**Subject:**")
+                    st.markdown("**Body:**")
+                with col_sim2:
+                    st.markdown(f"`{sim.get('sender', 'unknown@example.com')}`")
+                    st.markdown(f"**{sim.get('subject', '(no subject)')}**")
+                    st.markdown(
+                        "<div style='background:#0f172a;border:1px solid #1e3a5f;"
+                        "border-radius:10px;padding:16px;font-family:monospace;"
+                        "font-size:13px;color:#94a3b8;line-height:1.6;margin-top:4px;"
+                        "max-height:300px;overflow-y:auto'>"
+                        + sim.get("body", "").replace("\n", "<br>") +
+                        "</div>", unsafe_allow_html=True
+                    )
+
+                st.divider()
+                reveal = st.session_state.get("sim_reveal", False)
+                if not reveal:
+                    if st.button("🔍 Reveal Phishing Clues", type="primary", use_container_width=True):
+                        st.session_state["sim_reveal"] = True
+                        st.rerun()
+                else:
+                    clues = sim.get("clues", [])
+                    remediation = sim.get("remediation", "")
+                    st.markdown("### 🚩 Phishing Indicators")
+                    for clue in clues:
+                        st.markdown(
+                            "<div style='background:#2a0a0a;border:1px solid #ff444444;"
+                            "border-radius:8px;padding:10px 14px;margin:6px 0;"
+                            "color:#ff8888;font-size:13px'>🚨 " + clue + "</div>",
+                            unsafe_allow_html=True
+                        )
+                    st.markdown("### 🛡️ Remediation")
+                    st.success(remediation)
+                    if st.button("🔄 Try Another", use_container_width=True):
+                        st.session_state.pop("simulation", None)
+                        st.session_state.pop("sim_reveal", None)
+                        st.rerun()
 
     # ── Sub-tab 2: Screenshot OCR Scanner ────────────────────────────────────
     with sub_tab2:

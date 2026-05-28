@@ -226,9 +226,10 @@ class TestAPIProxy:
         resp = urllib.request.urlopen(req)
         assert resp.status == 200
         data = json.loads(resp.read())
-        assert "risk_score" in data
-        assert "severity" in data
-        assert data["severity"] in ("LOW", "MEDIUM", "HIGH", "CRITICAL")
+        assert "verdict" in data
+        assert "risk_score" in data["verdict"]
+        assert "severity" in data["verdict"]
+        assert data["verdict"]["severity"] in ("LOW", "MEDIUM", "HIGH", "CRITICAL")
 
 
 # ── Health check smoke test ──────────────────────────────────────────────
