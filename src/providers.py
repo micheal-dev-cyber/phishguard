@@ -1,5 +1,7 @@
 """Unified AI provider — tries Groq (free) → OpenRouter (free) → OpenAI → Anthropic."""
 
+from __future__ import annotations
+
 import logging
 from src.env import ENV
 

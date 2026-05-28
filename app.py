@@ -1485,21 +1485,24 @@ with tab3:
         role    = msg["role"]
         content = msg["content"]
         if role == "user":
+            import html
             st.markdown(
                 "<div style='display:flex;justify-content:flex-end;margin:8px 0'>"
                 "<div style='background:#1e3a5f;border-radius:14px 14px 2px 14px;"
                 "padding:12px 18px;max-width:75%;color:#e2e8f0;font-size:14px'>"
-                + content +
+                + html.escape(content) +
                 "</div></div>",
                 unsafe_allow_html=True
             )
         else:
+            import html
+            safe_content = html.escape(content)
             st.markdown(
                 "<div style='display:flex;justify-content:flex-start;margin:8px 0'>"
                 "<div style='background:#111827;border:1px solid #1e3a5f;"
                 "border-radius:14px 14px 14px 2px;padding:14px 18px;"
                 "max-width:80%;color:#e2e8f0;font-size:14px;line-height:1.6'>"
-                + content.replace("\n", "<br>") +
+                + safe_content.replace("\n", "<br>") +
                 "</div></div>",
                 unsafe_allow_html=True
             )

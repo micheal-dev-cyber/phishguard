@@ -55,7 +55,7 @@ app = Flask(__name__)
 @app.route("/webhook", methods=["POST"])
 def webhook():
     """Receive Paddle webhook events."""
-    signature = request.headers.get("Paddle-Signature", "") or request.headers.get("Paddle-Signature", "")
+    signature = request.headers.get("Paddle-Signature", "")
     body = request.get_data()
 
     if not signature:

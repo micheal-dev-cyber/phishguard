@@ -241,7 +241,7 @@ class TestHealthCheck:
         import src.database as db
         orig = db.DB_PATH
         try:
-            db.DB_PATH = "/tmp/nonexistent_phishguard.db"
+            import tempfile, os; db.DB_PATH = os.path.join(tempfile.gettempdir(), "nonexistent_phishguard.db")
             ok, msg = health_check.check_database()
             assert not ok
             assert "error" in msg.lower() or "not found" in msg.lower()

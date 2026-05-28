@@ -13,7 +13,7 @@ def get_redirect_chain(url):
         chain.append(response.url)
     except Exception as e:
         chain.append(f"Error: {str(e)}")
-    return list(set(chain))  # Remove duplicates
+    return list(dict.fromkeys(chain))  # Remove duplicates preserving order
 
 def analyze_url_safety(url):
     """Performs a deep look at the final destination."""
