@@ -501,7 +501,7 @@ with tab2:
             imap_port = st.number_input("Port", 993, key="imap_port")
         with col_imap3:
             imap_ssl = st.checkbox("SSL/TLS", True, key="imap_ssl")
-        col_imap4, col_imap5, col_imap6 = st.columns(2)
+        col_imap4, col_imap5, col_imap6 = st.columns(3)
         with col_imap4:
             imap_user = st.text_input("Email Address", key="imap_user")
         with col_imap5:
