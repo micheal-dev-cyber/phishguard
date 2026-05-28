@@ -25,11 +25,23 @@ sys.path.insert(0, str(Path(__file__).parent.resolve()))
 
 from src.enterprise_api import handle_scan_request
 from src.database import save_analysis
+from src.ratelimit import check_rate_limit, get_rate_limit_remaining
+from src.json_logger import setup_json_logging
+
+setup_json_logging()
 
 logging.basicConfig(level=logging.INFO, format="[api_proxy] %(message)s")
 logger = logging.getLogger("api-proxy")
 
 PROTECTED_ENDPOINTS = {"/api/v1/scan", "/api/v1/report-phish"}
+RATE_LIMIT = {"max": 60, "window": 60}  # 60 requests per minute per IP
+
+
+def _client_ip(handler):
+    forwarded = handler.headers.get("X-Forwarded-For", "")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return handler.client_address[0]
 
 
 class APIHandler(http.server.BaseHTTPRequestHandler):
@@ -71,6 +83,12 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
 
     def do_GET(self):
         parsed = urlparse(self.path)
+
+        # ── Per-IP rate limiting ─────────────────────────────────────────
+        ip = _client_ip(self)
+        if not check_rate_limit(f"api:{ip}", RATE_LIMIT["max"], RATE_LIMIT["window"]):
+            remaining = get_rate_limit_remaining(f"api:{ip}", RATE_LIMIT["max"], RATE_LIMIT["window"])
+            return self._send_json({"error": "rate_limited", "remaining": remaining}, 429)
 
         if parsed.path == "/health":
             return self._send_json({
@@ -119,6 +137,12 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urlparse(self.path)
+
+        # ── Per-IP rate limiting ─────────────────────────────────────────
+        ip = _client_ip(self)
+        if not check_rate_limit(f"api:{ip}", RATE_LIMIT["max"], RATE_LIMIT["window"]):
+            remaining = get_rate_limit_remaining(f"api:{ip}", RATE_LIMIT["max"], RATE_LIMIT["window"])
+            return self._send_json({"error": "rate_limited", "remaining": remaining}, 429)
 
         if parsed.path not in PROTECTED_ENDPOINTS and parsed.path != "/analyze":
             return self._send_json({"error": "Not found"}, 404)

@@ -1,4 +1,5 @@
 import os
+import time
 import streamlit as st
 import plotly.graph_objects as go
 from datetime import datetime
@@ -70,6 +71,10 @@ from src.paddle_billing import (
 from src.ratelimit import check_rate_limit, get_rate_limit_remaining
 from src.leaderboard import render_leaderboard, record_scan as lb_record_scan
 from src.env import ENV, get_config_status, log_config_status
+
+# ── Structured JSON logging (opt-in via JSON_LOG=true) ──────────────────────
+from src.json_logger import setup_json_logging
+setup_json_logging()
 
 # ── Enterprise component imports (with guards for optional deps) ──
 try:
@@ -2353,6 +2358,48 @@ if is_admin:
             st.rerun()
         else:
             st.error(f"Error: {result.get('error')}")
+
+    # ── Login Lockout Management ──────────────────────────────────────────
+    if is_admin:
+        st.divider()
+        with st.expander("🔒 Login Lockout Management", expanded=False):
+            st.caption("View locked accounts and manually unlock users.")
+            from src.tenants import unlock_user
+            import sqlite3
+            from pathlib import Path
+            _db = Path(__file__).parent / "data" / "phishguard.db"
+            try:
+                _conn = sqlite3.connect(str(_db))
+                _c = _conn.cursor()
+                _c.execute(
+                    "SELECT la.username, COUNT(*), MAX(la.timestamp) "
+                    "FROM login_attempts la "
+                    "WHERE la.success = 0 AND la.timestamp > ? "
+                    "GROUP BY la.username HAVING COUNT(*) >= 5",
+                    (time.time() - 900,)
+                )
+                _locked = _c.fetchall()
+                _conn.close()
+            except Exception:
+                _locked = []
+            if _locked:
+                st.warning(f"🔒 {len(_locked)} user(s) currently locked out")
+                for lu in _locked:
+                    _lu_name, _lu_count, _lu_ts = lu
+                    _remaining = int(900 - (time.time() - _lu_ts))
+                    col_l1, col_l2, col_l3 = st.columns([2, 1, 1])
+                    with col_l1:
+                        st.markdown(f"**{_lu_name}** — {_lu_count} failed attempts")
+                    with col_l2:
+                        st.caption(f"Locked {_remaining}s remaining")
+                    with col_l3:
+                        if st.button("🔓 Unlock", key=f"unlock_{_lu_name}",
+                                     use_container_width=True):
+                            unlock_user(_lu_name)
+                            st.success(f"Unlocked {_lu_name}")
+                            st.rerun()
+            else:
+                st.success("No users currently locked out")
 
 
 # ═════════════════════════════════════════════════════════════════════════════
