@@ -4,7 +4,7 @@ from pathlib import Path
 
 # Load keywords
 KEYWORDS_PATH = Path(__file__).parent.parent / "data" / "phishing_keywords.json"
-with open(KEYWORDS_PATH, "r") as f:
+with open(KEYWORDS_PATH, "r", encoding="utf-8") as f:
     PHISHING_KEYWORDS = json.load(f)
 
 # Suspicious URL patterns
@@ -220,8 +220,7 @@ def analyze_attachments(text: str) -> dict:
         "findings": findings,
         "risk_score": min(risk_score, 40),
         "detected_extensions": detected,
-        "has_attachment_language": len(attachment_language) > 0
-        if 'attachment_language' in dir() else False,
+        "has_attachment_language": len(attachment_language) > 0,
     }
 
 
