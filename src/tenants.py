@@ -82,6 +82,12 @@ def init_tenants():
         )
     """)
     c.execute("CREATE INDEX IF NOT EXISTS idx_login_attempts_user ON login_attempts (username, timestamp)")
+    # Schema migrations for new columns
+    for col in ("email_verified", "mfa_enabled"):
+        try:
+            c.execute(f"ALTER TABLE tenants ADD COLUMN {col} INTEGER DEFAULT 0")
+        except Exception:
+            pass
     conn.commit()
     conn.close()
     _migrate_sha256()
