@@ -46,6 +46,7 @@ from src.detector import analyze_email
 from src.database import init_db, save_analysis, get_history
 from src.report_generator import generate_pdf_report
 from src.auth import check_password, logout
+from src.session_manager import create_session, list_sessions, revoke_session, revoke_all_sessions, cleanup_expired
 from src.threat_intel import check_multiple_urls, get_threat_summary
 from src.osint import run_osint
 from src.admin import get_stats, get_all_analyses, get_recent_threats, get_daily_counts
@@ -71,6 +72,16 @@ from src.paddle_billing import (
 from src.ratelimit import check_rate_limit, get_rate_limit_remaining
 from src.leaderboard import render_leaderboard, record_scan as lb_record_scan
 from src.env import ENV, get_config_status, log_config_status
+from src.campaign_engine import (
+    get_templates, create_campaign, launch_campaign, get_campaigns,
+    get_campaign_results, generate_llm_template
+)
+from src.weekly_report import generate_weekly_report
+from src.notifications import push_notification, get_notifications, mark_read, mark_all_read, unread_count
+from src.session_manager import create_session, list_sessions, revoke_session, revoke_all_sessions
+from src.retention import get_retention_policy, set_retention_policy, purge_old_data
+from src.ip_allowlist import add_ip_rule, remove_ip_rule, list_ip_rules
+from src.custom_rules import add_rule, remove_rule, list_rules, toggle_rule
 
 # ── Structured JSON logging (opt-in via JSON_LOG=true) ──────────────────────
 from src.json_logger import setup_json_logging
@@ -330,10 +341,8 @@ with col_quota:
 with col_user:
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # ── Notification Bell ────────────────────────────────────────────────
-    if "notifications" not in st.session_state:
-        st.session_state["notifications"] = []
-    n_count = len(st.session_state["notifications"])
+    # ── Notification Center ──────────────────────────────────────────────
+    n_count = unread_count(username)
     n_badge = f'<span style="background:#ff4444;color:#fff;border-radius:50%;padding:1px 6px;font-size:10px;margin-left:4px">{n_count}</span>' if n_count else ""
     st.markdown(
         f'<div style="text-align:right;font-size:13px;color:#94a3b8">'
@@ -341,20 +350,26 @@ with col_user:
         unsafe_allow_html=True,
     )
     if n_count > 0:
-        with st.expander(f"🔔 {n_count} Alert(s)", expanded=False):
-            for n in st.session_state["notifications"][-5:]:
-                c = "#ff4444" if n["severity"] == "CRITICAL" else "#ff8800"
+        with st.expander(f"🔔 {n_count} Notification(s)", expanded=False):
+            for n in get_notifications(username, limit=10):
+                colors = {"critical": "#ff4444", "warning": "#ff8800", "success": "#22c55e", "info": "#60a5fa"}
+                c = colors.get(n["severity"], "#60a5fa")
+                read_marker = "" if not n["is_read"] else "opacity:0.5"
                 st.markdown(
                     f"<div style='border-left:3px solid {c};padding:4px 8px;margin:4px 0;"
-                    f"background:#111827;border-radius:6px;font-size:12px'>"
-                    f"<span style='color:{c};font-weight:700'>{n['severity']}</span> "
-                    f"<span style='color:#94a3b8'>{n['message'][:60]}</span>"
-                    f"<span style='color:#475569;display:block;font-size:10px'>{n.get('time','')}</span>"
+                    f"background:#111827;border-radius:6px;font-size:12px;{read_marker}'>"
+                    f"<span style='color:{c};font-weight:700'>{n['severity'].upper()}</span> "
+                    f"<span style='color:#e2e8f0;font-weight:600'>{n['title']}</span> "
+                    f"<span style='color:#94a3b8'>{n['message'][:80]}</span>"
+                    f"<span style='color:#475569;display:block;font-size:10px'>{n['created_at'][:19]}</span>"
                     f"</div>",
                     unsafe_allow_html=True,
                 )
-            if st.button("Clear All", key="clear_notif", use_container_width=True):
-                st.session_state["notifications"] = []
+                if st.button("✓ Mark read", key=f"notif_read_{n['id']}", use_container_width=True):
+                    mark_read(n["id"])
+                    st.rerun()
+            if st.button("✓ Mark All Read", key="mark_all_read", use_container_width=True):
+                mark_all_read(username)
                 st.rerun()
 
     # ── Theme Toggle ─────────────────────────────────────────────────────
@@ -534,25 +549,23 @@ except Exception:
     pass
 
 # ── Tabs ─────────────────────────────────────────────────────────────────────
-# Positions (both):     1        2         3
-# Admin:                4        5         6     7      8      9       10      11       12       13      14
-# Non-admin:            4        5         6     7      8
-# Enterprise (both):    9/11    10/12     11/13  12/14
 if is_admin:
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12, tab13, tab14, tab15 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12, tab13, tab14, tab15, tab16, tab17 = st.tabs([
         "🔍 Analyze Email", "📥 Inbox Scanner", "📈 Analytics", "🤖 AI Copilot",
         "⚙ Admin Dashboard", "👥 Clients",
         "💳 Billing", "⚙ Settings", "🧪 Training", "🏆 Champions", "📊 History",
         "🧬 STIX Intel", "📧 Sender Profiler", "🔗 URL Sandbox", "👁 OCR/Homograph",
+        "🎯 Campaigns", "📖 API Docs",
     ])
-    tab_stix, tab_sender, tab_sandbox, tab_ocr = tab12, tab13, tab14, tab15
+    tab_stix, tab_sender, tab_sandbox, tab_ocr, tab_campaigns, tab_api_docs = tab12, tab13, tab14, tab15, tab16, tab17
 else:
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12, tab13 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12, tab13, tab14, tab15 = st.tabs([
         "🔍 Analyze Email", "📥 Inbox Scanner", "📈 Analytics", "🤖 AI Copilot",
         "💳 Billing", "⚙ Settings", "🧪 Training", "🏆 Champions", "📊 History",
         "🧬 STIX Intel", "📧 Sender Profiler", "🔗 URL Sandbox", "👁 OCR/Homograph",
+        "🎯 Campaigns", "📖 API Docs",
     ])
-    tab_stix, tab_sender, tab_sandbox, tab_ocr = tab10, tab11, tab12, tab13
+    tab_stix, tab_sender, tab_sandbox, tab_ocr, tab_campaigns, tab_api_docs = tab10, tab11, tab12, tab13, tab14, tab15
 
 # ═════════════════════════════════════════════════════════════════════════════
 # TAB 1 — ANALYZER
@@ -1018,6 +1031,15 @@ with tab1:
                     "message": f"Threat detected — Score {results['risk_score']}/100",
                     "time": datetime.now().strftime("%H:%M"),
                 })
+                try:
+                    push_notification(
+                        username,
+                        f"🚨 {severity} Threat Detected",
+                        f"Score {results['risk_score']}/100 — {email_text[:60]}...",
+                        severity.lower(),
+                    )
+                except Exception:
+                    pass
 
             st.session_state["results"]         = results
             st.session_state["email_text"]       = email_text
@@ -2231,6 +2253,108 @@ if is_admin:
                 )
                 st.plotly_chart(fig4, use_container_width=True)
 
+        # ── Risk Trend Chart (last 100 analyses) ────────────────────────────
+        st.markdown("### 📈 Risk Score Trend")
+        try:
+            import sqlite3
+            from pathlib import Path
+            _adb = Path(__file__).parent / "data" / "phishguard.db"
+            _aconn = sqlite3.connect(str(_adb))
+            _ac = _aconn.cursor()
+            _ac.execute("SELECT risk_score, timestamp FROM analyses ORDER BY id DESC LIMIT 100")
+            _trend_rows = list(reversed(_ac.fetchall()))
+            _aconn.close()
+            if _trend_rows:
+                _scores = [r[0] for r in _trend_rows]
+                _times = [r[1][11:19] if r[1] else str(i) for i, r in enumerate(_trend_rows)]
+                fig_trend = go.Figure(go.Scatter(
+                    x=_times, y=_scores, mode="lines+markers",
+                    line=dict(color="#60a5fa", width=2),
+                    marker=dict(color=_scores, colorscale="RdYlGn_r", size=6),
+                    hovertemplate="Score: %{y}<extra></extra>",
+                ))
+                fig_trend.add_hline(y=75, line_dash="dash", line_color="#ff4444",
+                                     annotation_text="CRITICAL threshold")
+                fig_trend.add_hline(y=50, line_dash="dash", line_color="#ffaa00",
+                                     annotation_text="HIGH threshold")
+                fig_trend.update_layout(
+                    height=250, paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)", font_color="#e2e8f0",
+                    margin=dict(t=10, b=10, l=10, r=10),
+                    xaxis_title="Time", yaxis_title="Risk Score",
+                    yaxis=dict(range=[0, 100], gridcolor="#1e3a5f"),
+                    xaxis=dict(showgrid=False),
+                )
+                st.plotly_chart(fig_trend, use_container_width=True)
+        except Exception:
+            pass
+
+        # ── Top Threats Table ───────────────────────────────────────────────
+        col_th1, col_th2 = st.columns(2)
+        with col_th1:
+            st.markdown("### 🔥 Top Threats This Month")
+            try:
+                _aconn2 = sqlite3.connect(str(_adb))
+                _ac2 = _aconn2.cursor()
+                _ac2.execute(
+                    "SELECT email_preview, risk_score, COUNT(*) as cnt FROM analyses "
+                    "WHERE timestamp > datetime('now', '-30 days') "
+                    "GROUP BY email_preview ORDER BY cnt DESC LIMIT 5"
+                )
+                _top = _ac2.fetchall()
+                _aconn2.close()
+                if _top:
+                    for i, (preview, score, cnt) in enumerate(_top, 1):
+                        st.markdown(
+                            f"<div style='background:#111827;border:1px solid #1e3a5f;"
+                            f"border-radius:6px;padding:6px 10px;margin:3px 0;font-size:12px'>"
+                            f"<span style='color:#475569'>#{i}</span> "
+                            f"<span style='color:#e2e8f0'>{preview[:50]}</span> "
+                            f"<span style='color:#60a5fa'>×{cnt}</span> "
+                            f"<span style='color:#ff4444'>score {score}</span>"
+                            f"</div>", unsafe_allow_html=True
+                        )
+                else:
+                    st.info("No data this month.")
+            except Exception:
+                st.info("No data yet.")
+
+        with col_th2:
+            st.markdown("### 📊 Scan Volume by Severity (30d)")
+            try:
+                _aconn3 = sqlite3.connect(str(_adb))
+                _ac3 = _aconn3.cursor()
+                _ac3.execute(
+                    "SELECT severity, COUNT(*) as cnt FROM analyses "
+                    "WHERE timestamp > datetime('now', '-30 days') "
+                    "GROUP BY severity ORDER BY CASE severity "
+                    "WHEN 'CRITICAL' THEN 0 WHEN 'HIGH' THEN 1 WHEN 'MEDIUM' THEN 2 WHEN 'LOW' THEN 3 ELSE 4 END"
+                )
+                _vol = _ac3.fetchall()
+                _aconn3.close()
+                if _vol:
+                    _labels = [r[0] for r in _vol]
+                    _values = [r[1] for r in _vol]
+                    _colors = {"CRITICAL": "#ff4444", "HIGH": "#ff8800",
+                               "MEDIUM": "#ffaa00", "LOW": "#44aa44"}
+                    _bar_c = [_colors.get(l, "#60a5fa") for l in _labels]
+                    fig_vol = go.Figure(go.Bar(
+                        x=_labels, y=_values, marker_color=_bar_c,
+                        text=_values, textposition="outside",
+                    ))
+                    fig_vol.update_layout(
+                        height=250, paper_bgcolor="rgba(0,0,0,0)",
+                        plot_bgcolor="rgba(0,0,0,0)", font_color="#e2e8f0",
+                        margin=dict(t=10, b=10, l=10, r=10),
+                        xaxis=dict(showgrid=False),
+                        yaxis=dict(gridcolor="#1e3a5f", title="Count"),
+                    )
+                    st.plotly_chart(fig_vol, use_container_width=True)
+                else:
+                    st.info("No data this month.")
+            except Exception:
+                st.info("No data yet.")
+
         st.divider()
         st.markdown("### 🚨 Recent Critical & High Threats")
         threats = _cached_threats(10)
@@ -3185,6 +3309,163 @@ with settings_tab:
         "Or scan the QR code (coming soon)</div>"
         "</div>", unsafe_allow_html=True
     )
+
+    # ── Custom Detection Rules ──────────────────────────────────────────────
+    st.divider()
+    st.markdown("### 🧩 Custom Detection Rules")
+    st.caption("Add tenant-specific keyword, header, or regex rules to boost risk scores.")
+    cr_col1, cr_col2 = st.columns([1, 1])
+    with cr_col1:
+        with st.form("add_rule_form"):
+            cr_name = st.text_input("Rule name", placeholder="Detect competitor domain")
+            cr_type = st.selectbox("Type", ["keyword", "header", "regex", "url_pattern"])
+            cr_pattern = st.text_input("Pattern", placeholder="competitor\.com")
+            cr_boost = st.slider("Risk boost", 5, 50, 10, step=5)
+            if st.form_submit_button("➕ Add Rule", type="primary"):
+                if cr_name and cr_pattern:
+                    add_rule(username, cr_name, cr_type, cr_pattern, cr_boost)
+                    st.rerun()
+                else:
+                    st.warning("Name and pattern required.")
+    with cr_col2:
+        st.markdown("**Your Rules:**")
+        rules = list_rules(username)
+        if not rules:
+            st.info("No custom rules yet.")
+        else:
+            for r in rules:
+                st.markdown(
+                    f"<div style='background:#111827;border:1px solid #1e3a5f;"
+                    f"border-radius:6px;padding:4px 8px;margin:2px 0;font-size:12px'>"
+                    f"{'🟢' if r['is_active'] else '🔴'} <b>{r['name']}</b> "
+                    f"<span style='color:#94a3b8'>({r['rule_type']})</span> "
+                    f"<span style='color:#60a5fa'>+{r['risk_boost']}</span>"
+                    f"</div>", unsafe_allow_html=True
+                )
+                tc1, tc2 = st.columns([1, 1])
+                with tc1:
+                    if st.button("Toggle", key=f"tgl_rule_{r['id']}", use_container_width=True):
+                        toggle_rule(r["id"])
+                        st.rerun()
+                with tc2:
+                    if st.button("🗑", key=f"del_rule_{r['id']}", use_container_width=True):
+                        remove_rule(r["id"])
+                        st.rerun()
+
+    # ── IP Allowlist ────────────────────────────────────────────────────────
+    st.divider()
+    st.markdown("### 🌐 IP Allowlist")
+    st.caption("Restrict access to specific IP ranges (CIDR notation). Leave empty to allow all.")
+    ip_col1, ip_col2 = st.columns([1, 1])
+    with ip_col1:
+        with st.form("add_ip_form"):
+            ip_cidr = st.text_input("CIDR", placeholder="10.0.0.0/24")
+            ip_label = st.text_input("Label", placeholder="Office VPN")
+            if st.form_submit_button("➕ Add IP Rule", type="primary"):
+                if ip_cidr:
+                    try:
+                        add_ip_rule(username, ip_cidr, ip_label)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Invalid CIDR: {e}")
+                else:
+                    st.warning("Enter a CIDR.")
+    with ip_col2:
+        st.markdown("**Allowlist:**")
+        ip_rules = list_ip_rules(username)
+        if not ip_rules:
+            st.info("No IP restrictions (all IPs allowed).")
+        else:
+            for ir in ip_rules:
+                st.markdown(
+                    f"<div style='background:#111827;border:1px solid #1e3a5f;"
+                    f"border-radius:6px;padding:4px 8px;margin:2px 0;font-size:12px'>"
+                    f"{ir['cidr']} <span style='color:#94a3b8'>{ir['label']}</span>"
+                    f"</div>", unsafe_allow_html=True
+                )
+                if st.button("🗑 Remove", key=f"del_ip_{ir['id']}", use_container_width=True):
+                    remove_ip_rule(ir["id"])
+                    st.rerun()
+
+    # ── Data Retention ──────────────────────────────────────────────────────
+    st.divider()
+    st.markdown("### 🗄 Data Retention Policy")
+    st.caption("Auto-purge old data after a set number of days.")
+    retention = get_retention_policy(username)
+    ret_col1, ret_col2, ret_col3 = st.columns(3)
+    with ret_col1:
+        analysis_days = st.number_input("Analyses (days)", 1, 730, retention["analysis_days"], step=30)
+    with ret_col2:
+        audit_days = st.number_input("Audit logs (days)", 1, 730, retention["audit_days"], step=30)
+    with ret_col3:
+        alert_days = st.number_input("Alerts (days)", 1, 730, retention["alert_days"], step=30)
+    ret_b1, ret_b2 = st.columns(2)
+    with ret_b1:
+        if st.button("💾 Save Retention Policy", type="primary", use_container_width=True):
+            set_retention_policy(username, int(analysis_days), int(audit_days), int(alert_days))
+            st.success("Retention policy updated.")
+    with ret_b2:
+        if st.button("🗑 Purge Old Data Now", use_container_width=True):
+            result = purge_old_data(username)
+            if result.get("purged"):
+                st.success(f"Purged: {result.get('analyses', 0)} analyses, "
+                           f"{result.get('audit', 0)} audit logs, {result.get('alerts', 0)} alerts.")
+            else:
+                st.info("Nothing to purge or policy disabled.")
+
+    # ── Session Management ──────────────────────────────────────────────────
+    st.divider()
+    st.markdown("### 🔐 Active Sessions")
+    st.caption("View and manage active login sessions.")
+    sessions = list_sessions(username)
+    if not sessions:
+        st.info("No active sessions recorded.")
+    else:
+        for s in sessions:
+            from datetime import datetime as _dt
+            created = _dt.fromtimestamp(s["created_at"]).strftime("%Y-%m-%d %H:%M") if s["created_at"] else "—"
+            last_seen = _dt.fromtimestamp(s["last_seen"]).strftime("%Y-%m-%d %H:%M") if s["last_seen"] else "—"
+            st.markdown(
+                f"<div style='background:#111827;border:1px solid #1e3a5f;"
+                f"border-radius:6px;padding:4px 8px;margin:2px 0;font-size:12px'>"
+                f"{'🟢' if s['is_active'] else '🔴'} <code>{s['session_id']}</code> "
+                f"<span style='color:#94a3b8'>{s['ip']} · {created} → {last_seen}</span>"
+                f"</div>", unsafe_allow_html=True
+            )
+            if s["is_active"] and st.button("🚫 Revoke", key=f"rev_sess_{s['id']}", use_container_width=True):
+                revoke_session(s["session_id"])
+                st.rerun()
+        if st.button("🚫 Revoke All Sessions", use_container_width=True):
+            revoke_all_sessions(username)
+            st.rerun()
+
+    # ── Scheduled Email Digests ─────────────────────────────────────────────
+    st.divider()
+    st.markdown("### 📬 Scheduled Email Digests")
+    st.caption("Automatically receive PDF/CSV reports via email on a schedule.")
+    digest_freq = st.selectbox("Digest frequency", ["disabled", "daily", "weekly", "monthly"],
+                                index=0, key="digest_freq")
+    digest_format = st.selectbox("Format", ["pdf", "csv"], index=0, key="digest_format")
+    if st.button("💾 Save Digest Settings", type="primary", use_container_width=True):
+        st.session_state["digest_freq"] = digest_freq
+        st.session_state["digest_format"] = digest_format
+        st.success(f"Digest set to {digest_freq} ({digest_format}).")
+    if digest_freq != "disabled" and st.session_state.get("email"):
+        st.info(f"📧 {digest_freq.capitalize()} {digest_format.upper()} reports will be sent to {st.session_state['email']}.")
+        if st.button("📤 Send Test Report Now", use_container_width=True):
+            try:
+                report_bytes = generate_weekly_report(username)
+                st.download_button(
+                    "📥 Download Test Report",
+                    report_bytes,
+                    f"phishguard_digest_{username}_{datetime.now().strftime('%Y%m%d')}.pdf",
+                    "application/pdf",
+                )
+                st.success("Test report generated! Click to download.")
+            except Exception as e:
+                st.error(f"Report generation failed: {e}")
+    elif digest_freq != "disabled" and not st.session_state.get("email"):
+        st.warning("Save an email address in Profile above to receive digests.")
 
 # ═════════════════════════════════════════════════════════════════════════════
 # TAB 8/6 — TRAINING (Simulator + Screenshot Scanner)
@@ -4181,3 +4462,155 @@ with tab_ocr:
                 st.info("No homograph alerts yet.")
         except Exception:
             st.info("No homograph alerts yet.")
+
+# ═════════════════════════════════════════════════════════════════════════════
+# TAB — CAMPAIGNS (Phishing Simulation)
+# ═════════════════════════════════════════════════════════════════════════════
+with tab_campaigns:
+    st.markdown("## 🎯 Phishing Simulation Campaigns")
+    st.markdown(
+        "<p style='color:#64748b;margin-top:-8px'>Create and launch simulated "
+        "phishing attacks to train users. Track opens, clicks, and reports.</p>",
+        unsafe_allow_html=True,
+    )
+    st.divider()
+
+    col_camp1, col_camp2 = st.columns([2, 1])
+    with col_camp1:
+        st.markdown("### 📋 Existing Campaigns")
+        campaigns = get_campaigns()
+        if not campaigns:
+            st.info("No campaigns yet. Create one below.")
+        else:
+            for c in campaigns:
+                cid, cname, tname, targets, sent, opened, clicked, reported, status, created = c
+                with st.expander(f"**{cname}** — {status} — {sent}/{targets} sent"):
+                    st.markdown(
+                        f"**Template:** {tname}  \n"
+                        f"**Status:** {status}  \n"
+                        f"**Sent:** {sent}/{targets}  \n"
+                        f"**Opened:** {opened}  \n"
+                        f"**Clicked:** {clicked}  \n"
+                        f"**Reported:** {reported}  \n"
+                        f"**Created:** {created[:19] if created else '—'}"
+                    )
+                    if status == "draft" and st.button("🚀 Launch Campaign", key=f"launch_{cid}"):
+                        result = launch_campaign(cid)
+                        if result.get("success"):
+                            st.success(f"Campaign launched! Emails sent to {result.get('sent', 0)} recipients.")
+                            st.rerun()
+                        else:
+                            st.error(result.get("error", "Launch failed"))
+                    results = get_campaign_results(cid)
+                    if results:
+                        st.markdown("**Results breakdown:**")
+                        for r in results[-20:]:
+                            remail, rstatus, rsent, ropened, rclicked, rreported = r
+                            icons = {"sent": "📤", "opened": "👁", "clicked": "🖱", "reported": "🚨"}
+                            st.markdown(
+                                f"<div style='background:#111827;border:1px solid #1e3a5f;"
+                                f"border-radius:6px;padding:4px 8px;margin:2px 0;font-size:12px'>"
+                                f"{icons.get(rstatus, '📄')} {remail} — {rstatus}</div>",
+                                unsafe_allow_html=True,
+                            )
+
+    with col_camp2:
+        st.markdown("### ➕ New Campaign")
+        with st.form("campaign_form"):
+            camp_name = st.text_input("Campaign Name", placeholder="Q1 Phishing Test")
+            templates = get_templates()
+            t_options = {f"{t['name']} ({t['category']}, {t['difficulty']})": t["id"] for t in templates}
+            if t_options:
+                selected_t = st.selectbox("Template", list(t_options.keys()))
+            else:
+                selected_t = None
+                st.info("No templates found.")
+            targets_text = st.text_area(
+                "Targets (one email per line)",
+                placeholder="alice@company.com\nbob@company.com",
+            )
+            if st.form_submit_button("🎣 Create & Launch", type="primary"):
+                if camp_name and selected_t and targets_text.strip():
+                    targets = [{"email": e.strip()} for e in targets_text.strip().split("\n") if e.strip()]
+                    template_id = t_options[selected_t]
+                    result = create_campaign(camp_name, template_id, targets, created_by=username)
+                    if result.get("success"):
+                        cid = result["campaign_id"]
+                        st.success(f"Campaign #{cid} created!")
+                        launch = launch_campaign(cid)
+                        if launch.get("success"):
+                            st.success(f"Launched! Sent to {launch.get('sent', 0)} recipients.")
+                        st.rerun()
+                    else:
+                        st.error(result.get("error", "Failed to create campaign"))
+                else:
+                    st.warning("Fill in all fields.")
+
+    st.divider()
+    st.markdown("### 🤖 Generate Template with AI")
+    with st.form("ai_template_form"):
+        topic = st.text_input("Topic", "urgent invoice payment", placeholder="e.g. password reset, shared doc")
+        if st.form_submit_button("✨ Generate", type="primary"):
+            with st.spinner("LLM generating template..."):
+                tpl = generate_llm_template(topic)
+            if tpl.get("success"):
+                st.code(
+                    f"Subject: {tpl['subject']}\n\n{tpl['body']}",
+                    language="text",
+                )
+                st.success("Generated! Available in templates list.")
+            else:
+                st.error(tpl.get("error", "Generation failed"))
+
+# ═════════════════════════════════════════════════════════════════════════════
+# TAB — API DOCS (Swagger UI)
+# ═════════════════════════════════════════════════════════════════════════════
+with tab_api_docs:
+    st.markdown("## 📖 REST API Reference")
+    st.markdown(
+        "<p style='color:#64748b;margin-top:-8px'>Interactive documentation "
+        "for the PhishGuard REST API. Generate an API key in Settings to get started.</p>",
+        unsafe_allow_html=True,
+    )
+    st.divider()
+
+    api_base = ENV.APP_URL or "http://localhost:8080"
+    st.markdown(
+        f"**Base URL:** `{api_base}`  \n"
+        f"**Auth:** `X-PhishGuard-Key` header  \n"
+        f"**Spec:** `/api/v1/openapi.json`"
+    )
+    st.divider()
+
+    st.components.v1.html(
+        f"""<!DOCTYPE html><html lang="en"><head>
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css">
+        </head><body>
+        <div id="swagger-ui"></div>
+        <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+        <script>
+          SwaggerUIBundle({{
+            url: '{api_base}/api/v1/openapi.json',
+            dom_id: '#swagger-ui',
+            deepLinking: true,
+            presets: [SwaggerUIBundle.presets.apis],
+            layout: 'BaseLayout',
+            docExpansion: 'list',
+            defaultModelsExpandDepth: -1,
+          }});
+        </script>
+        <style>
+          body {{ margin:0; background:#0d1117; }}
+          .swagger-ui .topbar {{ display:none; }}
+          .swagger-ui .info .title {{ color:#e2e8f0; }}
+          .swagger-ui .scheme-container {{ background:#111827; }}
+          .swagger-ui .opblock-tag {{ color:#60a5fa; }}
+          .swagger-ui .opblock-summary-path {{ font-weight:700; }}
+          .swagger-ui .opblock-summary-description {{ color:#94a3b8; }}
+          .swagger-ui .parameter__name, .swagger-ui label {{ color:#e2e8f0; }}
+        </style>
+        </body></html>""",
+        height=800,
+        scrolling=True,
+    )
+    st.info("💡 For local development, the API proxy runs on port 8080 via `python api_proxy.py`")

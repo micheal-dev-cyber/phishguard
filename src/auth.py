@@ -107,6 +107,13 @@ def _login_form():
                     st.session_state["email"] = tenant["email"]
                     st.session_state.pop("show_login", None)
 
+                    # Track session
+                    try:
+                        from src.session_manager import create_session
+                        create_session(tenant["username"], ip_address="", user_agent="streamlit")
+                    except Exception:
+                        pass
+
                     # Check MFA enforcement
                     try:
                         from src.mfa import is_mfa_enabled
