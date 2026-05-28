@@ -469,6 +469,43 @@ with tab1:
             except Exception as exc:
                 st.error(f"Batch file error: {exc}")
 
+        # ── Attachment Scanner (hash + VT file reputation) ──────────────────
+        st.markdown("##### 🔒 Scan Attachment")
+        att_file = st.file_uploader(
+            "Upload an attachment to scan (PDF, DOCX, XLSX, ZIP, etc.)",
+            type=["pdf", "docx", "xlsx", "pptx", "zip", "rar", "7z",
+                  "exe", "dll", "ps1", "vbs", "js", "py", "scr", "bat",
+                  "doc", "xls"],
+            key="attachment_scanner",
+            label_visibility="collapsed",
+        )
+        if att_file and "att_scan_result" not in st.session_state:
+            from src.attachment_scanner import scan_attachment, is_allowed_attachment
+            with st.spinner(f"Hashing {att_file.name}..."):
+                att_result = scan_attachment(att_file.getvalue(), att_file.name)
+            st.session_state["att_scan_result"] = att_result
+            st.rerun()
+        if st.session_state.get("att_scan_result"):
+            _att = st.session_state["att_scan_result"]
+            if _att.get("error"):
+                st.error(f"Scan error: {_att['error']}")
+            else:
+                _vt = _att.get("vt_reputation", {})
+                _v = _vt.get("verdict", "unknown") if isinstance(_vt, dict) else "unknown"
+                _c = {"clean": "#44aa44", "malicious": "#ff4444", "suspicious": "#ff8800", "unknown": "#94a3b8"}.get(_v, "#94a3b8")
+                st.markdown(
+                    f"<div style='background:#111827;border:1px solid #1e3a5f;border-radius:10px;padding:8px 14px;font-size:13px'>"
+                    f"<b>📎 {_att['filename']}</b> ({_att['size']:,} bytes)<br>"
+                    f"MD5: <code style='color:#60a5fa'>{_att.get('md5','')[:16]}…</code><br>"
+                    f"SHA256: <code style='color:#60a5fa'>{_att.get('sha256','')[:20]}…</code><br>"
+                    f"VT Verdict: <span style='color:{_c};font-weight:700'>{_v.upper()}</span>"
+                    f"</div>",
+                    unsafe_allow_html=True,
+                )
+            if st.button("✕ Clear Attachment", key="clear_att"):
+                st.session_state.pop("att_scan_result", None)
+                st.rerun()
+
         email_text = st.text_area(
             label="email", label_visibility="collapsed",
             placeholder="Paste the full email here — subject, headers, body, links...",
@@ -581,6 +618,14 @@ with tab1:
             # ── XAI Psychological Trigger Analysis ─────────────────────────
             xai_result = analyze_psychological_triggers(email_text)
 
+            # ── Phishing DNA / Known Campaign Matching ──────────────────────
+            from src.phishing_dna import flagged_as_known_phishing
+            dna_known, dna_match = flagged_as_known_phishing(email_text, st.session_state)
+
+            # ── AI-Generated Text (Perplexity) Detector ─────────────────────
+            from src.perplexity_analyzer import compute_perplexity_score
+            perplexity_result = compute_perplexity_score(email_text)
+
             # ── Combined Threat Score (linguistic + VT reputation) ─────────
             combined_score = compute_combined_threat_score(
                 results.get("risk_score", 0),
@@ -640,6 +685,9 @@ with tab1:
             st.session_state["combined_score"]   = combined_score
             st.session_state["webhook_result"]   = webhook_result
             st.session_state["header_auth"]      = header_auth
+            st.session_state["dna_match"]        = dna_match
+            st.session_state["dna_known"]        = dna_known
+            st.session_state["perplexity_result"] = perplexity_result
             st.session_state.pop("ai_report", None)
 
     if "results" in st.session_state:
@@ -661,7 +709,7 @@ with tab1:
         severity = results["severity"]
         color    = results["severity_color"]
 
-        col_gauge, col_m1, col_m2, col_m3 = st.columns([1.2, 1, 1, 1])
+        col_gauge, col_m1, col_m2, col_m3, col_m4 = st.columns([1.2, 1, 1, 1, 1])
         with col_gauge:
             fig = go.Figure(go.Indicator(
                 mode="gauge+number", value=score,
@@ -693,6 +741,37 @@ with tab1:
         with col_m1: st.metric("🔗 URLs Found",      results["url_count"])
         with col_m2: st.metric("🚨 Suspicious URLs", results["suspicious_url_count"])
         with col_m3: st.metric("🎯 Keyword Hits",    results["total_keyword_hits"])
+        # ── AI-Author Probability (Perplexity Analyzer) ─────────────────────
+        _perplex = st.session_state.get("perplexity_result", {})
+        _ai_prob = _perplex.get("ai_probability", 0)
+        _pcolor = "#ff4444" if _ai_prob >= 70 else "#ffaa00" if _ai_prob >= 40 else "#44aa44"
+        with col_m4:
+            st.markdown(
+                f"<div style='background:#111827;border:1px solid #1e3a5f;border-radius:10px;"
+                f"padding:12px 16px;text-align:center'>"
+                f"<div style='color:#64748b;font-size:13px;margin-bottom:4px'>🤖 AI-Author</div>"
+                f"<div style='font-size:1.6rem;font-weight:700;color:{_pcolor}'>{_ai_prob}%</div>"
+                f"<div style='color:#475569;font-size:10px'>{_perplex.get('summary','')[:40]}</div>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+
+        # ── Phishing DNA / Known Campaign Alert ─────────────────────────────
+        _dna_known = st.session_state.get("dna_known", False)
+        _dna_match = st.session_state.get("dna_match")
+        if _dna_known and _dna_match:
+            _sim_pct = round(_dna_match["similarity"] * 100, 1)
+            st.markdown(
+                f"<div style='background:#2a0a0a;border:1px solid #ff4444;border-radius:10px;"
+                f"padding:12px 18px;margin:10px 0;display:flex;align-items:center;gap:12px'>"
+                f"<span style='font-size:1.5rem'>🧬</span>"
+                f"<div><strong style='color:#ff4444'>Known Phishing Campaign Variant Detected</strong><br>"
+                f"<span style='color:#94a3b8;font-size:13px'>"
+                f"{_sim_pct}% signature match with a previously flagged phishing campaign. "
+                f"Preview: <code style='color:#60a5fa'>{_dna_match['match'].get('preview','')[:80]}</code></span></div>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
 
         # ── Email Authentication (SPF/DKIM/DMARC) ──────────────────────────
         if header_auth:
@@ -723,6 +802,18 @@ with tab1:
                         unsafe_allow_html=True,
                     )
             st.caption(header_auth.get("details", ""))
+
+        # ── Perplexity Analyzer (AI-written text detector) ──────────────────
+        _perplex_data = st.session_state.get("perplexity_result", {})
+        if _perplex_data.get("signals"):
+            with st.expander(f"🤖 AI-Generated Text Analysis — {_perplex_data.get('summary','')}"):
+                st.markdown(f"**AI-Author Probability:** {_perplex_data.get('ai_probability',0)}%")
+                cols_perp = st.columns(4)
+                cols_perp[0].metric("Burstiness", _perplex_data.get("burstiness",0), help="High = human-like variation")
+                cols_perp[1].metric("Lexical Diversity", _perplex_data.get("lexical_diversity",0), help="Unique word ratio")
+                cols_perp[2].metric("Avg Sentence Len", _perplex_data.get("avg_sentence_len",0))
+                cols_perp[3].metric("Hedging Phrases", _perplex_data.get("hedging_count",0))
+                st.caption("Signals detected: " + ", ".join(_perplex_data.get("signals", [])))
 
         st.divider()
 
@@ -1032,6 +1123,48 @@ with tab1:
                     "ℹ️ The jury ensemble rates this email **lower** than the heuristic scan. "
                     "Heuristic flags may be false positives."
                 )
+
+        # ── Phishing Reverse Honeypot (Counter-Measure) ─────────────────────
+        if score >= 50:
+            st.divider()
+            st.markdown("<div class='section-title'>🪤 Counter-Measure Deployment</div>",
+                        unsafe_allow_html=True)
+            if st.button("⚔️ Deploy Deception Payload", use_container_width=True,
+                         type="secondary", key="honeypot_btn"):
+                from src.honeypot_generator import generate_honeypot
+                with st.spinner("Generating deceptive payload..."):
+                    honeypot = generate_honeypot(email_text_saved)
+                st.session_state["honeypot"] = honeypot
+                st.success("✅ Deception payload generated. You may copy and send it to the attacker.")
+                st.rerun()
+            _hp = st.session_state.get("honeypot")
+            if _hp:
+                st.markdown(
+                    f"<div style='background:#0a1a0a;border:1px solid #44aa44;border-radius:10px;"
+                    f"padding:14px 18px;margin:8px 0'>"
+                    f"<div style='color:#44aa44;font-weight:700;margin-bottom:6px'>"
+                    f"📨 {_hp.get('subject','')}</div>"
+                    f"<div style='color:#94a3b8;font-size:12px'>"
+                    f"From: {_hp.get('sender_name','')} ({_hp.get('sender_email','')})<br>"
+                    f"Payload: {_hp.get('payload_type','')}</div>"
+                    f"<div style='background:#000;border-radius:8px;padding:12px;margin:8px 0;"
+                    f"font-size:12px;color:#e2e8f0;white-space:pre-wrap;font-family:monospace'>"
+                    f"{_hp.get('body','')}</div>"
+                    f"</div>",
+                    unsafe_allow_html=True,
+                )
+                import json as _json
+                _pd = _hp.get("payload_data", "{}")
+                if isinstance(_pd, str):
+                    try:
+                        _pd = _json.loads(_pd)
+                    except Exception:
+                        pass
+                with st.expander("📦 Extracted Payload Data (for tracking)"):
+                    st.json(_pd)
+                if st.button("✕ Clear Payload", key="clear_hp"):
+                    st.session_state.pop("honeypot", None)
+                    st.rerun()
 
         # Export
         st.divider()
