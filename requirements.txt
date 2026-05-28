@@ -9,7 +9,9 @@
 # ──────────────────────────────────────────────────────────────────────────────
 
 # ── Web framework ──────────────────────────────────────────────────────────────
-streamlit>=1.35.0,<2.0.0
+# NOTE: streamlit is NOT listed here — HF Spaces with SDK: streamlit pre-installs
+# it at version 1.41.1.  Listing it causes version mismatch between server-side
+# Python code and client-side JS assets served by HF.
 
 # ── LLM / AI APIs ─────────────────────────────────────────────────────────────
 openai>=1.30.0,<2.0.0
