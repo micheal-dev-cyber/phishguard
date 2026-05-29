@@ -82,6 +82,16 @@ from src.session_manager import create_session, list_sessions, revoke_session, r
 from src.retention import get_retention_policy, set_retention_policy, purge_old_data
 from src.ip_allowlist import add_ip_rule, remove_ip_rule, list_ip_rules
 from src.custom_rules import add_rule, remove_rule, list_rules, toggle_rule
+from src.workspace import (
+    create_workspace, invite_member, remove_member, list_workspaces,
+    get_members, get_workspace, user_role, user_workspace_id
+)
+from src.gdpr import export_user_data, delete_user_data, record_consent, check_consent
+from src.integrations import (
+    list_integrations, save_integration, remove_integration, get_available_providers, REGISTRY
+)
+from src.auto_responder import send_phishing_warning
+from src.i18n import t, SUPPORTED_LANGUAGES
 
 # ── Structured JSON logging (opt-in via JSON_LOG=true) ──────────────────────
 from src.json_logger import setup_json_logging
@@ -158,6 +168,8 @@ bg_card = "#111827" if theme == "dark" else "#f3f4f6"
 text_main = "#e2e8f0" if theme == "dark" else "#1f2937"
 text_sec  = "#94a3b8" if theme == "dark" else "#6b7280"
 border_c  = "#1e3a5f" if theme == "dark" else "#d1d5db"
+from src.ui_theme import apply_theme
+apply_theme(theme)
 st.markdown("""
 <style>
 .block-container { padding-top: 1.5rem; }
@@ -189,11 +201,32 @@ st.markdown("""
 .quota-bar-fill { border-radius: 6px; height: 10px; }
 .quarantine-badge { display:inline-block; background:#ff4444; color:#fff; border-radius:100px;
     padding:2px 10px; font-size:10px; font-weight:700; letter-spacing:.08em; margin-left:6px; }
+@media (max-width: 768px) {
+    .block-container { padding: 1rem 0.5rem !important; }
+    .auth-card { padding: 24px 16px !important; }
+    h1 { font-size: 1.8rem !important; }
+    h2 { font-size: 1.3rem !important; }
+    div[data-testid="column"] { min-width: 100% !important; }
+    .stTabs [data-baseweb="tab-list"] { gap: 0 !important; overflow-x: auto !important; }
+    .stTabs [data-baseweb="tab"] { font-size: 11px !important; padding: 4px 8px !important; }
+    .stat-card { padding: 12px 8px !important; }
+}
 </style>
 """, unsafe_allow_html=True)
 
 init_db()
 log_config_status()
+
+# ── Start background task queue worker ──────────────────────────────────────
+try:
+    from src.task_queue import start_worker
+    start_worker()
+except Exception:
+    pass
+
+# ── Start real-time notification poller ─────────────────────────────────────
+if "notification_check" not in st.session_state:
+    st.session_state["notification_check"] = 0
 
 # ── Startup config banner (admin only) ──────────────────────────────────────
 if st.session_state.get("is_admin"):
@@ -341,7 +374,8 @@ with col_quota:
 with col_user:
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # ── Notification Center ──────────────────────────────────────────────
+    # ── Notification Center + Auto-Poll ──────────────────────────────────
+    from src.notifications import unread_count, get_notifications, mark_read, mark_all_read
     n_count = unread_count(username)
     n_badge = f'<span style="background:#ff4444;color:#fff;border-radius:50%;padding:1px 6px;font-size:10px;margin-left:4px">{n_count}</span>' if n_count else ""
     st.markdown(
@@ -349,6 +383,15 @@ with col_user:
         f'🔔{n_badge} 👤 {username}</div>',
         unsafe_allow_html=True,
     )
+
+    # Auto-poll: rerun every 30 seconds for live notification count
+    poll_interval = st.session_state.get("notification_check", 0)
+    if poll_interval >= 30:
+        st.session_state["notification_check"] = 0
+        st.rerun()
+    st.session_state["notification_check"] = poll_interval + 1
+    st.caption(f"Next check in {30 - poll_interval}s")
+
     if n_count > 0:
         with st.expander(f"🔔 {n_count} Notification(s)", expanded=False):
             for n in get_notifications(username, limit=10):
@@ -373,21 +416,24 @@ with col_user:
                 st.rerun()
 
     # ── Theme Toggle ─────────────────────────────────────────────────────
-    if "theme" not in st.session_state:
-        st.session_state["theme"] = "dark"
-    theme_toggle = st.toggle("☀️", value=(st.session_state["theme"] == "light"),
-                              key="theme_toggle", help="Toggle light/dark theme")
-    new_theme = "light" if theme_toggle else "dark"
-    if new_theme != st.session_state["theme"]:
-        st.session_state["theme"] = new_theme
-        st.rerun()
-    st.markdown(
-        f"<p style='color:#94a3b8;text-align:right;font-size:11px'>{'☀️ Light' if theme_toggle else '🌙 Dark'}</p>",
-        unsafe_allow_html=True,
-    )
+    from src.ui_theme import render_theme_toggle
+    render_theme_toggle()
 
     if st.button("Logout", use_container_width=True):
         logout()
+
+    # ── Language Selector ─────────────────────────────────────────────────
+    lang = st.session_state.get("lang", "en")
+    selected_lang = st.selectbox(
+        "Language", list(SUPPORTED_LANGUAGES.keys()),
+        index=list(SUPPORTED_LANGUAGES.keys()).index(lang) if lang in SUPPORTED_LANGUAGES else 0,
+        format_func=lambda k: SUPPORTED_LANGUAGES.get(k, k),
+        label_visibility="collapsed",
+        key="lang_selector",
+    )
+    if selected_lang != lang:
+        st.session_state["lang"] = selected_lang
+        st.rerun()
 
 st.divider()
 
@@ -550,21 +596,25 @@ except Exception:
 
 # ── Tabs ─────────────────────────────────────────────────────────────────────
 if is_admin:
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12, tab13, tab14, tab15, tab16, tab17 = st.tabs([
+    tabs = st.tabs([
         "🔍 Analyze Email", "📥 Inbox Scanner", "📈 Analytics", "🤖 AI Copilot",
         "⚙ Admin Dashboard", "👥 Clients",
         "💳 Billing", "⚙ Settings", "🧪 Training", "🏆 Champions", "📊 History",
         "🧬 STIX Intel", "📧 Sender Profiler", "🔗 URL Sandbox", "👁 OCR/Homograph",
         "🎯 Campaigns", "📖 API Docs",
+        "📋 Audit Log", "📊 Performance", "🔌 Webhook Tester",
     ])
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12, tab13, tab14, tab15, tab16, tab17, tab_audit, tab_perf, tab_webhook = tabs
     tab_stix, tab_sender, tab_sandbox, tab_ocr, tab_campaigns, tab_api_docs = tab12, tab13, tab14, tab15, tab16, tab17
 else:
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12, tab13, tab14, tab15 = st.tabs([
+    tabs = st.tabs([
         "🔍 Analyze Email", "📥 Inbox Scanner", "📈 Analytics", "🤖 AI Copilot",
         "💳 Billing", "⚙ Settings", "🧪 Training", "🏆 Champions", "📊 History",
         "🧬 STIX Intel", "📧 Sender Profiler", "🔗 URL Sandbox", "👁 OCR/Homograph",
         "🎯 Campaigns", "📖 API Docs",
+        "🔌 Webhook Tester",
     ])
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12, tab13, tab14, tab15, tab_webhook = tabs
     tab_stix, tab_sender, tab_sandbox, tab_ocr, tab_campaigns, tab_api_docs = tab10, tab11, tab12, tab13, tab14, tab15
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -1691,18 +1741,8 @@ with tab1:
 # TAB 3 — ENTERPRISE ANALYTICS DASHBOARD
 # ═════════════════════════════════════════════════════════════════════════════
 with tab3:
-    st.markdown("## 📈 SOC Analytics Dashboard")
-    st.caption("Real-time threat intelligence, security metrics, and phishing trend analysis.")
-    col_refresh, col_range = st.columns([1, 3])
-    with col_refresh:
-        if st.button("🔄 Refresh", key="refresh_analytics"):
-            _cached_history.clear()
-            st.rerun()
-    with col_range:
-        lookback_days = st.selectbox(
-            "Time range", ["All Time", "Last 30 Days", "Last 7 Days"],
-            index=0, key="soc_range", label_visibility="collapsed",
-        )
+    from src.ui_analytics import render_analytics_tab
+    render_analytics_tab()
     st.divider()
 
     history = _cached_history(500)
@@ -2496,6 +2536,32 @@ if is_admin:
         else:
             st.error(f"Error: {result.get('error')}")
 
+    # ── A/B Testing ─────────────────────────────────────────────────────
+    if is_admin:
+        st.divider()
+        with st.expander("🔬 A/B Testing", expanded=False):
+            st.caption("Run side-by-side detection rule comparisons.")
+            from src.ab_testing import ABTest, list_active_tests, stop_test, promote_variant
+            col_ab1, col_ab2 = st.columns(2)
+            with col_ab1:
+                ab_name = st.text_input("Test name", placeholder="keyword_boost_v2", key="ab_name")
+            with col_ab2:
+                if st.button("➕ Create Test", use_container_width=True) and ab_name:
+                    ABTest(ab_name, owner=username, description="Manual A/B test")
+                    st.success(f"Test '{ab_name}' created")
+                    st.rerun()
+            active = list_active_tests()
+            if active:
+                st.markdown("##### Active Tests")
+                for t in active:
+                    col_t1, col_t2 = st.columns([3, 1])
+                    with col_t1:
+                        st.markdown(f"**{t['test_name']}** — {t.get('description', '')[:60]}")
+                    with col_t2:
+                        if st.button("⏹ Stop", key=f"ab_stop_{t['id']}", use_container_width=True):
+                            stop_test(t['test_name'])
+                            st.rerun()
+
     # ── Login Lockout Management ──────────────────────────────────────────
     if is_admin:
         st.divider()
@@ -2562,10 +2628,61 @@ if is_admin:
                         unsafe_allow_html=True
                     )
 
-
-# ═════════════════════════════════════════════════════════════════════════════
-# TAB 4 — CLIENT MANAGEMENT
-# ═════════════════════════════════════════════════════════════════════════════
+        # ── Workspace / RBAC Management ────────────────────────────────────
+        st.divider()
+        with st.expander("🏢 Workspace & RBAC", expanded=False):
+            st.caption("Manage workspaces (orgs) and team member roles.")
+            ws_list = list_workspaces(username)
+            if not ws_list:
+                st.info("You are not a member of any workspace yet.")
+                with st.form("create_ws_form"):
+                    ws_name = st.text_input("Workspace name", placeholder="Acme Corp")
+                    if st.form_submit_button("➕ Create Workspace", type="primary"):
+                        if ws_name:
+                            r = create_workspace(ws_name, username)
+                            if r["success"]:
+                                st.success(f"Workspace '{ws_name}' created!")
+                                st.rerun()
+                            else:
+                                st.error(r.get("error", "Creation failed"))
+                        else:
+                            st.warning("Enter a name.")
+            else:
+                for ws in ws_list:
+                    with st.container():
+                        st.markdown(f"**{ws['name']}** — your role: `{ws['role']}`")
+                        if ws["role"] in ("admin",):
+                            members = get_members(ws["id"])
+                            if members:
+                                st.markdown("**Members:**")
+                                for m in members:
+                                    st.markdown(
+                                        f"<div style='background:#111827;border:1px solid #1e3a5f;"
+                                        f"border-radius:6px;padding:4px 8px;margin:2px 0;font-size:12px'>"
+                                        f"<b>{m['username']}</b> — {m['role']} "
+                                        f"<span style='color:#475569'>(by {m['invited_by']})</span>"
+                                        f"</div>", unsafe_allow_html=True
+                                    )
+                                    if m["username"] != username:
+                                        if st.button(f"🗑 Remove {m['username']}",
+                                                     key=f"rm_{ws['id']}_{m['username']}",
+                                                     use_container_width=True):
+                                            remove_member(ws["id"], m["username"])
+                                            st.rerun()
+                            with st.form(f"invite_{ws['id']}"):
+                                invite_user = st.text_input("Username to invite",
+                                                              placeholder="johndoe")
+                                invite_role = st.selectbox("Role", ["viewer", "analyst", "admin"])
+                                if st.form_submit_button("📨 Invite", type="primary"):
+                                    if invite_user:
+                                        r = invite_member(ws["id"], invite_user, invite_role, username)
+                                        if r["success"]:
+                                            st.success(f"Invited {invite_user} as {invite_role}")
+                                            st.rerun()
+                                        else:
+                                            st.error(r.get("error", "Invite failed"))
+                                    else:
+                                        st.warning("Enter a username.")
 if is_admin:
     with tab6:
         st.markdown("## 👥 Client Management")
@@ -3319,7 +3436,7 @@ with settings_tab:
         with st.form("add_rule_form"):
             cr_name = st.text_input("Rule name", placeholder="Detect competitor domain")
             cr_type = st.selectbox("Type", ["keyword", "header", "regex", "url_pattern"])
-            cr_pattern = st.text_input("Pattern", placeholder="competitor\.com")
+            cr_pattern = st.text_input("Pattern", placeholder=r"competitor\.com")
             cr_boost = st.slider("Risk boost", 5, 50, 10, step=5)
             if st.form_submit_button("➕ Add Rule", type="primary"):
                 if cr_name and cr_pattern:
@@ -3467,9 +3584,122 @@ with settings_tab:
     elif digest_freq != "disabled" and not st.session_state.get("email"):
         st.warning("Save an email address in Profile above to receive digests.")
 
-# ═════════════════════════════════════════════════════════════════════════════
-# TAB 8/6 — TRAINING (Simulator + Screenshot Scanner)
-# ═════════════════════════════════════════════════════════════════════════════
+    # ── Auto-Responder ─────────────────────────────────────────────────────
+    st.divider()
+    st.markdown("### 🤖 Email Auto-Responder")
+    st.caption("Automatically send a warning email to recipients when a HIGH/CRITICAL threat is detected.")
+    ar_key = f"auto_responder_enabled_{username}"
+    if ar_key not in st.session_state:
+        st.session_state[ar_key] = False
+    st.checkbox("Enable auto-responder", key=ar_key)
+    if st.session_state[ar_key]:
+        st.info("✅ Auto-responder is active. Warning emails will be sent for HIGH/CRITICAL scans.")
+
+    # ── Integration Marketplace ────────────────────────────────────────────
+    st.divider()
+    st.markdown("### 🔌 Integration Marketplace")
+    st.caption("One-click connectors for your security stack.")
+    integrations = list_integrations(username)
+    providers = get_available_providers()
+    int_col1, int_col2 = st.columns([1, 1])
+    with int_col1:
+        st.markdown("**Available connectors:**")
+        for pkey, pmeta in providers.items():
+            existing = any(i["provider"] == pkey for i in integrations)
+            status = "✅ Connected" if existing else "—"
+            st.markdown(
+                f"<div style='background:#111827;border:1px solid #1e3a5f;"
+                f"border-radius:6px;padding:6px 10px;margin:3px 0;font-size:12px'>"
+                f"{pmeta['icon']} <b>{pmeta['name']}</b> {status}"
+                f"</div>", unsafe_allow_html=True
+            )
+    with int_col2:
+        st.markdown("**Configure:**")
+        connect_provider = st.selectbox("Select provider", list(providers.keys()),
+                                         format_func=lambda k: providers[k]["name"],
+                                         key="int_provider")
+        if connect_provider:
+            pmeta = providers[connect_provider]
+            config_data = {}
+            for field in pmeta["fields"]:
+                config_data[field["key"]] = st.text_input(
+                    field["label"], type="password" if field["type"] == "password" else "text",
+                    key=f"int_{field['key']}",
+                )
+            col_c1, col_c2 = st.columns(2)
+            with col_c1:
+                if st.button("🔗 Connect", type="primary", use_container_width=True):
+                    save_integration(username, connect_provider, config_data)
+                    st.success(f"{pmeta['name']} connected!")
+                    st.rerun()
+            with col_c2:
+                existing_int = next((i for i in integrations if i["provider"] == connect_provider), None)
+                if existing_int and st.button("🗑 Disconnect", use_container_width=True):
+                    remove_integration(username, connect_provider)
+                    st.rerun()
+
+    # ── GDPR Compliance ────────────────────────────────────────────────────
+    st.divider()
+    st.markdown("### 🛡 GDPR Compliance")
+    st.caption("Manage your data and consent preferences.")
+    gdpr_tabs = st.tabs(["📥 Export My Data", "🗑 Delete My Account", "📋 Consent"])
+    with gdpr_tabs[0]:
+        st.markdown(
+            "<p style='color:#94a3b8;font-size:13px'>Download all your personal data "
+            "in JSON format, including account info, analyses, and audit logs.</p>",
+            unsafe_allow_html=True,
+        )
+        if st.button("📥 Export All My Data", type="primary", use_container_width=True):
+            with st.spinner("Gathering your data..."):
+                data = export_user_data(username)
+            st.json(data)
+            st.success("✅ Export complete! Data shown above. Use the download button below.")
+            import json
+            st.download_button(
+                "💾 Download JSON",
+                json.dumps(data, indent=2, default=str),
+                f"phishguard_export_{username}_{datetime.now().strftime('%Y%m%d')}.json",
+                "application/json",
+                use_container_width=True,
+            )
+    with gdpr_tabs[1]:
+        st.error("⚠ This action is irreversible and will permanently delete all your data.")
+        confirm = st.text_input(
+            f'Type "DELETE {username}" to confirm',
+            placeholder=f"DELETE {username}",
+            key="gdpr_delete_confirm",
+        )
+        if st.button("🗑 Permanently Delete My Account", use_container_width=True):
+            if confirm == f"DELETE {username}":
+                result = delete_user_data(username)
+                st.warning(f"Account deleted. {sum(result.values())} records removed.")
+                logout()
+            else:
+                st.error("Confirmation text does not match.")
+    with gdpr_tabs[2]:
+        st.markdown(
+            "<p style='color:#94a3b8;font-size:13px'>"
+            "PhishGuard processes email content you submit for scanning. "
+            "No data is shared with third parties for marketing.</p>",
+            unsafe_allow_html=True,
+        )
+        has_consent = check_consent(username)
+        if has_consent:
+            st.success("✅ Consent granted for data processing.")
+            if st.button("🔴 Revoke Consent", use_container_width=True):
+                revoke_consent(username)
+                st.rerun()
+        else:
+            st.warning("⚠ Consent not granted. Some features may be restricted.")
+            if st.button("✅ Grant Consent", use_container_width=True):
+                record_consent(username)
+                st.rerun()
+
+    st.divider()
+    st.markdown("### 📧 Email Templates")
+    from src.ui_email_templates import render_email_templates_ui
+    render_email_templates_ui()
+
 training_tab = tab9 if is_admin else tab7
 
 with training_tab:
@@ -3989,48 +4219,8 @@ with champions_tab:
 history_tab = tab10 if is_admin else tab8
 
 with history_tab:
-    st.markdown("#### 📊 Recent Analyses")
-    history = get_history(20)
-    if not history:
-        st.info("No analyses yet. Go to Analyze and scan your first email.")
-    else:
-        scores     = [row[1] for row in history]
-        labels     = [f"#{i+1}" for i in range(len(history))]
-        colors_bar = [
-            "#ff4444" if s >= 75 else
-            "#ff8800" if s >= 50 else
-            "#ffaa00" if s >= 25 else
-            "#44aa44"
-            for s in scores
-        ]
-        fig2 = go.Figure(go.Bar(
-            x=labels, y=scores, marker_color=colors_bar,
-            text=scores, textposition="outside"
-        ))
-        fig2.update_layout(
-            title="Risk Scores — Last 20 Analyses", yaxis_range=[0, 110],
-            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-            font_color="#e2e8f0", height=300, margin=dict(t=40, b=20, l=20, r=20)
-        )
-        fig2.update_xaxes(showgrid=False)
-        fig2.update_yaxes(gridcolor="#1e3a5f")
-        st.plotly_chart(fig2, use_container_width=True)
-
-        st.divider()
-        for row in history:
-            timestamp, score, severity, kw_hits, susp_urls, preview = row
-            with st.expander(
-                f"**{severity}** — Score {score}/100 — {timestamp[:16]}"
-            ):
-                ca, cb, cc = st.columns(3)
-                ca.metric("Risk Score", score)
-                cb.metric("Keyword Hits", kw_hits)
-                cc.metric("Suspicious URLs", susp_urls)
-                st.markdown(
-                    "<div class='url-box' style='color:#94a3b8'>📧 " +
-                    preview + "...</div>",
-                    unsafe_allow_html=True
-                )
+    from src.ui_history import render_history_tab
+    render_history_tab()
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -4614,3 +4804,30 @@ with tab_api_docs:
         scrolling=True,
     )
     st.info("💡 For local development, the API proxy runs on port 8080 via `python api_proxy.py`")
+
+# ═════════════════════════════════════════════════════════════════════════════
+# NEW TAB — AUDIT LOG
+# ═════════════════════════════════════════════════════════════════════════════
+if is_admin:
+    with tab_audit:
+        from src.ui_audit_log import render_audit_log_tab
+        render_audit_log_tab()
+
+# ═════════════════════════════════════════════════════════════════════════════
+# NEW TAB — PERFORMANCE MONITOR
+# ═════════════════════════════════════════════════════════════════════════════
+if is_admin:
+    with tab_perf:
+        from src.ui_performance import render_performance_tab
+        render_performance_tab()
+
+# ═════════════════════════════════════════════════════════════════════════════
+# NEW TAB — WEBHOOK TESTER
+# ═════════════════════════════════════════════════════════════════════════════
+with tab_webhook:
+    from src.ui_webhook_tester import render_webhook_tester_tab
+    render_webhook_tester_tab()
+
+# ═════════════════════════════════════════════════════════════════════════════
+# NEW TAB — SCIM / AUDIT LOG (non-admin webhook tester only)
+# ═════════════════════════════════════════════════════════════════════════════

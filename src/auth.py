@@ -81,6 +81,60 @@ def _login_form():
     login_btn = st.button("→ Access Platform", use_container_width=True,
                           type="primary")
 
+    # ── Magic Link Login ────────────────────────────────────────────────
+    st.markdown("<br><div style='text-align:center;color:#475569;font-size:12px'>"
+                "or</div>", unsafe_allow_html=True)
+    magic_email = st.text_input("Email for magic link", placeholder="you@example.com",
+                                label_visibility="collapsed", key="magic_email_input")
+    if st.button("📧 Send Magic Link", use_container_width=True):
+        if magic_email:
+            from src.magic_link import generate_magic_link
+            from src.alerting import send_email
+            from src.env import ENV
+            token = generate_magic_link(magic_email)
+            link = f"{ENV.APP_URL}/?magic_token={token}&email={magic_email}"
+            body = (
+                f"Click the link below to sign in to PhishGuard:\n\n{link}\n\n"
+                f"This link expires in 15 minutes. If you did not request this, ignore it."
+            )
+            try:
+                send_email(ENV.SMTP_HOST, ENV.SMTP_PORT, ENV.SMTP_USER,
+                           ENV.SMTP_PASSWORD, ENV.SMTP_FROM or ENV.SMTP_USER,
+                           magic_email, "Your PhishGuard Magic Link", body)
+                st.success("✅ Magic link sent! Check your inbox.")
+            except Exception as e:
+                st.error(f"Failed to send: {e}")
+        else:
+            st.warning("Enter your email address.")
+
+    # ── Magic Link Verification (via URL param) ─────────────────────────
+    try:
+        from urllib.parse import parse_qs
+        from src.magic_link import verify_magic_link
+        from src.tenants import get_tenant_by_email
+        query_params = st.query_params
+        magic_token = query_params.get("magic_token", [None])
+        magic_email = query_params.get("email", [None])
+        if magic_token and magic_email:
+            token_val = magic_token if isinstance(magic_token, str) else magic_token[0]
+            email_val = magic_email if isinstance(magic_email, str) else magic_email[0]
+            if verify_magic_link(email_val, token_val):
+                tenant = get_tenant_by_email(email_val)
+                if tenant:
+                    st.session_state["authenticated"] = True
+                    st.session_state["username"] = tenant["username"]
+                    st.session_state["plan"] = tenant["plan"]
+                    st.session_state["is_admin"] = bool(tenant["is_admin"])
+                    st.session_state["email"] = tenant["email"]
+                    st.session_state.pop("show_login", None)
+                    st.rerun()
+                else:
+                    st.error("No account found for that email.")
+            else:
+                st.error("Invalid or expired magic link.")
+    except Exception:
+        pass
+
     if login_btn:
         if not username or not password:
             st.error("Enter username and password.")

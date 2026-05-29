@@ -85,8 +85,8 @@ def init_api_keys_table():
 
 def generate_api_key(username: str, tier: str = "free") -> dict:
     init_api_keys_table()
-    raw_key = f"pg_{secrets.token_hex(24)}"
-    key_hash = _hash_key(raw_key)
+    raw_key = f"pg_{secrets.token_urlsafe(32)}"
+    key_hash = _hash_key_bcrypt(raw_key)
     key_prefix = raw_key[:14]
 
     conn = sqlite3.connect(str(DB_PATH))
@@ -115,20 +115,30 @@ def authenticate_request(headers: dict) -> dict:
     if not raw_key:
         return {"allowed": False, "status": 401, "error": "Missing X-PhishGuard-Key header"}
 
-    key_hash = _hash_key(raw_key)
-
     conn = sqlite3.connect(str(DB_PATH))
     c = conn.cursor()
     try:
         c.execute(
-            "SELECT username, tier, is_active FROM api_keys WHERE key_hash = ?",
-            (key_hash,),
+            "SELECT key_hash, username, tier, is_active FROM api_keys WHERE is_active=1",
         )
-        row = c.fetchone()
-        if not row:
+        rows = c.fetchall()
+        matched_row = None
+        for kh, uname, tier, active in rows:
+            try:
+                import bcrypt as _bcrypt
+                if _bcrypt.checkpw(raw_key.encode(), kh.encode()):
+                    matched_row = (kh, uname, tier, active)
+                    break
+            except (ImportError, ValueError):
+                # Fallback to SHA-256
+                if kh == hashlib.sha256(raw_key.encode()).hexdigest():
+                    matched_row = (kh, uname, tier, active)
+                    break
+
+        if not matched_row:
             return {"allowed": False, "status": 401, "error": "Invalid API key"}
 
-        username, tier, is_active = row
+        key_hash, username, tier, is_active = matched_row
         if not is_active:
             return {"allowed": False, "status": 403, "error": "API key is deactivated"}
 
@@ -251,3 +261,11 @@ def delete_api_key(key_hash: str) -> bool:
 
 def _hash_key(raw: str) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()
+
+
+def _hash_key_bcrypt(raw: str) -> str:
+    try:
+        import bcrypt as _bcrypt
+        return _bcrypt.hashpw(raw.encode(), _bcrypt.gensalt()).decode()
+    except ImportError:
+        return _hash_key(raw)
