@@ -376,6 +376,45 @@ with col_quota:
         st.session_state["show_upgrade"] = True
         st.rerun()
 
+    # ── Consultant White-Label Controls ────────────────────────────────────
+    tier = plan
+    is_consultant_plan = tier == "consultant"
+    st.markdown("<hr style='border-color:#1e3a5f;margin:12px 0'>", unsafe_allow_html=True)
+    st.markdown("<div style='font-size:13px;color:#94a3b8;margin-bottom:6px'>📄 Report Branding</div>",
+                unsafe_allow_html=True)
+    if is_consultant_plan:
+        uploaded_logo = st.file_uploader(
+            "Upload company logo for PDF reports",
+            type=["png", "jpg", "jpeg", "svg"],
+            key="consultant_logo_upload",
+            label_visibility="collapsed",
+        )
+        if uploaded_logo:
+            import tempfile
+            _tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
+            _tmp.write(uploaded_logo.getvalue())
+            st.session_state["consultant_logo_path"] = _tmp.name
+        wl_checked = st.checkbox("Export as White-Label Report", key="whitelabel_pdf")
+        if wl_checked:
+            st.caption("✅ All PhishGuard/SecOpsNode branding will be stripped")
+    else:
+        st.file_uploader(
+            "Upload company logo for PDF reports",
+            type=["png", "jpg", "jpeg", "svg"],
+            key="consultant_logo_locked",
+            disabled=True,
+            label_visibility="collapsed",
+            help="Available on Consultant Tier ($149/mo)",
+        )
+        st.checkbox(
+            "Export as White-Label Report",
+            key="whitelabel_pdf_locked",
+            disabled=True,
+            help="Available on Consultant Tier ($149/mo)",
+        )
+        st.caption("🔒 <span style='color:#eab308'>Available on Consultant Tier ($149/mo)</span>",
+                   unsafe_allow_html=True)
+
 with col_user:
     st.markdown("<br>", unsafe_allow_html=True)
 
@@ -585,10 +624,11 @@ if is_admin:
         "💳 Billing", "⚙ Settings", "🧪 Training", "🏆 Champions", "📊 History",
         "🧬 STIX Intel", "📧 Sender Profiler", "🔗 URL Sandbox", "👁 OCR/Homograph",
         "🎯 Campaigns", "📖 API Docs",
-        "📋 Audit Log", "📊 Performance", "🔌 Webhook Tester",
+        "📋 Audit Log", "📊 Performance", "📈 M&A Diligence",
+        "🔌 Webhook Tester",
         "📡 SOC Dashboard", "📋 Activity Timeline",
     ])
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12, tab13, tab14, tab15, tab16, tab17, tab_audit, tab_perf, tab_webhook, tab_soc, tab_timeline = tabs
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12, tab13, tab14, tab15, tab16, tab17, tab_audit, tab_perf, tab_ma, tab_webhook, tab_soc, tab_timeline = tabs
     tab_stix, tab_sender, tab_sandbox, tab_ocr, tab_campaigns, tab_api_docs = tab12, tab13, tab14, tab15, tab16, tab17
 else:
     tabs = st.tabs([
@@ -920,6 +960,7 @@ with tab1:
                 if _cap["paused"]:
                     st.error("⛔ **Hard spending cap reached.** Increase your cap in settings to continue.")
                     st.stop()
+                import time as _tmod; _start_time = _tmod.time()
                 results = analyze_email(email_text)
                 save_analysis(results, email_text)
                 log_usage(username, "analysis", results["risk_score"])
@@ -927,6 +968,17 @@ with tab1:
                     username,
                     severity=results["severity"],
                     score=results["risk_score"],
+                )
+                # Record valuation telemetry for M&A diligence
+                from src.database import record_valuation_metric
+                record_valuation_metric(
+                    scan_latency_ms=int((_tmod.time() - _start_time) * 1000),
+                    risk_score=results["risk_score"],
+                    severity=results["severity"],
+                    threat_category=",".join(results.get("keyword_matches", {}).keys()) or "none",
+                    username=username,
+                    user_tier=plan,
+                    source="web",
                 )
                 # Send email alert if HIGH or CRITICAL
                 user_email = st.session_state.get("email", "")
@@ -1112,6 +1164,10 @@ with tab1:
         header_auth      = st.session_state.get("header_auth", {})
         aitm_result      = st.session_state.get("aitm_result", {})
 
+        user_tier = st.session_state.get("plan", "trial")
+        is_restricted = user_tier in ("free", "trial", "starter") and results.get("risk_score", 0) >= 75
+        _restricted_blur = is_restricted
+
         st.divider()
         quarantine_badge = ""
         q_key = f"quarantine_threshold_{username}"
@@ -1126,10 +1182,15 @@ with tab1:
 
         col_gauge, col_m1, col_m2, col_m3, col_m4 = st.columns([1.2, 1, 1, 1, 1])
         with col_gauge:
+            lang_badges = ""
+            lang_map = {"EN": {"label": "EN", "color": "#3b82f6"}, "FR": {"label": "FR", "color": "#22c55e"}, "AR": {"label": "AR", "color": "#f59e0b"}}
+            for lc in results.get("languages_detected", ["EN"]):
+                info = lang_map.get(lc, {"label": lc, "color": "#94a3b8"})
+                lang_badges += f"<span style='background:{info['color']}20;color:{info['color']};border:1px solid {info['color']}44;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600;margin-left:4px'>{info['label']}</span>"
             fig = go.Figure(go.Indicator(
                 mode="gauge+number", value=score,
                 domain={"x": [0, 1], "y": [0, 1]},
-                title={"text": f"<b>{severity}</b>", "font": {"color": color, "size": 16}},
+                title={"text": f"<b>{severity}</b> {lang_badges}", "font": {"color": color, "size": 16}},
                 gauge={
                     "axis": {"range": [0, 100], "tickcolor": "#94a3b8"},
                     "bar":  {"color": color},
@@ -1168,6 +1229,15 @@ with tab1:
                 f"<div style='font-size:1.6rem;font-weight:700;color:{_pcolor}'>{_ai_prob}%</div>"
                 f"<div style='color:#475569;font-size:10px'>{_perplex.get('summary','')[:40]}</div>"
                 f"</div>",
+                unsafe_allow_html=True,
+            )
+
+        # ── Deep Analysis: Blur/Section-Cutoff for restricted tiers ────────
+        _restricted_blur = is_restricted
+        if _restricted_blur:
+            st.markdown(
+                "<div style='position:relative;overflow:hidden'>"
+                "<div style='filter:blur(6px);pointer-events:none;user-select:none;opacity:0.3'>",
                 unsafe_allow_html=True,
             )
 
@@ -1294,6 +1364,23 @@ with tab1:
                         "<span class='tag'>" + kw + "</span>" for kw in keywords
                     )
                     st.markdown(tags, unsafe_allow_html=True)
+
+        # ── Phishing Kit Fingerprinting ──────────────────────────────────────────
+        kit_data = results.get("kit_fingerprinting", {})
+        if kit_data and kit_data.get("total_kits_detected", 0) > 0:
+            st.markdown("<div class='section-title'>🕵️ Phishing Kit Fingerprinting</div>",
+                        unsafe_allow_html=True)
+            for match in kit_data["matches"]:
+                icon = "🔴" if match["confidence"] >= 70 else "🟡" if match["confidence"] >= 40 else "🟢"
+                sev_color = {"CRITICAL": "#ff4444", "HIGH": "#ff8800", "MEDIUM": "#ffaa00"}.get(match["severity"], "#94a3b8")
+                with st.expander(f"{icon} **{match['name']}** — {match['confidence']}% match", expanded=match["confidence"] >= 50):
+                    st.caption(f"Severity: <span style='color:{sev_color}'>{match['severity']}</span> — {match['description']}",
+                               unsafe_allow_html=True)
+                    mp = match["matched_patterns"]
+                    cols = st.columns(6)
+                    labels = ["HTML", "CSS", "Form Fields", "JS", "File Paths", "Headers"]
+                    for i, (key, label) in enumerate(zip(["html","css","form_fields","js","file_paths","headers"], labels)):
+                        cols[i].metric(label, mp.get(key, 0))
 
         # ── XAI Psychological Trigger Breakdown ─────────────────────────────────
         xai_result = st.session_state.get("xai_result")
@@ -1608,9 +1695,12 @@ with tab1:
                     st.session_state.pop("honeypot", None)
                     st.rerun()
 
+        # ── Close blur overlay for restricted tiers ────────────────────────
+        if _restricted_blur:
+            st.markdown("</div></div>", unsafe_allow_html=True)
+
         # ── Abrupt Visibility Cutoff Paywall Gate ──────────────────────────
-        user_tier = st.session_state.get("plan", "trial")
-        is_restricted = user_tier in ("trial", "starter") and results.get("risk_score", 0) >= 75
+        is_restricted = _restricted_blur
 
         if is_restricted:
             st.divider()
@@ -2920,6 +3010,57 @@ with billing_tab:
         unsafe_allow_html=True
     )
 
+    # ── Per-Mailbox Pricing Calculator ─────────────────────────────────────
+    st.markdown("<div class='section-title'>📬 Per-Mailbox Pricing Calculator</div>",
+                unsafe_allow_html=True)
+    _mb = st.slider("Number of mailboxes / users", 5, 5000, 50, key="mb_slider")
+    if _mb <= 200:
+        _rate = 4.00
+        _tier_label = "Business"
+    elif _mb <= 2000:
+        _rate = 3.25
+        _tier_label = "Business+"
+    else:
+        _rate = 2.50
+        _tier_label = "Enterprise"
+    _monthly = _mb * _rate
+    _annual = _monthly * 12
+    st.markdown(
+        f"<div style='background:linear-gradient(135deg,#0a1628,#0f1f3d);"
+        f"border:1px solid #3b82f644;border-radius:14px;padding:20px 24px;margin-bottom:20px'>"
+        f"<div style='display:flex;justify-content:space-between;align-items:center'>"
+        f"<div>"
+        f"<div style='color:#94a3b8;font-size:12px'>Tier</div>"
+        f"<div style='color:#f0f6ff;font-size:1.2rem;font-weight:700'>{_tier_label}</div>"
+        f"<div style='color:#60a5fa;font-size:0.85rem'>${_rate:.2f}/mailbox/mo</div>"
+        f"</div>"
+        f"<div style='text-align:right'>"
+        f"<div style='color:#94a3b8;font-size:12px'>Monthly Invoice</div>"
+        f"<div style='color:#22c55e;font-size:2rem;font-weight:800'>${_monthly:,.2f}</div>"
+        f"<div style='color:#475569;font-size:0.75rem'>${_annual:,.2f}/year</div>"
+        f"</div></div></div>",
+        unsafe_allow_html=True
+    )
+    st.caption(f"Rate: ${_rate:.2f}/mailbox/mo × {_mb} mailboxes = ${_monthly:,.2f}/mo")
+
+    # ── API Prepaid Credits Overage ────────────────────────────────────────
+    st.markdown("<div class='section-title'>⛽ API Prepaid Credits</div>",
+                unsafe_allow_html=True)
+    col_cr1, col_cr2, col_cr3 = st.columns(3)
+    with col_cr1:
+        st.metric("Daily API Calls Used", quota_status.get("used", 0), help="API calls today")
+    with col_cr2:
+        st.metric("Daily Limit", quota_status.get("limit", 100), help="Your daily API quota")
+    with col_cr3:
+        remaining = max(0, quota_status.get("limit", 100) - quota_status.get("used", 0))
+        st.metric("Remaining", remaining, delta_color="inverse")
+    _top_up = st.number_input("Purchase prepaid credits (1,000 credits = $49)", min_value=0, max_value=10000, step=1000, value=0, key="credit_topup")
+    if _top_up > 0 and st.button(f"💳 Purchase {_top_up:,} Credits for ${_top_up//1000*49:,}", key="buy_credits_btn"):
+        from src.database import buy_credits
+        buy_credits(username, _top_up)
+        st.success(f"✅ {_top_up:,} credits added to your account!")
+        st.rerun()
+
     if plan == "enterprise":
         st.success("🌟 You are on the **Enterprise** plan — unlimited analyses, all features enabled.")
     else:
@@ -3302,6 +3443,80 @@ with settings_tab:
             st.rerun()
     else:
         st.info("No quarantined emails yet. Threshold-based tracking is active.")
+
+    # ── Active Containment & SOAR Gateway ────────────────────────────────────
+    st.divider()
+    st.markdown("### 🚨 Active Containment & SOAR Gateway")
+    _is_ent = plan == "enterprise"
+    if not _is_ent:
+        st.markdown(
+            "<div style='background:#0a0f1a;border:2px solid #eab30844;border-radius:16px;"
+            "padding:30px 24px;text-align:center;margin:12px 0'>"
+            "<div style='font-size:2.5rem;margin-bottom:8px'>🔒</div>"
+            "<div style='color:#f0f6ff;font-size:1.2rem;font-weight:700;margin-bottom:6px'>"
+            "Enterprise SOAR Gateway Locked</div>"
+            "<div style='color:#94a3b8;font-size:0.9rem;max-width:400px;margin:0 auto 16px auto'>"
+            "Isolate compromised endpoints instantly via Active Directory & Cisco API integration. "
+            "Upgrade to Enterprise Plan to enable automatic workstation quarantine.</div>"
+            "<a href='#billing-tab' style='display:inline-block;"
+            "background:linear-gradient(135deg,#eab308,#f59e0b);color:#0a0f1a;"
+            "padding:10px 32px;border-radius:10px;text-decoration:none;font-weight:700;"
+            "font-size:0.95rem'>⬆ Upgrade to Enterprise</a></div>",
+            unsafe_allow_html=True,
+        )
+    else:
+        from src.soar_gateway import (
+            quarantine_host, disable_ad_account, broadcast_slack_channel, get_soar_status,
+        )
+        st.markdown(
+            "<div style='background:#0a1628;border:1px solid #22c55e44;border-radius:14px;"
+            "padding:18px 22px;margin-bottom:16px'>"
+            "<div style='color:#22c55e;font-weight:700;font-size:1rem'>✅ SOAR Gateway Active</div>"
+            "<div style='color:#94a3b8;font-size:13px'>Connected: Active Directory | Cisco Firepower | Slack Webhook</div>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
+        soar_status = get_soar_status()
+        col_s1, col_s2, col_s3 = st.columns(3)
+        col_s1.metric("Hosts Quarantined", soar_status["quarantined_hosts"])
+        col_s2.metric("AD Accounts Disabled", soar_status["disabled_accounts"])
+        col_s3.metric("Alerts Broadcast", soar_status["broadcasts_sent"])
+
+        with st.expander("🛡 Quarantine Host IP via Cisco Firewall", expanded=False):
+            q_ip = st.text_input("Target IP address", placeholder="10.0.1.50", key="soar_ip")
+            q_reason = st.text_input("Reason", "Phishing threat detected", key="soar_reason")
+            if st.button("🚨 Execute Quarantine", type="primary", key="soar_q_btn"):
+                with st.spinner("Communicating with Cisco Firepower..."):
+                    res = quarantine_host(q_ip, q_reason)
+                if res.success:
+                    st.success(f"✅ {res.message}")
+                    st.caption(f"Duration: {res.duration_ms}ms | ACL: {res.details.get('acl_rule', 'N/A')}")
+                else:
+                    st.error(f"❌ {res.message}")
+
+        with st.expander("🔐 Disable Account in Active Directory", expanded=False):
+            ad_user = st.text_input("AD Username", placeholder="jdoe", key="soar_ad_user")
+            ad_domain = st.text_input("Domain", "CORP", key="soar_ad_domain")
+            if st.button("🔐 Disable Account", type="primary", key="soar_ad_btn"):
+                with st.spinner("Connecting to domain controller..."):
+                    res = disable_ad_account(ad_user, ad_domain)
+                if res.success:
+                    st.success(f"✅ {res.message}")
+                    st.caption(f"Duration: {res.duration_ms}ms | DC: {res.details.get('domain_controller', 'N/A')}")
+                else:
+                    st.error(f"❌ {res.message}")
+
+        with st.expander("📢 Broadcast to SecOps Slack Channel", expanded=False):
+            slack_ch = st.text_input("Slack Channel", "#secops-alerts", key="soar_slack_ch")
+            slack_msg = st.text_area("Alert Message", "PhishGuard AI: Compromise confirmed — immediate action required.", key="soar_slack_msg")
+            if st.button("📢 Send Broadcast", type="primary", key="soar_slack_btn"):
+                with st.spinner("Pushing to Slack, PagerDuty, and OpsGenie..."):
+                    res = broadcast_slack_channel(slack_ch, slack_msg)
+                if res.success:
+                    st.success(f"✅ {res.message}")
+                    st.caption(f"Duration: {res.duration_ms}ms | Channels: {', '.join(res.details.get('integrations', []))}")
+                else:
+                    st.error(f"❌ {res.message}")
 
     # ── IMAP Worker Configuration ───────────────────────────────────────────
     st.divider()
@@ -3944,88 +4159,180 @@ with training_tab:
                     st.info("No campaigns launched yet.")
 
         else:
-            # ── Non-admin: Simple Simulation Generator ──────────────────────
-            st.markdown("### 🎣 Phishing Simulation Generator")
+            # ── Corporate Phishing Simulation Hub (WormGPT-Style) ────────────
+            _sim_tier_ok = plan in ("business", "enterprise", "consultant")
+            # Simulation credits counter
+            if "sim_credits" not in st.session_state:
+                st.session_state["sim_credits"] = 5 if _sim_tier_ok else 0
+            _sim_credits = st.session_state["sim_credits"]
+
+            st.markdown("### 🧠 Corporate Phishing Simulation Hub")
             st.markdown(
-                "<p style='color:#64748b;margin-top:-8px'>Generate context-specific "
-                "phishing simulations for self-training.</p>",
+                "<p style='color:#64748b;margin-top:-8px'>WormGPT-style contextual "
+                "persuasion engine — generate state-actor phishing simulations "
+                "tailored to your organization's departments.</p>",
                 unsafe_allow_html=True
             )
 
-            col_sim_dept, col_sim_vec = st.columns(2)
-            with col_sim_dept:
-                department = st.selectbox(
-                    "Department", ["Finance", "HR", "IT Support"],
-                    index=0, label_visibility="collapsed", key="sim_dept"
+            if not _sim_tier_ok:
+                st.markdown(
+                    "<div style='background:linear-gradient(145deg,#0a0f1a,#0f1a2a);"
+                    "border:2px solid #eab30844;border-radius:16px;padding:28px 24px;"
+                    "text-align:center;margin:16px 0'>"
+                    "<div style='font-size:2.5rem;margin-bottom:8px'>🧠</div>"
+                    "<div style='color:#f0f6ff;font-size:1.2rem;font-weight:700;margin-bottom:6px'>"
+                    "Advanced Simulation Hub Locked</div>"
+                    "<div style='color:#94a3b8;font-size:0.9rem;max-width:420px;margin:0 auto 16px auto'>"
+                    "Generate context-aware phishing simulations with state-actor tactical "
+                    "patterns. Upgrade to Business ($99/mo) or Enterprise to unlock.</div>"
+                    "<a href='#billing-tab' style='display:inline-block;"
+                    "background:linear-gradient(135deg,#eab308,#f59e0b);color:#0a0f1a;"
+                    "padding:10px 32px;border-radius:10px;text-decoration:none;font-weight:700;"
+                    "font-size:0.95rem'>⬆ Upgrade to Business</a></div>",
+                    unsafe_allow_html=True,
                 )
-            with col_sim_vec:
-                attack_vector = st.selectbox(
-                    "Attack Vector", ["Urgent Invoice", "Password Reset", "Fake HR Policy"],
-                    index=0, label_visibility="collapsed", key="sim_vector"
+            else:
+                # ── Credit Meter ─────────────────────────────────────────────
+                _sc_pct = min(100, int(_sim_credits / 50 * 100))
+                _sc_color = "#22c55e" if _sim_credits > 20 else "#eab308" if _sim_credits > 5 else "#ef4444"
+                st.markdown(
+                    "<div style='display:flex;gap:12px;align-items:center;"
+                    "background:#111827;border:1px solid #1e3a5f;border-radius:12px;"
+                    "padding:12px 18px;margin-bottom:16px'>"
+                    "<div style='font-size:1.5rem'>🎯</div>"
+                    "<div style='flex:1'>"
+                    "<div style='display:flex;justify-content:space-between;font-size:12px;"
+                    f"color:#94a3b8'><span>Simulation Credits</span>"
+                    f"<span style='color:{_sc_color};font-weight:700'>{_sim_credits} remaining</span></div>"
+                    "<div style='background:#1e3a5f;border-radius:4px;height:5px;margin-top:4px'>"
+                    f"<div style='background:{_sc_color};border-radius:4px;height:5px;"
+                    f"width:{_sc_pct}%'></div></div></div>"
+                    f"<div style='font-size:11px;color:#64748b'>1 credit per simulation</div></div>",
+                    unsafe_allow_html=True,
                 )
 
-            dept_icons = {"Finance": "🏦", "HR": "📋", "IT Support": "🖥"}
-            vec_icons = {"Urgent Invoice": "📄", "Password Reset": "🔑", "Fake HR Policy": "📜"}
-
-            st.markdown(
-                f"<div style='background:#0f172a;border:1px solid #1e3a5f;"
-                f"border-radius:10px;padding:14px 18px;margin:8px 0 16px 0;"
-                f"color:#94a3b8;font-size:13px'>"
-                f"Scenario: {dept_icons.get(department, '')} <b>{department}</b> "
-                f"via {vec_icons.get(attack_vector, '')} <b>{attack_vector}</b></div>",
-                unsafe_allow_html=True
-            )
-
-            if st.button("🎲 Generate Simulation", type="primary", use_container_width=True):
-                with st.spinner("Generating..."):
-                    sim = simulate_phishing(department, attack_vector)
-                st.session_state["simulation"] = sim
-                st.session_state["sim_reveal"] = False
-
-            sim = st.session_state.get("simulation")
-            if sim:
-                st.divider()
-                st.markdown("### 📧 Simulated Email")
-                col_sim1, col_sim2 = st.columns([1, 3])
-                with col_sim1:
-                    st.markdown("**From:**")
-                    st.markdown("**Subject:**")
-                    st.markdown("**Body:**")
-                with col_sim2:
-                    st.markdown(f"`{sim.get('sender', 'unknown@example.com')}`")
-                    st.markdown(f"**{sim.get('subject', '(no subject)')}**")
-                    st.markdown(
-                        "<div style='background:#0f172a;border:1px solid #1e3a5f;"
-                        "border-radius:10px;padding:16px;font-family:monospace;"
-                        "font-size:13px;color:#94a3b8;line-height:1.6;margin-top:4px;"
-                        "max-height:300px;overflow-y:auto'>"
-                        + sim.get("body", "").replace("\n", "<br>") +
-                        "</div>", unsafe_allow_html=True
+                col_sim_dept, col_sim_vec, col_sim_tac = st.columns(3)
+                with col_sim_dept:
+                    department = st.selectbox(
+                        "Target Department",
+                        ["Finance", "HR", "IT Support", "Executive", "Sales", "Engineering", "Legal"],
+                        index=0, label_visibility="collapsed", key="sim_dept"
+                    )
+                with col_sim_vec:
+                    attack_vector = st.selectbox(
+                        "Attack Vector",
+                        ["Urgent Invoice", "Password Reset", "Fake HR Policy",
+                         "Shared Document", "Voicemail", "Package Delivery",
+                         "MFA Fatigue", "OAuth Consent", "Gift Card Scam"],
+                        index=0, label_visibility="collapsed", key="sim_vector"
+                    )
+                with col_sim_tac:
+                    tactic_ref = st.selectbox(
+                        "State-Actor Tactic",
+                        ["Whaling (CEO Fraud)", "Business Email Compromise",
+                         "Credential Harvesting", "MFA Bypass (AitM)",
+                         "Pretexting / Vishing Setup", "Watering Hole Lure",
+                         "WormGPT Contextual Persuasion"],
+                        index=0, label_visibility="collapsed", key="sim_tactic"
                     )
 
-                st.divider()
-                reveal = st.session_state.get("sim_reveal", False)
-                if not reveal:
-                    if st.button("🔍 Reveal Phishing Clues", type="primary", use_container_width=True):
-                        st.session_state["sim_reveal"] = True
+                dept_icons = {"Finance": "🏦", "HR": "📋", "IT Support": "🖥",
+                              "Executive": "👔", "Sales": "📊", "Engineering": "⚙", "Legal": "⚖"}
+                vec_icons = {"Urgent Invoice": "📄", "Password Reset": "🔑", "Fake HR Policy": "📜",
+                             "Shared Document": "📎", "Voicemail": "📞", "Package Delivery": "📦",
+                             "MFA Fatigue": "📱", "OAuth Consent": "🔐", "Gift Card Scam": "🎁"}
+                tactic_icons = {"Whaling (CEO Fraud)": "🐋", "Business Email Compromise": "💼",
+                                "Credential Harvesting": "🎣", "MFA Bypass (AitM)": "🕵️",
+                                "Pretexting / Vishing Setup": "🎭", "Watering Hole Lure": "🌊",
+                                "WormGPT Contextual Persuasion": "🧠"}
+
+                st.markdown(
+                    f"<div style='background:#0f172a;border:1px solid #1e3a5f;"
+                    f"border-radius:10px;padding:14px 18px;margin:8px 0 16px 0;"
+                    f"color:#94a3b8;font-size:13px'>"
+                    f"Scenario: {dept_icons.get(department, '')} <b>{department}</b> "
+                    f"via {vec_icons.get(attack_vector, '')} <b>{attack_vector}</b> "
+                    f"| Tactic: {tactic_icons.get(tactic_ref, '')} <b>{tactic_ref}</b></div>",
+                    unsafe_allow_html=True
+                )
+
+                col_go, col_buy = st.columns([1, 1])
+                with col_go:
+                    gen_disabled = _sim_credits <= 0
+                    if st.button("🧠 WormGPT Generate", type="primary",
+                                  use_container_width=True, disabled=gen_disabled):
+                        with st.spinner("Generating state-actor simulation..."):
+                            st.session_state["sim_credits"] = max(0, _sim_credits - 1)
+                            sim = simulate_phishing(department, attack_vector)
+                            # Inject tactic reference
+                            sim["tactic"] = tactic_ref
+                            st.session_state["simulation"] = sim
+                            st.session_state["sim_reveal"] = False
+                            st.rerun()
+                with col_buy:
+                    if st.button("💰 Buy 1,000 Simulation Credits ($49)",
+                                  use_container_width=True):
+                        st.session_state["sim_credits"] = _sim_credits + 1000
+                        st.success("✅ 1,000 simulation credits added!")
                         st.rerun()
-                else:
-                    clues = sim.get("clues", [])
-                    remediation = sim.get("remediation", "")
-                    st.markdown("### 🚩 Phishing Indicators")
-                    for clue in clues:
+                if gen_disabled and _sim_credits <= 0:
+                    st.warning("⛔ Simulation credits depleted. Purchase a bundle to continue.")
+
+                # Display simulation results
+                sim = st.session_state.get("simulation")
+                if sim:
+                    st.divider()
+                    st.markdown("### 📧 Simulated Email")
+                    col_sim1, col_sim2 = st.columns([1, 3])
+                    with col_sim1:
+                        st.markdown("**From:**")
+                        st.markdown("**Subject:**")
+                        st.markdown("**Tactic:**")
+                        st.markdown("**Body:**")
+                    with col_sim2:
+                        st.markdown(f"`{sim.get('sender', 'unknown@example.com')}`")
+                        st.markdown(f"**{sim.get('subject', '(no subject)')}**")
+                        st.markdown(f"<span style='color:#eab308'>{sim.get('tactic', tactic_ref)}</span>",
+                                    unsafe_allow_html=True)
                         st.markdown(
-                            "<div style='background:#2a0a0a;border:1px solid #ff444444;"
-                            "border-radius:8px;padding:10px 14px;margin:6px 0;"
-                            "color:#ff8888;font-size:13px'>🚨 " + clue + "</div>",
-                            unsafe_allow_html=True
+                            "<div style='background:#0f172a;border:1px solid #1e3a5f;"
+                            "border-radius:10px;padding:16px;font-family:monospace;"
+                            "font-size:13px;color:#94a3b8;line-height:1.6;margin-top:4px;"
+                            "max-height:300px;overflow-y:auto'>"
+                            + sim.get("body", "").replace("\n", "<br>") +
+                            "</div>", unsafe_allow_html=True
                         )
-                    st.markdown("### 🛡️ Remediation")
-                    st.success(remediation)
-                    if st.button("🔄 Try Another", use_container_width=True):
-                        st.session_state.pop("simulation", None)
-                        st.session_state.pop("sim_reveal", None)
-                        st.rerun()
+
+                    st.divider()
+                    reveal = st.session_state.get("sim_reveal", False)
+                    if not reveal:
+                        if st.button("🔍 Reveal Phishing Clues", type="primary", use_container_width=True):
+                            st.session_state["sim_reveal"] = True
+                            st.rerun()
+                    else:
+                        clues = sim.get("clues", [])
+                        remediation = sim.get("remediation", "")
+                        st.markdown("### 🚩 Phishing Indicators")
+                        for clue in clues:
+                            st.markdown(
+                                "<div style='background:#2a0a0a;border:1px solid #ff444444;"
+                                "border-radius:8px;padding:10px 14px;margin:6px 0;"
+                                "color:#ff8888;font-size:13px'>🚨 " + clue + "</div>",
+                                unsafe_allow_html=True
+                            )
+                        st.markdown("### 🛡️ Remediation")
+                        st.success(remediation)
+                        col_try, col_new = st.columns(2)
+                        with col_try:
+                            if st.button("🔄 Try Another", use_container_width=True):
+                                st.session_state.pop("simulation", None)
+                                st.session_state.pop("sim_reveal", None)
+                                st.rerun()
+                        with col_new:
+                            if st.button("💰 Buy More Credits", use_container_width=True):
+                                st.session_state["sim_credits"] = _sim_credits + 1000
+                                st.success("✅ 1,000 credits added!")
+                                st.rerun()
 
     # ── Sub-tab 2: Screenshot OCR Scanner ────────────────────────────────────
     with sub_tab2:
@@ -4879,6 +5186,127 @@ if is_admin:
     with tab_perf:
         from src.ui_performance import render_performance_tab
         render_performance_tab()
+
+# ═════════════════════════════════════════════════════════════════════════════
+# TAB — M&A DILIGENCE (Acquire.com Valuation Optimizer)
+# ═════════════════════════════════════════════════════════════════════════════
+with tab_ma:
+    st.markdown("## 📈 M&A Diligence Dashboard")
+    st.markdown(
+        "<p style='color:#94a3b8'>Verified transaction telemetry for acquirer due diligence. "
+        "Audit-proof logs of user engagement, ARR, and SDE multiples.</p>",
+        unsafe_allow_html=True,
+    )
+    st.divider()
+
+    from src.database import get_valuation_summary, get_valuation_logs
+    v = get_valuation_summary()
+
+    col_v1, col_v2, col_v3, col_v4 = st.columns(4)
+    col_v1.markdown(
+        "<div class='stat-card'>"
+        f"<div style='font-size:2rem;font-weight:900;color:#60a5fa'>{v['total_scans']}</div>"
+        "<div style='color:#64748b;font-size:0.85rem'>Total Scans Logged</div></div>",
+        unsafe_allow_html=True
+    )
+    col_v2.markdown(
+        "<div class='stat-card'>"
+        f"<div style='font-size:2rem;font-weight:900;color:#22c55e'>{v['unique_users']}</div>"
+        "<div style='color:#64748b;font-size:0.85rem'>Active Users</div></div>",
+        unsafe_allow_html=True
+    )
+    col_v3.markdown(
+        "<div class='stat-card'>"
+        f"<div style='font-size:1.5rem;font-weight:900;color:#eab308'>${v['estimated_arr']:,.0f}</div>"
+        "<div style='color:#64748b;font-size:0.85rem'>Estimated ARR</div></div>",
+        unsafe_allow_html=True
+    )
+    col_v4.markdown(
+        "<div class='stat-card'>"
+        f"<div style='font-size:1.5rem;font-weight:900;color:#22c55e'>${v['estimated_sde']:,.0f}</div>"
+        "<div style='color:#64748b;font-size:0.85rem'>Est. SDE (2.5x)</div></div>",
+        unsafe_allow_html=True
+    )
+
+    st.divider()
+    col_va, col_vb = st.columns(2)
+    with col_va:
+        st.markdown("### 📊 Performance Metrics")
+        st.metric("Avg Scan Latency", f"{v['avg_latency_ms']}ms")
+        st.metric("Avg Risk Score", f"{v['avg_risk_score']}/100")
+        st.metric("Unique Sessions", v["unique_sessions"])
+        st.metric("Valuation Range", v["valuation_range"])
+    with col_vb:
+        st.markdown("### 👥 User Tier Distribution")
+        if v["tier_distribution"]:
+            for tier, cnt in v["tier_distribution"].items():
+                pct = cnt / v["total_scans"] * 100 if v["total_scans"] else 0
+                st.markdown(
+                    f"<div style='display:flex;justify-content:space-between;"
+                    f"padding:4px 8px;background:#111827;border-radius:6px;margin:3px 0'>"
+                    f"<span style='color:#94a3b8'>{tier.upper()}</span>"
+                    f"<span style='color:#e2e8f0'>{cnt} scans ({pct:.1f}%)</span></div>",
+                    unsafe_allow_html=True,
+                )
+        else:
+            st.info("No tier data yet.")
+
+    st.divider()
+    st.markdown("### 📜 Verified Transaction Log")
+    st.caption("Last 100 scan events with latency, risk, and user metadata")
+    logs = get_valuation_logs(100)
+    if logs:
+        log_rows = ""
+        for row in logs:
+            ts, sid, lat, score, sev, cat, tier, user, src = row
+            sev_color = {"CRITICAL": "#ff4444", "HIGH": "#ff8800", "MEDIUM": "#ffaa00", "LOW": "#44aa44"}.get(sev, "#94a3b8")
+            log_rows += (
+                f"<tr style='border-bottom:1px solid #1e3a5f'>"
+                f"<td style='padding:4px 8px;color:#475569;font-size:11px'>{ts[:19]}</td>"
+                f"<td style='padding:4px 8px;color:#60a5fa;font-size:11px'>{sid}</td>"
+                f"<td style='padding:4px 8px;color:#94a3b8;font-size:11px'>{lat}ms</td>"
+                f"<td style='padding:4px 8px;color:{sev_color};font-size:11px'>{score}/100</td>"
+                f"<td style='padding:4px 8px;color:{sev_color};font-size:11px'>{sev}</td>"
+                f"<td style='padding:4px 8px;color:#94a3b8;font-size:11px'>{cat[:30]}</td>"
+                f"<td style='padding:4px 8px;color:#eab308;font-size:11px'>{tier}</td>"
+                f"<td style='padding:4px 8px;color:#94a3b8;font-size:11px'>{user}</td>"
+                f"<td style='padding:4px 8px;color:#94a3b8;font-size:11px'>{src}</td></tr>"
+            )
+        st.markdown(
+            "<div style='overflow-x:auto;max-height:400px;overflow-y:scroll'>"
+            "<table style='width:100%;border-collapse:collapse'>"
+            "<thead style='position:sticky;top:0;background:#0a0f1a'>"
+            "<tr style='border-bottom:2px solid #1e3a5f'>"
+            "<th style='padding:8px;color:#64748b;font-size:11px;text-align:left'>Timestamp</th>"
+            "<th style='padding:8px;color:#64748b;font-size:11px;text-align:left'>Session</th>"
+            "<th style='padding:8px;color:#64748b;font-size:11px;text-align:left'>Latency</th>"
+            "<th style='padding:8px;color:#64748b;font-size:11px;text-align:left'>Score</th>"
+            "<th style='padding:8px;color:#64748b;font-size:11px;text-align:left'>Severity</th>"
+            "<th style='padding:8px;color:#64748b;font-size:11px;text-align:left'>Category</th>"
+            "<th style='padding:8px;color:#64748b;font-size:11px;text-align:left'>Tier</th>"
+            "<th style='padding:8px;color:#64748b;font-size:11px;text-align:left'>User</th>"
+            "<th style='padding:8px;color:#64748b;font-size:11px;text-align:left'>Source</th></tr></thead>"
+            f"<tbody>{log_rows}</tbody></table></div>",
+            unsafe_allow_html=True,
+        )
+    else:
+        st.info("No scan telemetry yet. Scan an email to populate the valuation log.")
+
+    st.divider()
+    st.markdown(
+        "<div style='background:#111827;border:1px solid #eab30844;border-radius:12px;padding:20px'>"
+        "<div style='color:#eab308;font-weight:700;margin-bottom:8px'>💰 Pre-Revenue Valuation Estimate</div>"
+        f"<p style='color:#94a3b8;font-size:13px'>Based on <strong>{v['unique_users']}</strong> active users "
+        f"with <strong>{v['total_scans']}</strong> verified scan events, estimated ARR is "
+        f"<strong style='color:#22c55e'>${v['estimated_arr']:,.0f}</strong> "
+        f"and SDE (Seller's Discretionary Earnings) at 2.5x is "
+        f"<strong style='color:#22c55e'>${v['estimated_sde']:,.0f}</strong>.</p>"
+        "<p style='color:#64748b;font-size:12px'>Valuation range on Acquire.com/Microns.io: "
+        f"<strong>{v['valuation_range']}</strong>. "
+        "These metrics are auditable through the verified transaction log above.</p>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
 
 # ═════════════════════════════════════════════════════════════════════════════
 # NEW TAB — WEBHOOK TESTER

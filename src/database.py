@@ -359,6 +359,29 @@ def init_db():
         )
     """)
 
+    # 19. M&A Valuation Metrics Telemetry
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS valuation_metrics (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp       TEXT NOT NULL,
+            session_id      TEXT NOT NULL,
+            scan_latency_ms INTEGER NOT NULL,
+            risk_score      INTEGER NOT NULL,
+            severity        TEXT NOT NULL,
+            threat_category TEXT NOT NULL,
+            user_tier       TEXT NOT NULL DEFAULT 'trial',
+            username        TEXT DEFAULT 'anonymous',
+            source          TEXT DEFAULT 'web',
+            created_at      TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    c.execute("""
+        CREATE INDEX IF NOT EXISTS idx_valuation_ts ON valuation_metrics (timestamp)
+    """)
+    c.execute("""
+        CREATE INDEX IF NOT EXISTS idx_valuation_session ON valuation_metrics (session_id)
+    """)
+
     conn.commit()
     conn.close()
 
@@ -509,6 +532,98 @@ def record_spend(username: str, amount_usd: float) -> dict:
     conn.commit()
     conn.close()
     return {"allowed": True, "cap": {**cap, "current_spend": new_spend}}
+
+
+# ── M&A Valuation Telemetry ──────────────────────────────────────────────
+
+import uuid
+import time
+
+
+def record_valuation_metric(
+    scan_latency_ms: int,
+    risk_score: int,
+    severity: str,
+    threat_category: str,
+    username: str = "anonymous",
+    user_tier: str = "trial",
+    source: str = "web",
+) -> dict:
+    """Record a scan event for M&A valuation / ARR calculations."""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    session_id = str(uuid.uuid4())[:8]
+    ts = datetime.now().isoformat()
+    c.execute(
+        "INSERT INTO valuation_metrics "
+        "(timestamp, session_id, scan_latency_ms, risk_score, severity, "
+        "threat_category, user_tier, username, source) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (ts, session_id, scan_latency_ms, risk_score, severity,
+         threat_category, user_tier, username, source),
+    )
+    conn.commit()
+    conn.close()
+    return {"session_id": session_id, "timestamp": ts}
+
+
+def get_valuation_summary() -> dict:
+    """Aggregate valuation metrics for M&A diligence dashboard."""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT COUNT(*) FROM valuation_metrics")
+    total_scans = c.fetchone()[0]
+    c.execute("SELECT COUNT(DISTINCT session_id) FROM valuation_metrics")
+    unique_sessions = c.fetchone()[0]
+    c.execute("SELECT AVG(scan_latency_ms) FROM valuation_metrics")
+    avg_latency = c.fetchone()[0] or 0
+    c.execute("SELECT AVG(risk_score) FROM valuation_metrics")
+    avg_risk = c.fetchone()[0] or 0
+    c.execute(
+        "SELECT user_tier, COUNT(*) as cnt FROM valuation_metrics "
+        "GROUP BY user_tier ORDER BY cnt DESC"
+    )
+    tier_distribution = dict(c.fetchall())
+    c.execute(
+        "SELECT DATE(timestamp) as day, COUNT(*) as cnt "
+        "FROM valuation_metrics GROUP BY day ORDER BY day"
+    )
+    daily_activity = [{"date": r[0], "count": r[1]} for r in c.fetchall()]
+    c.execute("SELECT COUNT(DISTINCT username) FROM valuation_metrics")
+    unique_users = c.fetchone()[0] or 0
+    conn.close()
+
+    # ARR calculation (conservative: assume avg $99/mo per active user)
+    estimated_arr = unique_users * 99 * 12 * 0.7  # 70% conversion assumption
+    sde = estimated_arr * 2.5  # 2.5x SDE multiple for early-stage SaaS
+
+    return {
+        "total_scans": total_scans,
+        "unique_sessions": unique_sessions,
+        "unique_users": unique_users,
+        "avg_latency_ms": round(avg_latency, 1),
+        "avg_risk_score": round(avg_risk, 1),
+        "tier_distribution": tier_distribution,
+        "daily_activity": daily_activity,
+        "estimated_arr": round(estimated_arr, 2),
+        "estimated_sde": round(sde, 2),
+        "valuation_range": f"${round(sde * 0.7):,} - ${round(sde * 1.5):,}",
+    }
+
+
+def get_valuation_logs(limit: int = 100) -> list:
+    """Get raw valuation metrics logs."""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute(
+        "SELECT timestamp, session_id, scan_latency_ms, risk_score, "
+        "severity, threat_category, user_tier, username, source "
+        "FROM valuation_metrics ORDER BY id DESC LIMIT ?",
+        (limit,),
+    )
+    rows = c.fetchall()
+    conn.close()
+    return rows
 
 
 # ── B2B Referral System ───────────────────────────────────────────────────

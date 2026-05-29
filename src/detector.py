@@ -2,6 +2,8 @@ import json
 import re
 from pathlib import Path
 
+from src.fingerprinting import fingerprint_email
+
 # Load keywords
 KEYWORDS_PATH = Path(__file__).parent.parent / "data" / "phishing_keywords.json"
 with open(KEYWORDS_PATH, "r", encoding="utf-8") as f:
@@ -52,6 +54,66 @@ FAKE_SENDER_PATTERNS = [
     r'support.*@(?!.*\.(com|org|gov|edu)$)',
     r'security.*@(?!.*\.(com|org|gov|edu)$)',
 ]
+
+# ── Multilingual Phishing Keywords ───────────────────────────────────────────
+
+ARABIC_KEYWORDS = {
+    "urgency": ["تحقق", "عاجل", "فوري", "انتهت", "محدود", "الآن", "خطر"],
+    "credentials": ["كلمة المرور", "تسجيل الدخول", "حسابك", "بياناتك"],
+    "financial": ["تحويل", "مبلغ", "دفع", "بنك", "بطاقة", "رصيد"],
+    "suspension": ["تم تعليق", "محظور", "مغلق", "انتهت صلاحية"],
+}
+
+FRENCH_KEYWORDS = {
+    "urgency": ["urgent", "immediatement", "expire", "limite", "maintenant", "danger"],
+    "credentials": ["mot de passe", "connexion", "votre compte", "identifiant"],
+    "financial": ["virement", "paiement", "banque", "carte", "solde", "fraude"],
+    "suspension": ["suspendu", "bloque", "ferme", "expire", "desactive"],
+}
+
+
+def detect_languages(text: str) -> dict:
+    """Detect which languages are present in the email text."""
+    text_lower = text.lower()
+    detected = {"ar": False, "fr": False, "en": True}
+    ar_count = 0
+    fr_count = 0
+
+    for kw_list in ARABIC_KEYWORDS.values():
+        for kw in kw_list:
+            if kw in text:
+                ar_count += 1
+
+    for kw_list in FRENCH_KEYWORDS.values():
+        for kw in kw_list:
+            if kw in text_lower:
+                fr_count += 1
+
+    if ar_count >= 2:
+        detected["ar"] = True
+    if fr_count >= 2:
+        detected["fr"] = True
+
+    return detected
+
+
+def scan_multilingual_keywords(text: str) -> dict:
+    """Scan for Arabic and French phishing keywords."""
+    results = {}
+    text_lower = text.lower()
+
+    for lang, lang_keywords in [("ar", ARABIC_KEYWORDS), ("fr", FRENCH_KEYWORDS)]:
+        for category, keywords in lang_keywords.items():
+            key = f"{lang}_{category}"
+            if lang == "ar":
+                hits = [kw for kw in keywords if kw in text]
+            else:
+                hits = [kw for kw in keywords if kw in text_lower]
+            if hits:
+                results[key] = hits
+
+    return results
+
 
 # Language manipulation patterns
 URGENCY_PATTERNS = [
@@ -114,11 +176,18 @@ def scan_keywords(text: str) -> tuple:
     text_lower = text.lower()
     results = {}
     total_hits = 0
+
     for category, keywords in PHISHING_KEYWORDS.items():
         hits = [kw for kw in keywords if kw in text_lower]
         if hits:
             results[category] = hits
             total_hits += len(hits)
+
+    ml_results = scan_multilingual_keywords(text)
+    for key, hits in ml_results.items():
+        results[key] = hits
+        total_hits += len(hits)
+
     return results, total_hits
 
 
@@ -304,7 +373,8 @@ def detect_attachments(text: str) -> bool:
 def calculate_risk_score(keyword_hits: int, url_count: int,
                           suspicious_urls: int, has_attachments: bool,
                           header_score: int, attachment_score: int,
-                          language_score: int) -> dict:
+                          language_score: int,
+                          kit_score: float = 0.0) -> dict:
 
     score = 0
     score += min(keyword_hits * 6, 30)
@@ -314,6 +384,7 @@ def calculate_risk_score(keyword_hits: int, url_count: int,
     score += min(header_score, 20)
     score += min(attachment_score, 15)
     score += min(language_score, 15)
+    score += int(kit_score * 20)
     score = min(score, 100)
 
     if score >= 75:
@@ -345,6 +416,8 @@ def analyze_email(email_text: str) -> dict:
     attachment_analysis = analyze_attachments(email_text)
     language_analysis  = analyze_language(email_text)
 
+    kit_fingerprint    = fingerprint_email(email_text)
+
     risk = calculate_risk_score(
         total_hits,
         len(urls),
@@ -353,7 +426,16 @@ def analyze_email(email_text: str) -> dict:
         header_analysis["risk_score"],
         attachment_analysis["risk_score"],
         language_analysis["risk_score"],
+        kit_fingerprint["highest_confidence"] / 100,
     )
+
+    languages_detected = detect_languages(email_text)
+    lang_codes = []
+    if languages_detected.get("ar"):
+        lang_codes.append("AR")
+    if languages_detected.get("fr"):
+        lang_codes.append("FR")
+    lang_codes.append("EN")
 
     return {
         "risk_score":            risk["score"],
@@ -369,4 +451,6 @@ def analyze_email(email_text: str) -> dict:
         "header_analysis":       header_analysis,
         "attachment_analysis":   attachment_analysis,
         "language_analysis":     language_analysis,
+        "languages_detected":    lang_codes,
+        "kit_fingerprinting":    kit_fingerprint,
     }

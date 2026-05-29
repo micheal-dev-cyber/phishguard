@@ -41,7 +41,7 @@ class PhishGuardReport(FPDF):
         self.set_y(-14)
         self.set_font("Helvetica", "I", 7)
         self.set_text_color(71, 85, 105)
-        brand_footer = "Confidential Security Report" if self.white_label else "SecOpsNode AI — PhishGuard"
+        brand_footer = "Confidential Security Report" if self.white_label else "SecOpsNode AI | PhishGuard"
         self.cell(0, 8,
                   f"{brand_footer}  |  Confidential Security Report  |  Page {self.page_no()}",
                   align="C")
@@ -65,7 +65,7 @@ class PhishGuardReport(FPDF):
         self.set_font("Helvetica", "", 8)
         self.set_text_color(226, 232, 240)
         x0 = self.get_x()
-        self.cell(indent, 5, chr(8226))  # bullet
+        self.cell(indent, 5, "-")
         self.multi_cell(0, 5, text)
         self.set_x(x0)
 
@@ -91,7 +91,7 @@ def _draw_risk_gauge(pdf: FPDF, score: int, severity: str, sev_color: tuple):
     # Severity label
     pdf.set_xy(62, y_start + 4)
     pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(60, 12, f"/ 100  —  {severity} THREAT")
+    pdf.cell(60, 12, f"/ 100 - {severity} THREAT")
     # Stats line
     pdf.set_xy(20, y_start + 22)
     pdf.set_font("Helvetica", "", 8)
@@ -274,7 +274,7 @@ def generate_pdf_report(results: dict, email_text: str,
     pdf.section_title("REPORT INFORMATION")
     pdf.info_row("Generated:", datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC"))
     if not pdf.white_label:
-        pdf.info_row("Platform:", "SecOpsNode AI — PhishGuard")
+        pdf.info_row("Platform:", "SecOpsNode AI | PhishGuard")
         pdf.info_row("Engine:", "v3.5 Enterprise Detection Engine")
     pdf.info_row("Threat Level:", severity)
     pdf.ln(3)
