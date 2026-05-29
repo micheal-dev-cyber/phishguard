@@ -1,0 +1,162 @@
+{
+  "kits": [
+    {
+      "name": "EvilGinx",
+      "description": "Reverse-proxy phishing kit targeting OAuth/2FA tokens. Intercepts login credentials and session cookies in real time.",
+      "severity": "CRITICAL",
+      "signatures": {
+        "html_patterns": ["<title>login</title>", "<title>sign in</title>", "action=\"https://login\\.microsoftonline\\.com",
+          "action=\"/oauth2", "authorization endpoint", "access_token", "id_token"],
+        "css_patterns": [".login-container", "#loginForm", ".btn-primary", ".form-control"],
+        "form_fields": ["loginfmt", "passwd", "LoginOptions", "otc", "authenticator"],
+        "js_patterns": ["document\\.getElementById\\('loginfmt", "submitForm", "checkCredentials"],
+        "file_paths": ["/login.php", "/oauth2.php", "/callback.php", "/.env"],
+        "header_patterns": ["x-forwarded-host", "x-real-ip", "x-original-url"]
+      }
+    },
+    {
+      "name": "Modlishka",
+      "description": "Open-source reverse proxy phishing framework. Captures credentials and 2FA tokens with real-time traffic proxying.",
+      "severity": "CRITICAL",
+      "signatures": {
+        "html_patterns": ["modlishka", "reverse proxy", "phishing proxy", "action=\"/auth"],
+        "css_patterns": [".modlishka", "#modlishka"],
+        "form_fields": ["username", "password", "token", "2fa", "totp"],
+        "js_patterns": ["modlishka", "Proxy", "reverseProxy"],
+        "file_paths": ["/config.json", "/domains.json", "/modlishka"],
+        "header_patterns": ["x-modlishka", "x-proxy"]
+      }
+    },
+    {
+      "name": "Gophish",
+      "description": "Popular open-source phishing framework. Used for tracking and credential harvesting campaigns.",
+      "severity": "HIGH",
+      "signatures": {
+        "html_patterns": ["gophish", "phish\\.html", "track/", "campaign"],
+        "css_patterns": [".gophish", ".tracking"],
+        "form_fields": ["gophish", "campaign_id", "template", "landing_page"],
+        "js_patterns": ["gophish", "tracking"],
+        "file_paths": ["/track/", "/campaign/", "/report/", "/static/gophish"],
+        "header_patterns": ["x-gophish", "x-phish"]
+      }
+    },
+    {
+      "name": "SET (Social Engineering Toolkit)",
+      "description": "TrustedSec's Social Engineering Toolkit. Credential harvester and website clone attacks.",
+      "severity": "HIGH",
+      "signatures": {
+        "html_patterns": ["setoolkit", "social engineer", "credential harvester", "web attack",
+          "action=\"index\\.html\"", "username=\"\\.\\.\\.\""],
+        "css_patterns": [".set", ".credential"],
+        "form_fields": ["username", "password", "Login", "submit", "email"],
+        "js_patterns": ["setoolkit", "harvester"],
+        "file_paths": ["/index.html", "/post.php", "/harvester.php"],
+        "header_patterns": ["x-set"]
+      }
+    },
+    {
+      "name": "SocialFish",
+      "description": "Social engineering phishing framework with QR code support and credential harvesting.",
+      "severity": "HIGH",
+      "signatures": {
+        "html_patterns": ["socialfish", "ngrok", "social fish", "phishing attack"],
+        "css_patterns": [".socialfish", "#sf"],
+        "form_fields": ["sf_username", "sf_password", "socialfish"],
+        "js_patterns": ["socialfish", "sf_"],
+        "file_paths": ["/socialfish/", "/ngrok", "/sf_"],
+        "header_patterns": ["x-socialfish"]
+      }
+    },
+    {
+      "name": "BlackEye",
+      "description": "Automated phishing tool with multiple service templates (Instagram, Netflix, PayPal, etc.).",
+      "severity": "HIGH",
+      "signatures": {
+        "html_patterns": ["blackeye", "black eye", "instagram", "netflix"],
+        "css_patterns": [".blackeye", ".be-"],
+        "form_fields": ["blackeye", "be_username", "be_password"],
+        "js_patterns": ["blackeye", "be_"],
+        "file_paths": ["/blackeye/", "/ip.php", "/index.php"],
+        "header_patterns": ["x-blackeye"]
+      }
+    },
+    {
+      "name": "HiddenEye",
+      "description": "Advanced phishing tool with custom templates and Telegram bot integration.",
+      "severity": "HIGH",
+      "signatures": {
+        "html_patterns": ["hiddeneye", "hidden eye", "facebook\\.com", "account kit"],
+        "css_patterns": [".hiddeneye", ".he-"],
+        "form_fields": ["he_email", "he_password", "hiddeneye"],
+        "js_patterns": ["hiddeneye", "he_"],
+        "file_paths": ["/hiddeneye/", "/he_"],
+        "header_patterns": ["x-hiddeneye"]
+      }
+    },
+    {
+      "name": "Nexphisher",
+      "description": "Advanced phishing tool with over 30+ website templates for credential harvesting.",
+      "severity": "HIGH",
+      "signatures": {
+        "html_patterns": ["nexphisher", "nex phishing", "template"],
+        "css_patterns": [".nex", ".np-"],
+        "form_fields": ["np_email", "np_password", "nexphisher"],
+        "js_patterns": ["nexphisher", "np_"],
+        "file_paths": ["/nexphisher/", "/np_", "/template/"],
+        "header_patterns": ["x-nexphisher"]
+      }
+    },
+    {
+      "name": "ShellPhish",
+      "description": "Phishing tool utilizing ngrok for port forwarding with multiple social media templates.",
+      "severity": "HIGH",
+      "signatures": {
+        "html_patterns": ["shellphish", "shellphish\\.com", "google", "facebook"],
+        "css_patterns": [".shell", ".sp-"],
+        "form_fields": ["sp_email", "sp_password", "shellphish"],
+        "js_patterns": ["shellphish", "sp_"],
+        "file_paths": ["/shellphish/", "/sp_", "/ngrok"],
+        "header_patterns": ["x-shellphish"]
+      }
+    },
+    {
+      "name": "CredSniper",
+      "description": "OAuth phishing framework targeting Microsoft and Google credentials with 2FA capture.",
+      "severity": "CRITICAL",
+      "signatures": {
+        "html_patterns": ["credsniper", "oaut", "authorize", "consent"],
+        "css_patterns": [".credsniper", ".cs-"],
+        "form_fields": ["cs_email", "cs_password", "credsniper"],
+        "js_patterns": ["credsniper", "cs_"],
+        "file_paths": ["/credsniper/", "/authorize", "/consent"],
+        "header_patterns": ["x-credsniper"]
+      }
+    },
+    {
+      "name": "Z-phisher",
+      "description": "Lightweight phishing tool with customizable templates and Telegram exfiltration.",
+      "severity": "MEDIUM",
+      "signatures": {
+        "html_patterns": ["zphisher", "z-phisher", "htaccess"],
+        "css_patterns": [".zp-", ".zphisher"],
+        "form_fields": ["zp_email", "zp_password", "zphisher"],
+        "js_patterns": ["zphisher", "zp_"],
+        "file_paths": ["/zphisher/", "/zp_", "/login.php"],
+        "header_patterns": ["x-zphisher"]
+      }
+    },
+    {
+      "name": "Muraena",
+      "description": "Reverse proxy phishing toolkit with automatic cookie capture and session hijacking.",
+      "severity": "CRITICAL",
+      "signatures": {
+        "html_patterns": ["muraena", "muræna", "reverse proxy", "action=\"/login"],
+        "css_patterns": [".muraena", ".token"],
+        "form_fields": ["muraena_token", "muraena_session", "username", "password"],
+        "js_patterns": ["muraena", "cookieGrabber", "session"],
+        "file_paths": ["/cookie.php", "/session.php", "/muraena/"],
+        "header_patterns": ["x-muraena", "x-cookie"]
+      }
+    }
+  ]
+}

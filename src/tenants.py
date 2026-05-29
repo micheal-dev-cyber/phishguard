@@ -7,6 +7,7 @@ from pathlib import Path
 DB_PATH = Path(__file__).parent.parent / "data" / "phishguard.db"
 
 PLANS = {
+    "free":       {"analyses_per_month": 5,     "label": "Free",       "price": "Free"},
     "trial":      {"analyses_per_month": 10,    "label": "Trial",      "price": "Free"},
     "starter":    {"analyses_per_month": 100,   "label": "Starter",    "price": "$29/mo"},
     "business":   {"analyses_per_month": 500,   "label": "Business",   "price": "$99/mo"},

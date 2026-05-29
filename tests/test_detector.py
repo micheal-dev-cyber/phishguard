@@ -91,5 +91,8 @@ class TestDetector:
             "urls_found", "suspicious_urls", "url_count",
             "suspicious_url_count", "keyword_matches",
             "total_keyword_hits", "has_attachments",
+            "header_analysis", "attachment_analysis",
+            "language_analysis", "languages_detected",
+            "kit_fingerprinting",
         }
         assert expected_keys.issubset(result.keys())
