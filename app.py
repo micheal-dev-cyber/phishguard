@@ -17,12 +17,12 @@ st.markdown(
 
 # ── SSO Callback Handler (OIDC redirect) ────────────────────────────────────
 _sso_code = st.query_params.get("code")
-_sso_state = st.query_params.get("state")
-if _sso_code and _sso_state:
+_sso_state = st.query_params.get("state", "")
+if _sso_code:
     try:
         from src.sso import SSOManager
         _sso = SSOManager()
-        _info = _sso.handle_callback(_sso_code)
+        _info = _sso.handle_callback(_sso_code, state=_sso_state)
         if _info and _info.get("email"):
             from src.tenants import verify_tenant, create_tenant
             _username = _info["email"].split("@")[0].replace(".", "_")
@@ -56,6 +56,7 @@ from src.copilot import get_copilot_response, SUGGESTED_PROMPTS
 from src.ai_analyzer import simulate_phishing, analyze_screenshot, generate_ai_report
 from src.xai_analyzer import analyze_psychological_triggers, format_xai_report
 from src.email_parser import parse_email_file
+from src.brand_impersonation import run_brand_impersonation_check as _run_brand_check
 from src.jury_engine import evaluate_linguistic_jury, evaluate_corporate_jury, compute_ensemble_score
 from src.b2b_gateway import get_tier_config, check_feature_access, MockAPIGateway
 from src.webhook_gateway import send_alert as send_webhook_alert
@@ -92,6 +93,10 @@ from src.integrations import (
 )
 from src.auto_responder import send_phishing_warning
 from src.i18n import t, SUPPORTED_LANGUAGES
+
+# ── RBAC permissions ────────────────────────────────────────────────────────
+from src.rbac import init_rbac, check_permission
+init_rbac()
 
 # ── Structured JSON logging (opt-in via JSON_LOG=true) ──────────────────────
 from src.json_logger import setup_json_logging
@@ -555,33 +560,11 @@ if st.session_state.get("show_upgrade") and plan != "enterprise":
     st.stop()
 
 # ── Onboarding Wizard (first-time users) ───────────────────────────────────
-_onboarding_key = f"onboarding_{username}"
-if _onboarding_key not in st.session_state:
-    st.session_state[_onboarding_key] = True
-    try:
-        from src.onboarding import get_onboarding_steps, complete_onboarding_step
-        _steps = get_onboarding_steps(username)
-        _incomplete = [s for s in _steps if not s["done"]]
-        if _incomplete:
-            with st.container():
-                st.markdown(
-                    "<div style='background:linear-gradient(135deg,#0f172a,#1e293b);"
-                    "border:1px solid #334155;border-radius:16px;padding:20px 24px;margin-bottom:16px'>"
-                    "<div style='color:#f0f6ff;font-weight:700;font-size:1.1rem;margin-bottom:12px'>"
-                    "🚀 Welcome! Let's get started</div>", unsafe_allow_html=True
-                )
-                for _s in _incomplete[:3]:
-                    col1, col2 = st.columns([4, 1])
-                    with col1:
-                        st.markdown(f"<div style='color:#94a3b8;font-size:13px'>→ {_s['label']}</div>",
-                                    unsafe_allow_html=True)
-                    with col2:
-                        if st.button("Done", key=f"onb_{_s['step']}", use_container_width=True):
-                            complete_onboarding_step(username, _s["step"])
-                            st.rerun()
-                st.markdown("</div>", unsafe_allow_html=True)
-    except Exception:
-        pass
+try:
+    from src.ui_onboarding import render_onboarding_wizard
+    render_onboarding_wizard(username)
+except Exception:
+    pass
 
 # ── Weekly Report Check ─────────────────────────────────────────────────────
 try:
@@ -603,8 +586,9 @@ if is_admin:
         "🧬 STIX Intel", "📧 Sender Profiler", "🔗 URL Sandbox", "👁 OCR/Homograph",
         "🎯 Campaigns", "📖 API Docs",
         "📋 Audit Log", "📊 Performance", "🔌 Webhook Tester",
+        "📡 SOC Dashboard", "📋 Activity Timeline",
     ])
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12, tab13, tab14, tab15, tab16, tab17, tab_audit, tab_perf, tab_webhook = tabs
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12, tab13, tab14, tab15, tab16, tab17, tab_audit, tab_perf, tab_webhook, tab_soc, tab_timeline = tabs
     tab_stix, tab_sender, tab_sandbox, tab_ocr, tab_campaigns, tab_api_docs = tab12, tab13, tab14, tab15, tab16, tab17
 else:
     tabs = st.tabs([
@@ -613,8 +597,9 @@ else:
         "🧬 STIX Intel", "📧 Sender Profiler", "🔗 URL Sandbox", "👁 OCR/Homograph",
         "🎯 Campaigns", "📖 API Docs",
         "🔌 Webhook Tester",
+        "📡 SOC Dashboard", "📋 Activity Timeline",
     ])
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12, tab13, tab14, tab15, tab_webhook = tabs
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12, tab13, tab14, tab15, tab_webhook, tab_soc, tab_timeline = tabs
     tab_stix, tab_sender, tab_sandbox, tab_ocr, tab_campaigns, tab_api_docs = tab10, tab11, tab12, tab13, tab14, tab15
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -1091,6 +1076,17 @@ with tab1:
                 except Exception:
                     pass
 
+            # ── Brand Impersonation Check ────────────────────────────────────
+            _sender = results.get("headers", {}).get("From", "")
+            _brand_result = _run_brand_check(email_text, sender=_sender)
+            if _brand_result.get("impersonation_detected"):
+                st.toast(f"🏷 Brand impersonation detected — risk {_brand_result['total_risk']}/100", icon="🏷")
+                try:
+                    from src.notification_channels import dispatch_to_channels
+                    dispatch_to_channels(username, f"🏷 Brand impersonation detected: {_brand_result}", severity="high")
+                except Exception:
+                    pass
+
             st.session_state["results"]         = results
             st.session_state["email_text"]       = email_text
             st.session_state["vt_results"]       = vt_results
@@ -1105,6 +1101,7 @@ with tab1:
             st.session_state["dna_known"]        = dna_known
             st.session_state["perplexity_result"] = perplexity_result
             st.session_state["aitm_result"]      = aitm_result
+            st.session_state["brand_check"]      = _brand_result
             st.session_state.pop("ai_report", None)
 
     if "results" in st.session_state:
@@ -2554,13 +2551,32 @@ if is_admin:
             if active:
                 st.markdown("##### Active Tests")
                 for t in active:
-                    col_t1, col_t2 = st.columns([3, 1])
+                    col_t1, col_t2, col_t3, col_t4 = st.columns([2, 1, 1, 1])
                     with col_t1:
                         st.markdown(f"**{t['test_name']}** — {t.get('description', '')[:60]}")
                     with col_t2:
+                        if st.button("📊 Results", key=f"ab_res_{t['id']}", use_container_width=True):
+                            from src.ab_testing import ABTest
+                            _ab = ABTest(t['test_name'])
+                            _results = _ab.get_results()
+                            st.session_state[f"ab_results_{t['id']}"] = _results
+                            st.rerun()
+                    with col_t3:
+                        if st.button("🏆 Promote Winner", key=f"ab_prom_{t['id']}", use_container_width=True):
+                            promote_variant(t['test_name'])
+                            st.success(f"Winner promoted for '{t['test_name']}'")
+                            st.rerun()
+                    with col_t4:
                         if st.button("⏹ Stop", key=f"ab_stop_{t['id']}", use_container_width=True):
                             stop_test(t['test_name'])
                             st.rerun()
+                    _res_key = f"ab_results_{t['id']}"
+                    if _res_key in st.session_state and st.session_state[_res_key]:
+                        _ab_data = st.session_state[_res_key]
+                        if isinstance(_ab_data, list) and _ab_data:
+                            st.dataframe(_ab_data, use_container_width=True)
+                        elif isinstance(_ab_data, dict) and _ab_data.get("results"):
+                            st.json(_ab_data)
 
     # ── Login Lockout Management ──────────────────────────────────────────
     if is_admin:
@@ -2683,6 +2699,22 @@ if is_admin:
                                             st.error(r.get("error", "Invite failed"))
                                     else:
                                         st.warning("Enter a username.")
+
+        # ── Plugin Manager ──────────────────────────────────────────────────
+        st.divider()
+        from src.ui_plugins import render_plugin_manager_ui
+        render_plugin_manager_ui()
+
+        # ── Bulk User Import/Export ────────────────────────────────────────
+        st.divider()
+        from src.ui_bulk_users import render_bulk_users_ui
+        render_bulk_users_ui()
+
+        # ── System Health ────────────────────────────────────────────────────
+        st.divider()
+        from src.ui_health import render_health_ui
+        render_health_ui()
+
 if is_admin:
     with tab6:
         st.markdown("## 👥 Client Management")
@@ -2981,17 +3013,19 @@ with billing_tab:
     init_api_keys_table()
     conn = sqlite3.connect(str(api_db))
     c = conn.cursor()
-    c.execute("SELECT id, key_prefix, tier, is_active, created_at FROM api_keys WHERE username = ? ORDER BY id DESC", (username,))
+    c.execute("SELECT id, key_prefix, tier, is_active, created_at, last_used FROM api_keys WHERE username = ? ORDER BY id DESC", (username,))
     user_keys = c.fetchall()
     conn.close()
 
     if user_keys:
         st.markdown("**Your API Keys:**")
         for k_row in user_keys:
-            kid, kprefix, ktier, kactive, kcreated = k_row
+            kid, kprefix, ktier, kactive, kcreated, klast = k_row
             status = "🟢 Active" if kactive else "🔴 Revoked"
-            col_k1, col_k2, col_k3, col_k4 = st.columns([3, 1, 1, 1])
-            col_k1.code(f"{kprefix}...", language="text")
+            last_used_str = klast[:19] if klast else "Never"
+            col_k0, col_k1, col_k2, col_k3, col_k4 = st.columns([2, 2, 1, 1, 1])
+            col_k0.code(f"{kprefix}...", language="text")
+            col_k1.caption(f"Last used: {last_used_str}")
             col_k2.markdown(f"`{ktier}`")
             col_k3.markdown(status)
             if col_k4.button("🗑 Revoke", key=f"revoke_{kid}"):
@@ -3694,6 +3728,31 @@ with settings_tab:
             if st.button("✅ Grant Consent", use_container_width=True):
                 record_consent(username)
                 st.rerun()
+
+    # ── Scheduled Scans ────────────────────────────────────────────────────
+    st.divider()
+    from src.ui_scheduler import render_scheduler_ui
+    render_scheduler_ui(username)
+
+    # ── Notification Channels ──────────────────────────────────────────────
+    st.divider()
+    from src.ui_channels import render_notification_channels_ui
+    render_notification_channels_ui(username)
+
+    # ── Granular Webhook Routing ───────────────────────────────────────────
+    st.divider()
+    from src.ui_webhook_routing import render_webhook_routing_ui
+    render_webhook_routing_ui(username)
+
+    # ── Domain Verification ────────────────────────────────────────────────
+    st.divider()
+    from src.ui_domain_verify import render_domain_verify_ui
+    render_domain_verify_ui(username)
+
+    # ── White-Label Branding ───────────────────────────────────────────────
+    st.divider()
+    from src.ui_branding import render_branding_ui
+    render_branding_ui(username)
 
     st.divider()
     st.markdown("### 📧 Email Templates")
@@ -4827,6 +4886,52 @@ if is_admin:
 with tab_webhook:
     from src.ui_webhook_tester import render_webhook_tester_tab
     render_webhook_tester_tab()
+
+# ═════════════════════════════════════════════════════════════════════════════
+# NEW TAB — SOC DASHBOARD
+# ═════════════════════════════════════════════════════════════════════════════
+with tab_soc:
+    from src.ui_soc_dashboard import render_soc_dashboard
+    render_soc_dashboard(username)
+
+# ═════════════════════════════════════════════════════════════════════════════
+# NEW TAB — ACTIVITY TIMELINE
+# ═════════════════════════════════════════════════════════════════════════════
+with tab_timeline:
+    from src.activity_timeline import init_activity_timeline, record_activity, get_activity
+    init_activity_timeline()
+    st.markdown("## 📋 Activity Timeline")
+    st.caption("Your recent actions and events across the platform.")
+
+    col_f1, col_f2 = st.columns(2)
+    with col_f1:
+        action_filter = st.selectbox("Filter by action", ["All", "login", "scan", "export",
+                                                           "api_key_created", "settings_update",
+                                                           "admin_action"], key="tl_filter")
+    with col_f2:
+        limit = st.selectbox("Show", [20, 50, 100], index=0, key="tl_limit")
+
+    activities = get_activity(username, limit=limit)
+    if action_filter and action_filter != "All":
+        activities = [a for a in activities if a["action"] == action_filter]
+
+    if activities:
+        for a in activities:
+            sev_colors = {"info": "#94a3b8", "warning": "#ff8800", "error": "#ff4444"}
+            sev_color = sev_colors.get(a.get("severity", "info"), "#94a3b8")
+            st.markdown(
+                f"<div style='display:flex;justify-content:space-between;padding:6px 10px;"
+                f"background:#111827;border:1px solid #1e3a5f;border-radius:6px;margin:3px 0'>"
+                f"<span style='color:#60a5fa'>{a['action']}</span>"
+                f"<span style='color:#e2e8f0;font-size:13px'>{a.get('detail', '')[:80]}</span>"
+                f"<span style='color:{sev_color};font-size:12px'>{a.get('created_at', '')[:19]}</span>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+    else:
+        st.info("No activity recorded yet. Actions will appear here as you use the platform.")
+
+    record_activity(username, "view_timeline", detail="Viewed activity timeline")
 
 # ═════════════════════════════════════════════════════════════════════════════
 # NEW TAB — SCIM / AUDIT LOG (non-admin webhook tester only)

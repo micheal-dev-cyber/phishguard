@@ -2,7 +2,7 @@ import secrets
 import hashlib
 import sqlite3
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -33,7 +33,7 @@ def generate_magic_link(email: str, expiry_minutes: int = 15) -> str:
     init_magic_links()
     token = secrets.token_urlsafe(32)
     token_hash = hashlib.sha256(token.encode()).hexdigest()
-    expires_at = (datetime.utcnow() + timedelta(minutes=expiry_minutes)).isoformat()
+    expires_at = (datetime.now(timezone.utc) + timedelta(minutes=expiry_minutes)).isoformat()
 
     conn = sqlite3.connect(str(DB_PATH))
     c = conn.cursor()
@@ -66,7 +66,7 @@ def verify_magic_link(email: str, token: str, ip_address: Optional[str] = None) 
         return False
 
     expires = datetime.fromisoformat(expires_at)
-    if datetime.utcnow() > expires:
+    if datetime.now(timezone.utc) > expires:
         conn.close()
         return False
 
