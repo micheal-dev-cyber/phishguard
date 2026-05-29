@@ -113,6 +113,7 @@ def handle_scan_request(body: dict) -> dict:
         "meta": {
             "service": "phishguard-enterprise-api",
             "version": "3.0.0",
+            "api_version": "v1",
         },
     }
 

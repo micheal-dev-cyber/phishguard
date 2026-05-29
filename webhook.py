@@ -125,9 +125,92 @@ def index():
         "service": "PhishGuard Paddle Webhook",
         "endpoints": {
             "POST /webhook": "Receive Paddle subscription events",
+            "POST /analyze": "Scan email/page text for threats",
+            "POST /scan-webhook": "Receive forwarded email via webhook, scan, reply with verdict",
+            "POST /api/v1/scim/Users": "SCIM 2.0 — Create user",
+            "GET /api/v1/scim/Users": "SCIM 2.0 — List users",
+            "GET /api/v1/scim/Users/:id": "SCIM 2.0 — Get user",
+            "DELETE /api/v1/scim/Users/:id": "SCIM 2.0 — Deactivate user",
             "GET /health": "Health check",
         }
     })
+
+
+@app.route("/api/v1/scim/Users", methods=["GET", "POST"])
+@app.route("/api/v1/scim/Users/<int:user_id>", methods=["GET", "PUT", "PATCH", "DELETE"])
+def scim_users(user_id=None):
+    """SCIM 2.0 provisioning endpoint."""
+    from src.scim import handle_scim_request
+    body = request.get_json(force=True, silent=True) if request.method in ("POST", "PUT", "PATCH") else None
+    path = request.path
+    result = handle_scim_request(request.method, path, body)
+    status = 200
+    if "status" in result:
+        status = int(result["status"])
+    elif request.method == "POST":
+        status = 201
+    elif request.method == "DELETE":
+        status = 204
+        return "", 204
+    return jsonify(result), status
+
+
+@app.route("/scan-webhook", methods=["POST"])
+def scan_webhook():
+    """Receive a forwarded email via webhook, scan it, and optionally email back the verdict."""
+    data = request.get_json(force=True, silent=True)
+    if not data:
+        return jsonify({"error": "Missing JSON body"}), 400
+
+    email_text = data.get("email_text", data.get("text", ""))
+    sender = data.get("sender", "")
+    recipient = data.get("recipient", "")
+    reply_to = data.get("reply_to", recipient)
+
+    if not email_text:
+        return jsonify({"error": "Missing 'email_text' or 'text' field"}), 400
+
+    try:
+        from src.detector import analyze_email
+        from src.alerting import send_email
+        from src.env import ENV
+
+        results = analyze_email(email_text[:20000])
+        verdict = {
+            "risk_score": results.get("risk_score", 0),
+            "severity": results.get("severity", "LOW"),
+            "total_keyword_hits": results.get("total_keyword_hits", 0),
+            "suspicious_urls": [u["url"] for u in results.get("suspicious_urls", [])],
+            "is_phishing": results.get("risk_score", 0) >= 50,
+        }
+
+        # Auto-reply with verdict if recipient is configured
+        if reply_to and verdict["is_phishing"]:
+            smtp_host = ENV.SMTP_HOST
+            smtp_port = ENV.SMTP_PORT
+            smtp_user = ENV.SMTP_USER
+            smtp_pass = ENV.SMTP_PASS
+            if smtp_user and smtp_pass:
+                subject = f"🔍 PhishGuard Scan Result — {verdict['severity']} ({verdict['risk_score']}/100)"
+                body = (
+                    f"PhishGuard scanned a forwarded email from {sender or 'unknown'}.\n\n"
+                    f"Risk Score: {verdict['risk_score']}/100\n"
+                    f"Severity: {verdict['severity']}\n"
+                    f"Keyword Hits: {verdict['total_keyword_hits']}\n"
+                    f"Suspicious URLs: {len(verdict['suspicious_urls'])}\n\n"
+                    f"Verdict: {'⚠️ PHISHING DETECTED' if verdict['is_phishing'] else '✅ No phishing indicators'}\n\n"
+                    f"Full details: https://phishguard.ai\n"
+                )
+                send_email(smtp_host, smtp_port, smtp_user, smtp_pass,
+                           smtp_user, reply_to, subject, body)
+                verdict["reply_sent"] = True
+
+        logger.info("Scan-webhook processed for %s → score %s", sender or "unknown", verdict["risk_score"])
+        return jsonify(verdict), 200
+
+    except Exception as e:
+        logger.error("Scan-webhook error: %s", e)
+        return jsonify({"error": str(e)}), 500
 
 
 if __name__ == "__main__":
