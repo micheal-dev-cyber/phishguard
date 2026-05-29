@@ -2729,7 +2729,7 @@ if is_admin:
                         f"<span style='color:#475569;font-family:monospace'>{a_row['timestamp'][:19]}</span> "
                         f"<span style='color:#60a5fa'>{a_row['actor']}</span> "
                         f"<span style='color:#e2e8f0'>→ {a_row['action']}</span>"
-                        f"{' · <span style=\"color:#94a3b8\">' + a_row['target'] + '</span>' if a_row['target'] else ''}"
+                        f"{(' · <span style=color:#94a3b8>' + a_row['target'] + '</span>') if a_row['target'] else ''}"
                         f"</div>",
                         unsafe_allow_html=True
                     )
