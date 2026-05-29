@@ -4,11 +4,7 @@ __pycache__/
 *.pyc
 reports/*.pdf
 .DS_Store
-venv/
-.env
 .streamlit/secrets.toml
-__pycache__/
-*.pyc
-reports/*.pdf
-.DS_Store
 data/*.db
+backups/
+t.py
