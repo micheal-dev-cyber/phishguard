@@ -3,7 +3,7 @@ import threading
 import time
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -44,7 +44,7 @@ def enqueue(task_name: str, payload: Optional[dict] = None,
             delay_seconds: int = 0, max_retries: int = 3) -> int:
     conn = sqlite3.connect(str(DB_PATH))
     c = conn.cursor()
-    scheduled = (datetime.utcnow() + timedelta(seconds=delay_seconds)).isoformat()
+    scheduled = (datetime.now(timezone.utc) + timedelta(seconds=delay_seconds)).strftime("%Y-%m-%d %H:%M:%S")
     c.execute(
         "INSERT INTO task_queue (task_name, payload, status, scheduled_for, max_retries) VALUES (?, ?, 'pending', ?, ?)",
         (task_name, json.dumps(payload or {}), scheduled, max_retries),
@@ -162,6 +162,25 @@ def get_pending_count() -> int:
     count = c.fetchone()[0]
     conn.close()
     return count
+
+
+def get_task_status(task_id: int) -> Optional[str]:
+    conn = sqlite3.connect(str(DB_PATH))
+    c = conn.cursor()
+    c.execute("SELECT status FROM task_queue WHERE id=?", (task_id,))
+    row = c.fetchone()
+    conn.close()
+    return row[0] if row else None
+
+
+def wait_for_completion(task_id: int, timeout: float = 10.0, poll_interval: float = 0.5) -> Optional[str]:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        status = get_task_status(task_id)
+        if status in ("completed", "failed"):
+            return status
+        time.sleep(poll_interval)
+    return None
 
 
 def get_failed_tasks(limit: int = 20) -> list:
