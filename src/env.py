@@ -37,6 +37,8 @@ class EnvConfig:
     PADDLE_WEBHOOK_SECRET: str = ""
     PADDLE_PRICE_ID_STARTER: str = ""
     PADDLE_PRICE_ID_BUSINESS: str = ""
+    PADDLE_PRICE_ID_CONSULTANT: str = ""
+    PADDLE_PRICE_ID_ENTERPRISE: str = ""
     PADDLE_ENVIRONMENT: str = "sandbox"
     LOG_LEVEL: str = "INFO"
     ADMIN_PASSWORD: str = "phishguard2026"
@@ -95,6 +97,8 @@ def load_env() -> EnvConfig:
         PADDLE_WEBHOOK_SECRET=_read_env("PADDLE_WEBHOOK_SECRET"),
         PADDLE_PRICE_ID_STARTER=_read_env("PADDLE_PRICE_ID_STARTER"),
         PADDLE_PRICE_ID_BUSINESS=_read_env("PADDLE_PRICE_ID_BUSINESS"),
+        PADDLE_PRICE_ID_CONSULTANT=_read_env("PADDLE_PRICE_ID_CONSULTANT"),
+        PADDLE_PRICE_ID_ENTERPRISE=_read_env("PADDLE_PRICE_ID_ENTERPRISE"),
         PADDLE_ENVIRONMENT=_read_env("PADDLE_ENVIRONMENT", "sandbox"),
         LOG_LEVEL=_read_env("LOG_LEVEL", "INFO"),
         ADMIN_PASSWORD=_read_env("ADMIN_PASSWORD", "phishguard2026"),

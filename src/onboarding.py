@@ -72,8 +72,12 @@ def _paddle_checkout(plan: str, username: str, email: str) -> dict:
     if pricing.get("custom"):
         return {"error": "Enterprise plan requires contact sales"}
     try:
-        from src.paddle_billing import generate_paddle_paylink
-        return generate_paddle_paylink(plan, username, email)
+        from src.paddle_billing import generate_checkout_url
+        from src.env import ENV
+        url = generate_checkout_url(username, plan, success_url=f"{ENV.APP_URL or 'https://phishguard.ai'}/?checkout=completed")
+        if url:
+            return {"url": url, "session_id": plan}
+        return {"error": "Failed to create Paddle checkout"}
     except Exception as e:
         logger.error("Paddle checkout failed: %s", e)
         return {"error": str(e)}

@@ -69,6 +69,15 @@ from src.paddle_billing import (
     is_configured as paddle_configured,
     generate_checkout_url,
     verify_transaction,
+    get_local_subscription,
+    get_subscription,
+    get_price_id,
+    get_customer_portal_url,
+    get_invoices,
+    pause_subscription,
+    cancel_subscription,
+    resume_subscription,
+    update_subscription_plan,
 )
 from src.ratelimit import check_rate_limit, get_rate_limit_remaining
 from src.leaderboard import render_leaderboard, record_scan as lb_record_scan
@@ -521,9 +530,10 @@ if st.session_state.get("show_upgrade") and plan != "enterprise":
 
         cols = st.columns(3)
         upgrade_plans = [
-            ("starter",  "Starter",   "$29/mo", ["100 analyses/mo", "VirusTotal scans", "OSINT investigation", "AI security reports", "Email alerts"]),
-            ("business", "Business",  "$99/mo", ["500 analyses/mo", "Everything in Starter", "Priority support", "Team access", "Export + API access"]),
-            ("enterprise", "Enterprise", "Custom", ["Unlimited analyses", "SLA guarantee", "White-label option", "Dedicated support", "Custom integrations"]),
+            ("starter",    "Starter",     "$29/mo",  ["100 analyses/mo", "VirusTotal scans", "OSINT investigation", "AI security reports", "Email alerts"]),
+            ("business",   "Business",    "$99/mo",  ["500 analyses/mo", "Everything in Starter", "Priority support", "Team access", "Export + API access"]),
+            ("consultant", "Consultant",  "$149/mo", ["2000 analyses/mo", "Everything in Business", "White-label reports", "SOC dashboard", "All integrations"]),
+            ("enterprise", "Enterprise",  "Custom",  ["Unlimited analyses", "SLA guarantee", "White-label option", "Dedicated support", "Custom integrations"]),
         ]
         for i, (pkey, plabel, pprice, pfeatures) in enumerate(upgrade_plans):
             with cols[i]:
@@ -1295,8 +1305,8 @@ with tab1:
                 f" <span style='font-size:11px;color:#475569;font-weight:400'>(+{header_auth.get('risk_contribution',0)} risk)</span></div>",
                 unsafe_allow_html=True,
             )
-            cols = st.columns(3)
-            for col, (label, key, color_map) in zip(cols, [
+        cols = st.columns(len(upgrade_plans))
+        for col, (label, key, color_map) in zip(cols, [
                 ("SPF", "spf_status", {"pass":"#44aa44","fail":"#ff4444","softfail":"#ffaa00","neutral":"#ffaa00","missing":"#94a3b8"}),
                 ("DKIM", "dkim_status", {"pass":"#44aa44","fail":"#ff4444","signed":"#ffaa00","missing":"#94a3b8"}),
                 ("DMARC", "dmarc_status", {"pass":"#44aa44","fail":"#ff4444","bestguesspass":"#88cc88","missing":"#94a3b8"}),
@@ -1312,8 +1322,9 @@ with tab1:
                         f"<div style='font-size:1.2rem;font-weight:700;color:{c}'>{dot} {val.upper()}</div>"
                         f"</div>",
                         unsafe_allow_html=True,
-                    )
-            st.caption(header_auth.get("details", ""))
+                    )  # end with col
+
+        st.caption(header_auth.get("details", ""))
 
         # ── Perplexity Analyzer (AI-written text detector) ──────────────────
         _perplex_data = st.session_state.get("perplexity_result", {})
@@ -2988,27 +2999,129 @@ with billing_tab:
     plan_info = PLANS.get(plan, PLANS["trial"])
     q = check_quota(username, plan)
 
-    # Current plan card
+    # ── Current Plan + Subscription Status Card ───────────────────────────
+    sub = get_local_subscription(username)
+    paddle_avail = paddle_configured()
+
+    status_tag = ""
+    status_color = "#22c55e"
+    if sub:
+        s = sub.get("status", "")
+        if s == "active":
+            status_tag = "🟢 Active"
+        elif s == "paused":
+            status_tag = "⏸ Paused"
+            status_color = "#f59e0b"
+        elif s == "cancelled":
+            status_tag = "⏹ Cancelled"
+            status_color = "#ef4444"
+        elif s == "past_due":
+            status_tag = "🔴 Past Due"
+            status_color = "#ef4444"
+        else:
+            status_tag = s.capitalize()
+
     st.markdown(
-        "<div style='background:#111827;border:1px solid #1e3a5f;"
-        "border-radius:16px;padding:28px 32px;margin-bottom:24px'>"
-        "<div style='display:flex;justify-content:space-between;align-items:center'>"
-        "<div>"
-        "<div style='color:#64748b;font-size:0.8rem;text-transform:uppercase;"
-        "letter-spacing:0.08em;margin-bottom:4px'>Current Plan</div>"
-        "<div style='color:#f0f6ff;font-size:1.8rem;font-weight:800'>"
-        + plan_info["label"] + "</div>"
-        "<div style='color:#475569;font-size:0.85rem;margin-top:4px'>"
-        + plan_info["price"] + "</div>"
-        "</div>"
-        "<div style='text-align:right'>"
-        "<div style='color:#94a3b8;font-size:0.9rem'>"
+        f"<div style='background:#111827;border:1px solid #1e3a5f;"
+        f"border-radius:16px;padding:28px 32px;margin-bottom:24px'>"
+        f"<div style='display:flex;justify-content:space-between;align-items:center'>"
+        f"<div>"
+        f"<div style='color:#64748b;font-size:0.8rem;text-transform:uppercase;"
+        f"letter-spacing:0.08em;margin-bottom:4px'>Current Plan</div>"
+        f"<div style='color:#f0f6ff;font-size:1.8rem;font-weight:800'>"
+        + plan_info["label"] + f"</div>"
+        f"<div style='color:#475569;font-size:0.85rem;margin-top:4px'>"
+        + plan_info["price"] + f"</div>"
+        f"</div>"
+        f"<div style='text-align:right'>"
+        + (f"<div style='color:{status_color};font-size:0.9rem;font-weight:600'>{status_tag}</div>"
+           if status_tag else "")
+        + f"<div style='color:#94a3b8;font-size:0.9rem;margin-top:4px'>"
         + str(q["usage"]) + " / " + str(q["limit"]) + " analyses used</div>"
-        "<div style='background:#1e3a5f;border-radius:4px;height:6px;width:120px;margin:6px 0 0 auto'>"
-        "<div style='background:#60a5fa;border-radius:4px;height:6px;width:"
-        + str(q["pct"]) + "%'></div></div></div></div></div>",
+        f"<div style='background:#1e3a5f;border-radius:4px;height:6px;width:120px;margin:6px 0 0 auto'>"
+        f"<div style='background:#60a5fa;border-radius:4px;height:6px;width:"
+        + str(q["pct"]) + f"%'></div></div></div></div>"
+        + (f"<div style='color:#64748b;font-size:0.8rem;margin-top:12px;border-top:1px solid #1e3a5f;padding-top:12px'>"
+           f"Subscription ID: <code>{sub['subscription_id']}</code>"
+           + (f" | Next billing: <strong>{sub.get('next_billed_at', 'N/A')}</strong>" if sub.get('next_billed_at') else "")
+           + f"</div>" if sub and sub.get('subscription_id') else "")
+        + f"</div>",
         unsafe_allow_html=True
     )
+
+    # ── Subscription Management Actions ───────────────────────────────────
+    if sub and sub.get("subscription_id") and sub["subscription_id"].startswith("sub_"):
+        sub_id = sub["subscription_id"]
+        sub_status = sub.get("status", "")
+        remote = get_subscription(sub_id) if paddle_avail else None
+        if remote:
+            sub_status = remote.get("status", sub_status)
+
+        col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+        with col_m1:
+            if sub_status == "active" and st.button("⏸ Pause", key="sub_pause", use_container_width=True):
+                if pause_subscription(sub_id):
+                    st.success("Subscription paused.")
+                    st.rerun()
+                else:
+                    st.error("Failed to pause subscription.")
+        with col_m2:
+            if sub_status == "paused" and st.button("▶ Resume", key="sub_resume", use_container_width=True):
+                if resume_subscription(sub_id):
+                    st.success("Subscription resumed.")
+                    st.rerun()
+                else:
+                    st.error("Failed to resume subscription.")
+        with col_m3:
+            if sub_status not in ("cancelled",) and st.button("⏹ Cancel", key="sub_cancel", use_container_width=True):
+                if cancel_subscription(sub_id):
+                    st.success("Subscription cancelled. You retain access until end of billing period.")
+                    st.rerun()
+                else:
+                    st.error("Failed to cancel subscription.")
+        with col_m4:
+            if paddle_avail and remote and remote.get("customer_id"):
+                portal_url = get_customer_portal_url(remote["customer_id"])
+                if portal_url:
+                    st.link_button("🔧 Manage Billing", portal_url, use_container_width=True)
+
+        # ── Plan Change ────────────────────────────────────────────────────
+        if sub_status == "active":
+            st.markdown("#### Change Plan")
+            plans_for_change = [p for p in ("starter", "business", "consultant") if p != plan and get_price_id(p)]
+            if plans_for_change:
+                cols_change = st.columns(len(plans_for_change))
+                for ci, pkey in enumerate(plans_for_change):
+                    with cols_change[ci]:
+                        if st.button(f"Switch to {PLANS[pkey]['label']} ({PLANS[pkey]['price']})",
+                                     key=f"change_{pkey}", use_container_width=True):
+                            if update_subscription_plan(sub_id, pkey):
+                                st.success(f"Plan changed to {PLANS[pkey]['label']}!")
+                                st.rerun()
+                            else:
+                                st.error("Failed to change plan.")
+
+        # ── Invoice History ────────────────────────────────────────────────
+        if remote and remote.get("customer_id"):
+            st.divider()
+            st.markdown("### 📄 Invoice History")
+            invoices = get_invoices(remote["customer_id"])
+            if invoices:
+                for inv in invoices:
+                    inv_total = int(inv["total"]) / 100 if inv["total"].isdigit() else inv["total"]
+                    st.markdown(
+                        f"<div style='background:#0f172a;border:1px solid #1e3a5f;border-radius:8px;"
+                        f"padding:10px 16px;margin:4px 0;font-size:13px;display:flex;justify-content:space-between'>"
+                        f"<span style='color:#94a3b8'>{inv.get('number', inv['id'][:12])}</span>"
+                        f"<span style='color:#22c55e;font-weight:600'>{inv_total} {inv['currency']}</span>"
+                        f"<span style='color:#475569'>{inv.get('paid_at', '')[:10]}</span>"
+                        + (f"<a href='{inv['invoice_url']}' target='_blank' style='color:#60a5fa'>PDF</a>"
+                           if inv.get('invoice_url') else "")
+                        + f"</div>",
+                        unsafe_allow_html=True
+                    )
+            else:
+                st.caption("No invoices yet.")
 
     # ── Per-Mailbox Pricing Calculator ─────────────────────────────────────
     st.markdown("<div class='section-title'>📬 Per-Mailbox Pricing Calculator</div>",
@@ -3064,16 +3177,16 @@ with billing_tab:
     if plan == "enterprise":
         st.success("🌟 You are on the **Enterprise** plan — unlimited analyses, all features enabled.")
     else:
-        col1, col2, col3 = st.columns(3)
         upgrade_options = [
             ("starter", "Starter", "$29/mo", ["100 analyses/mo", "VirusTotal + OSINT", "AI security reports", "Email alerts"]),
             ("business", "Business", "$99/mo", ["500 analyses/mo", "Priority support", "Team access", "All features"]),
+            ("consultant", "Consultant", "$149/mo", ["2000 analyses/mo", "White-label", "SOC dashboard", "All features"]),
             ("enterprise", "Enterprise", "Custom", ["Unlimited analyses", "SLA guarantee", "White-label", "Dedicated support"]),
         ]
+        upgrade_cols = st.columns(len(upgrade_options))
         for i, (pkey, plabel, pprice, pfeatures) in enumerate(upgrade_options):
-            with [col1, col2, col3][i]:
+            with upgrade_cols[i]:
                 featured = pkey == "business"
-                border = "2px solid #3b82f6" if featured else "1px solid rgba(255,255,255,0.1)"
                 bg = "linear-gradient(160deg, #040f24, #071530)" if featured else "#0f172a"
                 already_on = plan == pkey
                 st.markdown(
