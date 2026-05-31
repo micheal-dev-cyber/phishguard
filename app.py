@@ -1,8 +1,68 @@
 import os
 import time
+import json
 import streamlit as st
 import plotly.graph_objects as go
 from datetime import datetime
+from pathlib import Path
+
+# ── Paddle Webhook handler (inline, no Flask needed) ───────────────────────
+try:
+    from src.paddle_billing import verify_webhook_signature, handle_webhook_event
+    _PADDLE_READY = True
+except Exception:
+    _PADDLE_READY = False
+
+def _handle_webhook(body: bytes, headers: dict) -> dict:
+    """Process a Paddle webhook request inline."""
+    if not _PADDLE_READY:
+        return {"error": "Paddle module not available"}, 500
+    signature = headers.get("Paddle-Signature", "")
+    if not signature:
+        return {"error": "Missing signature"}, 401
+    if not verify_webhook_signature(body, signature):
+        return {"error": "Invalid signature"}, 401
+    try:
+        payload = json.loads(body)
+    except Exception:
+        return {"error": "Invalid JSON"}, 400
+    event_type = payload.get("event_type", "unknown")
+    try:
+        result = handle_webhook_event(payload)
+        print(f"[paddle-webhook] {event_type}: {result}")
+        return result, 200
+    except Exception as e:
+        print(f"[paddle-webhook] Error: {e}")
+        return {"error": str(e)}, 500
+
+# Monkey-patch Streamlit's Tornado to add /webhook route
+try:
+    import tornado.web
+    import tornado.routing
+    from streamlit.web.server import Server
+
+    class PaddleWebhookHandler(tornado.web.RequestHandler):
+        def prepare(self):
+            if self.request.method != "POST":
+                self.set_status(405)
+                self.finish({"error": "Method not allowed"})
+                return
+            body = self.request.body
+            result, status = _handle_webhook(body, self.request.headers)
+            self.set_status(status)
+            self.write(result)
+            self.finish()
+
+    # Patch Server to add our route
+    _orig_start = Server.start
+
+    def _patched_start(self, *args, **kwargs):
+        self._tornado.add_handlers(r".*", [(r"/webhook", PaddleWebhookHandler)])
+        return _orig_start(self, *args, **kwargs)
+
+    Server.start = _patched_start
+except Exception:
+    pass  # Tornado patching failed — webhook won't be available
 
 st.set_page_config(page_title="PhishGuard AI", page_icon="🛡",
                    layout="wide", initial_sidebar_state="collapsed")
