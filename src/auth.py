@@ -6,6 +6,7 @@ from src.tenants import verify_tenant, seed_admin_from_env, init_tenants
 def _landing_page():
     """Landing page shown before login — uses Streamlit-native layout."""
     show_login = st.session_state.get("show_login", False)
+    show_signup = st.session_state.get("show_signup", False)
     show_reset = st.session_state.get("show_reset", False)
     show_mfa = st.session_state.get("show_mfa", False)
 
@@ -56,12 +57,97 @@ def _landing_page():
 
     if show_reset:
         _reset_form()
+    elif show_signup:
+        _signup_form()
     elif show_login:
         _login_form()
     elif show_mfa:
         _mfa_form()
     else:
         _hero_page()
+
+
+def _signup_form():
+    st.markdown("<div style='padding:60px 0'>", unsafe_allow_html=True)
+    st.markdown("<div class='auth-card'>", unsafe_allow_html=True)
+    st.markdown("<h2 style='font-size:1.8rem;font-weight:800;color:#f0f6ff;"
+                "text-align:center;margin-bottom:4px'>🛡 Create Your Account</h2>")
+    st.markdown("<p style='color:#475569;text-align:center;margin-bottom:32px;"
+                "font-size:13px'>Start protecting your inbox in under a minute.</p>",
+                unsafe_allow_html=True)
+
+    col1, col2 = st.columns(2)
+    with col1:
+        new_username = st.text_input("Username", placeholder="you",
+                                     label_visibility="collapsed", key="signup_user")
+    with col2:
+        new_email = st.text_input("Email", placeholder="you@company.com",
+                                  label_visibility="collapsed", key="signup_email")
+    new_password = st.text_input("Password", type="password",
+                                 placeholder="Create a strong password (min 8 characters)",
+                                 label_visibility="collapsed", key="signup_pass")
+    new_password2 = st.text_input("Confirm Password", type="password",
+                                  placeholder="Repeat your password",
+                                  label_visibility="collapsed", key="signup_pass2")
+
+    st.markdown("<p style='color:#475569;font-size:11px;margin-top:12px'>"
+                "By creating an account, you agree to our Terms of Service and Privacy Policy.</p>",
+                unsafe_allow_html=True)
+
+    if st.button("→ Create Free Account", use_container_width=True, type="primary", key="signup_submit"):
+        errors = []
+        if not new_username or len(new_username.strip()) < 3:
+            errors.append("Username must be at least 3 characters.")
+        if not new_email or "@" not in new_email or "." not in new_email:
+            errors.append("Please enter a valid email address.")
+        if not new_password or len(new_password) < 8:
+            errors.append("Password must be at least 8 characters.")
+        if new_password != new_password2:
+            errors.append("Passwords do not match.")
+        if any(c in new_username for c in "/\\!@#$%^&*()=+, "):
+            errors.append("Username can only contain letters, numbers, hyphens, and underscores.")
+
+        if errors:
+            for e in errors:
+                st.error(e)
+        else:
+            from src.tenants import create_tenant
+            from src.email_verify import create_verification, send_verification_email
+            from src.env import ENV
+            success = create_tenant(new_username.strip(), new_password, email=new_email.strip(), plan="trial")
+            if not success:
+                st.error("That username is already taken. Try a different one.")
+            else:
+                st.success("🎉 Account created! Let's get started.")
+                try:
+                    v = create_verification(new_username.strip(), new_email.strip())
+                    base_url = getattr(ENV, "APP_URL", "http://localhost:8501")
+                    verify_url = f"{base_url}/?verify={v['token']}"
+                    send_verification_email(new_email.strip(), verify_url)
+                    st.info("📧 We sent a verification email. Check your inbox (and spam folder).")
+                except Exception:
+                    pass
+                st.session_state["authenticated"] = True
+                st.session_state["username"] = new_username.strip()
+                st.session_state["plan"] = "trial"
+                st.session_state["is_admin"] = False
+                st.session_state["email"] = new_email.strip()
+                st.session_state.pop("show_signup", None)
+                st.rerun()
+
+    st.markdown("<br><div style='text-align:center'>"
+                "<span style='color:#475569;font-size:13px'>Already have an account? </span>",
+                unsafe_allow_html=True)
+    if st.button("→ Sign In", use_container_width=True):
+        st.session_state["show_signup"] = False
+        st.session_state["show_login"] = True
+        st.rerun()
+    if st.button("← Back to home", use_container_width=True, key="signup_back"):
+        st.session_state.pop("show_signup", None)
+        st.rerun()
+
+    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
 
 def _login_form():
@@ -192,10 +278,15 @@ def _login_form():
         pass
 
     st.markdown("<br>", unsafe_allow_html=True)
-    col_fp, col_back = st.columns([1, 1])
+    col_fp, col_signup, col_back = st.columns([1, 1, 1])
     with col_fp:
         if st.button("Forgot password?", use_container_width=True):
             st.session_state["show_reset"] = True
+            st.session_state["show_login"] = False
+            st.rerun()
+    with col_signup:
+        if st.button("Create account", use_container_width=True):
+            st.session_state["show_signup"] = True
             st.session_state["show_login"] = False
             st.rerun()
     with col_back:
@@ -326,7 +417,7 @@ def _hero_page():
                 "reports in seconds.</p>", unsafe_allow_html=True)
 
     if st.button("→ Get Started", use_container_width=True, type="primary"):
-        st.session_state["show_login"] = True
+        st.session_state["show_signup"] = True
         st.rerun()
 
     st.markdown("</div>", unsafe_allow_html=True)
@@ -440,7 +531,7 @@ def _hero_page():
 
     if st.button("→ Start Free Trial", use_container_width=True,
                  type="primary", key="cta2"):
-        st.session_state["show_login"] = True
+        st.session_state["show_signup"] = True
         st.rerun()
 
     # FOOTER

@@ -454,3 +454,16 @@ def section_title(label: str) -> str:
 def url_box(url: str, is_danger: bool = True) -> str:
     cls = "pg-url pg-url-danger" if is_danger else "pg-url pg-url-safe"
     return f'<div class="{cls}">{"🚨" if is_danger else "🔗"} {url}</div>'
+
+def empty_state(icon: str, title: str, description: str, action_label: str = "", action_key: str = "") -> str:
+    action = ""
+    if action_label:
+        action = f'<div style="margin-top:16px"><button onclick="alert(\'redirect\')" style="background:linear-gradient(135deg,#3b82f6,#6366f1);color:#fff;border:none;border-radius:8px;padding:8px 20px;font-weight:600;font-size:0.85rem;cursor:pointer">{action_label}</button></div>'
+    return (
+        f'<div style="text-align:center;padding:60px 20px;background:#111827;border:1px solid #1e293b;'
+        f'border-radius:16px;margin:20px 0">'
+        f'<div style="font-size:3rem;margin-bottom:12px">{icon}</div>'
+        f'<div style="font-size:1.1rem;font-weight:700;color:#f1f5f9;margin-bottom:6px">{title}</div>'
+        f'<div style="font-size:0.85rem;color:#64748b;max-width:360px;margin:0 auto 8px;line-height:1.5">{description}</div>'
+        f'{action}</div>'
+    )

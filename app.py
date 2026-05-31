@@ -238,7 +238,7 @@ def _cached_all_analyses(limit: int = 100):
 theme = st.session_state.get("theme", "dark")
 from src.ui_theme import apply_theme
 apply_theme(theme)
-from src.ui_design_system import inject_design_system, card, stat_card, badge, section_title, url_box
+from src.ui_design_system import inject_design_system, card, stat_card, badge, section_title, url_box, empty_state
 inject_design_system(theme)
 
 init_db()
@@ -498,27 +498,28 @@ except Exception:
     pass
 
 # ── Tabs ─────────────────────────────────────────────────────────────────────
+# Tab ordering must remain stable — existing code uses numbered tab references
 if is_admin:
     tabs = st.tabs([
-        "🔍 Analyze Email", "📥 Inbox Scanner", "📈 Analytics", "🤖 AI Copilot",
-        "⚙ Admin Dashboard", "👥 Clients",
-        "💳 Billing", "⚙ Settings", "🧪 Training", "🏆 Champions", "📊 History",
-        "🧬 STIX Intel", "📧 Sender Profiler", "🔗 URL Sandbox", "👁 OCR/Homograph",
+        "🔍 Analyze", "📥 Inbox", "📊 Analytics", "🤖 Copilot",
+        "⚙ Admin", "👥 Team",
+        "💳 Billing", "⚙ Settings", "🧪 Training", "🏆 Leaderboard", "📊 History",
+        "🔬 Threat Intel", "📧 Sender", "🔗 Sandbox", "👁 OCR",
         "🎯 Campaigns", "📖 API Docs",
-        "📋 Audit Log", "📊 Performance", "📈 M&A Diligence",
-        "🔌 Webhook Tester",
-        "📡 SOC Dashboard", "📋 Activity Timeline",
+        "📋 Audit", "⚡ Performance", "💼 M&A",
+        "🔌 Webhooks",
+        "📡 SOC", "📋 Timeline",
     ])
     tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12, tab13, tab14, tab15, tab16, tab17, tab_audit, tab_perf, tab_ma, tab_webhook, tab_soc, tab_timeline = tabs
     tab_stix, tab_sender, tab_sandbox, tab_ocr, tab_campaigns, tab_api_docs = tab12, tab13, tab14, tab15, tab16, tab17
 else:
     tabs = st.tabs([
-        "🔍 Analyze Email", "📥 Inbox Scanner", "📈 Analytics", "🤖 AI Copilot",
-        "💳 Billing", "⚙ Settings", "🧪 Training", "🏆 Champions", "📊 History",
-        "🧬 STIX Intel", "📧 Sender Profiler", "🔗 URL Sandbox", "👁 OCR/Homograph",
+        "🔍 Analyze", "📥 Inbox", "📊 Analytics", "🤖 Copilot",
+        "💳 Billing", "⚙ Settings", "🧪 Training", "🏆 Leaderboard", "📊 History",
+        "🔬 Threat Intel", "📧 Sender", "🔗 Sandbox", "👁 OCR",
         "🎯 Campaigns", "📖 API Docs",
-        "🔌 Webhook Tester",
-        "📡 SOC Dashboard", "📋 Activity Timeline",
+        "🔌 Webhooks",
+        "📡 SOC", "📋 Timeline",
     ])
     tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12, tab13, tab14, tab15, tab_webhook, tab_soc, tab_timeline = tabs
     tab_stix, tab_sender, tab_sandbox, tab_ocr, tab_campaigns, tab_api_docs = tab10, tab11, tab12, tab13, tab14, tab15
@@ -1429,7 +1430,14 @@ with tab3:
 
     history = _cached_history(500)
     if not history:
-        st.info("No scan data yet. Go to Analyze and scan your first email.")
+        st.markdown(empty_state(
+            "📊",
+            "No scan data yet",
+            "Run your first phishing analysis to see analytics, trends, and SOC metrics here.",
+            "🔍 Analyze an Email",
+        ), unsafe_allow_html=True)
+        if st.button("🔍 Analyze an Email", key="empty_analytics_cta", use_container_width=True):
+            st.session_state["active_tab"] = 0
     else:
         scores = [row[1] for row in history]
         severities = [row[2] for row in history]
@@ -5054,7 +5062,11 @@ with tab_timeline:
                 unsafe_allow_html=True,
             )
     else:
-        st.info("No activity recorded yet. Actions will appear here as you use the platform.")
+        st.markdown(empty_state(
+            "📋",
+            "No activity recorded yet",
+            "Your team's actions — analyses, logins, configuration changes — will appear here in real time.",
+        ), unsafe_allow_html=True)
 
     record_activity(username, "view_timeline", detail="Viewed activity timeline")
 
