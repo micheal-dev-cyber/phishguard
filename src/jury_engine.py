@@ -1,7 +1,10 @@
 import json
 import re
 import os
+import logging
 from typing import Dict, List, Any, Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 LINGUISTIC_PATTERNS = {
     "translation_artifacts": {
@@ -178,8 +181,8 @@ def _call_llm_jury(system_prompt: str, email_text: str, max_retries: int = 1) ->
         )
         raw = response.choices[0].message.content.strip()
         return json.loads(raw)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.exception("jury_engine: OpenAI LLM call failed: %s", e)
 
     # Try Anthropic as fallback
     try:
@@ -193,8 +196,8 @@ def _call_llm_jury(system_prompt: str, email_text: str, max_retries: int = 1) ->
         )
         raw = response.content[0].text.strip()
         return json.loads(raw)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.exception("jury_engine: Anthropic LLM call failed: %s", e)
 
     return None
 

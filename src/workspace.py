@@ -41,8 +41,8 @@ def init_workspace_tables():
     for col in ("workspace_id", "role"):
         try:
             c.execute(f"ALTER TABLE tenants ADD COLUMN {col} TEXT DEFAULT ''")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("workspace: Failed to add column %s: %s", col, e)
     conn.commit()
     conn.close()
 

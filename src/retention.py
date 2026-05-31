@@ -69,17 +69,20 @@ def purge_old_data(username: str) -> dict:
     try:
         c.execute("DELETE FROM analyses WHERE timestamp < ?", (cutoff_analysis,))
         counts["analyses"] = c.rowcount
-    except Exception:
+    except Exception as e:
+        logger.warning("retention: Failed to purge analyses: %s", e)
         counts["analyses"] = 0
     try:
         c.execute("DELETE FROM audit_log WHERE timestamp < ?", (cutoff_audit,))
         counts["audit"] = c.rowcount
-    except Exception:
+    except Exception as e:
+        logger.warning("retention: Failed to purge audit_log: %s", e)
         counts["audit"] = 0
     try:
         c.execute("DELETE FROM alert_log WHERE sent_at < ?", (cutoff_alerts,))
         counts["alerts"] = c.rowcount
-    except Exception:
+    except Exception as e:
+        logger.warning("retention: Failed to purge alert_log: %s", e)
         counts["alerts"] = 0
     conn.commit()
     conn.close()

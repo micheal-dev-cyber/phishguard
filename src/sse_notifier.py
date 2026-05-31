@@ -61,18 +61,20 @@ def cleanup_stale_queues(max_age: float = 3600):
             del _events[k]
 
 
-def render_sse_script(username: str, check_interval: int = 5) -> str:
+def render_sse_script(username: str, check_interval: int = 5, origin: str = "") -> str:
+    target_origin = origin if origin else "window.location.origin"
     return f"""
     <script>
     (function() {{
         let lastId = 0;
+        const targetOrigin = {target_origin};
         function poll() {{
             fetch('/_sse_events?username={username}&after=' + lastId + '&t=' + Date.now())
                 .then(r => r.json())
                 .then(events => {{
                     if (events && events.length) {{
                         lastId = events[events.length - 1].timestamp;
-                        window.parent.postMessage({{type: 'sse_events', events: events}}, '*');
+                        window.parent.postMessage({{type: 'sse_events', events: events}}, targetOrigin);
                     }}
                 }})
                 .catch(() => {{}});

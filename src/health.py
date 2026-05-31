@@ -100,7 +100,8 @@ def check_redis() -> dict:
             "status": "healthy" if ok else "down",
             "message": "Redis connected" if ok else "Redis unreachable",
         }
-    except Exception:
+    except Exception as e:
+        logger.warning("health: Redis check failed: %s", e)
         return {"component": "redis", "status": "disabled", "message": "Redis not configured"}
 
 
@@ -137,9 +138,9 @@ def _get_uptime() -> str:
             return result.stdout[:100] if result.stdout else "unknown"
         result = subprocess.run(["uptime", "-p"], capture_output=True, text=True, timeout=5)
         return result.stdout.strip()
-    except Exception:
+    except Exception as e:
+        logger.warning("health: Uptime check failed: %s", e)
         return "unknown"
-
 
 def run_backup() -> dict:
     init_health()

@@ -478,8 +478,8 @@ if st.session_state.get("show_upgrade") and plan != "enterprise":
 try:
     from src.ui_onboarding import render_onboarding_wizard
     render_onboarding_wizard(username)
-except Exception:
-    pass
+except Exception as e:
+    logger.warning("Onboarding wizard failed: %s", e)
 
 # ── Weekly Report Check ─────────────────────────────────────────────────────
 try:
@@ -489,8 +489,8 @@ try:
     if _email and _wr_key not in st.session_state:
         st.session_state[_wr_key] = True
         check_and_send_weekly(username, _email)
-except Exception:
-    pass
+except Exception as e:
+    logger.warning("Weekly report check failed: %s", e)
 
 # ── Sidebar Navigation Guide ──────────────────────────────────────────────────
 with st.sidebar:
@@ -677,8 +677,8 @@ with tab1:
                 icon="⚠️"
             )
             st.stop()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.error("Email verification check failed (proceeding without check): %s", e)
 
     q = check_quota(username, plan)
     if q["over_limit"] and plan != "enterprise":
@@ -816,7 +816,7 @@ with tab1:
                 st.error("⏳ Rate limit reached for batch (3/min).")
                 st.stop()
             batch_results = []
-            text_col = "text" if batch_inputs[0].get("text") else "email" if batch_inputs[0].get("email") else list(batch_inputs[0].keys())[0]
+            text_col = "text" if batch_inputs[0].get("text") else "email" if batch_inputs[0].get("email") else next(iter(batch_inputs[0].keys()), "text")
             progress = st.progress(0, text="Batch analysis in progress...")
             for i, row in enumerate(batch_inputs):
                 t = (row.get(text_col) or "").strip()
@@ -1431,6 +1431,10 @@ with tab1:
             elif jr.get("final_score",0) < score - 15:
                 st.info("ℹ️ Jury rates this **lower** — heuristic flags may be false positives.")
 
+        # ── Close blur for restricted tiers ─────────────────────────────
+        if _restricted_blur:
+            st.markdown("</div></div>", unsafe_allow_html=True)
+
         # ── Honeypot Counter-Measure ───────────────────────────────────────
         if score >= 50:
             st.divider()
@@ -1447,10 +1451,6 @@ with tab1:
                 st.markdown(f"<div class='pg-card-success' style='margin:8px 0'><div style='color:#22c55e;font-weight:700'>{_hp.get('subject','')}</div><div style='color:#94a3b8;font-size:12px'>From: {_hp.get('sender_name','')} — {_hp.get('payload_type','')}</div></div>", unsafe_allow_html=True)
                 if st.button("✕ Clear", key="clear_hp"):
                     st.session_state.pop("honeypot", None); st.rerun()
-
-            # ── Close blur for restricted tiers ─────────────────────────
-            if _restricted_blur:
-                st.markdown("</div></div>", unsafe_allow_html=True)
 
             # ── Upgrade Gate / Export in technical view ────────────────
             if _restricted_blur:
@@ -1655,11 +1655,16 @@ with tab3:
 
         # ── Weekly Digest ──────────────────────────────────────────────
         st.markdown("#### 📬 7-Day Summary")
-        weekly_scores = [row[1] for row in history if (datetime.now() - datetime.strptime(row[0][:10], "%Y-%m-%d")).days < 7] if history else []
+        def _is_recent(ts: str, days: int = 7) -> bool:
+            try:
+                return (datetime.now() - datetime.strptime(ts[:10], "%Y-%m-%d")).days < days
+            except (ValueError, IndexError):
+                return False
+        weekly_scores = [row[1] for row in history if _is_recent(row[0])] if history else []
         if weekly_scores:
             w_total = len(weekly_scores)
-            w_crit = sum(1 for row in history if row[2] == "CRITICAL" and (datetime.now() - datetime.strptime(row[0][:10], "%Y-%m-%d")).days < 7)
-            w_high = sum(1 for row in history if row[2] == "HIGH" and (datetime.now() - datetime.strptime(row[0][:10], "%Y-%m-%d")).days < 7)
+            w_crit = sum(1 for row in history if row[2] == "CRITICAL" and _is_recent(row[0]))
+            w_high = sum(1 for row in history if row[2] == "HIGH" and _is_recent(row[0]))
             w_avg = round(sum(weekly_scores) / w_total, 1)
             w_col1, w_col2, w_col3, w_col4 = st.columns(4)
             w_col1.metric("7-Day Scans", w_total)
@@ -2600,7 +2605,8 @@ with billing_tab:
             invoices = get_invoices(remote["customer_id"])
             if invoices:
                 for inv in invoices:
-                    inv_total = int(inv["total"]) / 100 if inv["total"].isdigit() else inv["total"]
+                    inv_total_str = str(inv.get("total") or "0")
+                    inv_total = int(inv_total_str) / 100 if inv_total_str.isdigit() else inv_total_str
                     st.markdown(
                         f"<div style='background:#0f172a;border:1px solid #1e3a5f;border-radius:8px;"
                         f"padding:10px 16px;margin:4px 0;font-size:13px;display:flex;justify-content:space-between'>"
@@ -2942,13 +2948,13 @@ with settings_tab:
                         unsafe_allow_html=True
                     )
                     st.code(secret, language="text")
-                    from urllib.parse import quote
-                    qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=200x200&data={quote(uri)}"
                     st.markdown(
-                        f"<div style='text-align:center'><img src='{qr_url}' "
-                        f"width='180' alt='QR Code'></div>",
+                        "<p style='color:#94a3b8;font-size:12px;text-align:center'>"
+                        "Enter this key manually in your authenticator app, or use the URI below.</p>",
                         unsafe_allow_html=True
                     )
+                    with st.expander("Show setup URI"):
+                        st.code(uri, language="text")
                     verify_code = st.text_input("Enter 6-digit code to verify",
                                                  max_chars=6, label_visibility="collapsed",
                                                  key="mfa_verify_code")
@@ -3001,8 +3007,10 @@ with settings_tab:
     col_wh1, col_wh2 = st.columns([1, 3])
     with col_wh1:
         if st.button("💾 Save Webhook", type="primary", use_container_width=True):
-            if webhook_url and not webhook_url.startswith(("https://hooks.slack.com/", "https://outlook.office.com/webhook/")):
-                st.error("Invalid webhook URL. Must be a Slack or Teams incoming webhook URL.")
+            if webhook_url and not webhook_url.startswith("https://"):
+                st.error("Webhook URL must use HTTPS.")
+            elif webhook_url and not webhook_url.startswith(("https://hooks.slack.com/", "https://outlook.office.com/webhook/")):
+                st.warning("⚠️ Unrecognized webhook provider. Only Slack and Teams are officially supported.")
             else:
                 st.session_state[wh_key] = webhook_url
                 st.success("Webhook URL saved. Alerts will be sent on HIGH/CRITICAL scans.")

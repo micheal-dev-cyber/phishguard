@@ -1,5 +1,6 @@
 """Password Reset — token generation, expiry, email delivery."""
 
+import hashlib
 import logging
 import secrets
 import time
@@ -32,15 +33,20 @@ def _init_table():
     conn.close()
 
 
+def _hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
 def create_reset_token(username: str, email: str) -> dict:
     _init_table()
     token = secrets.token_urlsafe(32)
+    token_hash = _hash_token(token)
     expires_at = time.time() + RESET_TOKEN_TTL
     conn = sqlite3.connect(str(DB_PATH))
     c = conn.cursor()
     c.execute(
         "INSERT INTO password_reset_tokens (username, email, token, expires_at) VALUES (?, ?, ?, ?)",
-        (username, email, token, expires_at),
+        (username, email, token_hash, expires_at),
     )
     conn.commit()
     conn.close()
@@ -49,11 +55,12 @@ def create_reset_token(username: str, email: str) -> dict:
 
 def verify_reset_token(token: str) -> dict:
     _init_table()
+    token_hash = _hash_token(token)
     conn = sqlite3.connect(str(DB_PATH))
     c = conn.cursor()
     c.execute(
         "SELECT username, email, expires_at, used FROM password_reset_tokens WHERE token = ?",
-        (token,),
+        (token_hash,),
     )
     row = c.fetchone()
     conn.close()

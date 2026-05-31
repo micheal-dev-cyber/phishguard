@@ -1,8 +1,11 @@
 import re
 import socket
 import requests
+import logging
 from datetime import datetime
 from src.env import ENV
+
+logger = logging.getLogger(__name__)
 
 VT_API_KEY = ENV.VIRUSTOTAL_API_KEY
 
@@ -73,7 +76,8 @@ def investigate_domain(domain: str) -> dict:
     try:
         ip = socket.gethostbyname(domain)
         result["ip"] = ip
-    except Exception:
+    except Exception as e:
+        logger.warning("osint: Failed to resolve domain %s: %s", domain, e)
         result["risk_indicators"].append("Domain does not resolve — possibly fake")
         result["risk_score"] += 30
         return result
@@ -95,8 +99,8 @@ def investigate_domain(domain: str) -> dict:
             )
             result["risk_score"] += 10
 
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("osint: IP geolocation failed for %s: %s", ip, e)
 
     # ── 3. WHOIS domain age check (free API) ──────────────────────────────────
     try:
@@ -124,10 +128,10 @@ def investigate_domain(domain: str) -> dict:
                         f"Domain created {age_days} days ago — relatively new"
                     )
                     result["risk_score"] += 15
-            except Exception:
-                pass
-    except Exception:
-        pass
+            except Exception as e:
+                logger.warning("osint: Failed to parse WHOIS date for %s: %s", domain, e)
+    except Exception as e:
+        logger.warning("osint: WHOIS lookup failed for %s: %s", domain, e)
 
     # ── 4. VirusTotal domain check ─────────────────────────────────────────────
     if VT_API_KEY:
@@ -160,8 +164,8 @@ def investigate_domain(domain: str) -> dict:
                     )
                     result["risk_score"] += 20
 
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("osint: VirusTotal lookup failed for %s: %s", domain, e)
 
     # ── 5. Suspicious domain pattern checks ───────────────────────────────────
     suspicious_patterns = [
@@ -223,7 +227,8 @@ def investigate_ip(ip: str) -> dict:
             result["risk_indicators"].append("IP belongs to a hosting provider — VPS/cloud server")
             result["risk_score"] += 15
 
-    except Exception:
+    except Exception as e:
+        logger.warning("osint: IP investigation failed for %s: %s", ip, e)
         result["risk_indicators"].append("Could not investigate IP")
 
     return result

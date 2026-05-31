@@ -3,6 +3,7 @@ Custom email domain verification (DKIM/SPF) for sender authentication.
 
 Verifies that sending domains have proper DKIM and SPF records.
 """
+import hmac
 import logging
 import re
 import sqlite3
@@ -60,7 +61,7 @@ def verify_domain(username: str, domain: str, token: str) -> bool:
         (username, domain),
     )
     row = c.fetchone()
-    if not row or row[0] != token:
+    if not row or not hmac.compare_digest(str(row[0] or ""), token):
         conn.close()
         return False
     c.execute(f"UPDATE {DOMAIN_TABLE} SET verified=1 WHERE username=? AND domain=?", (username, domain))
@@ -79,8 +80,8 @@ def check_dns_records(domain: str) -> dict:
             try:
                 answers = socket.getaddrinfo(f"_dmarc.{domain}", 0)
                 result["dmarc"] = "found"
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("domain_verify: DMARC lookup failed for %s: %s", domain, e)
             try:
                 import dns.resolver
                 for rtype, key in [("TXT", "spf"), ("TXT", "dkim")]:
@@ -92,8 +93,8 @@ def check_dns_records(domain: str) -> dict:
                                 result["spf"] = "found"
                             if "v=dkim1" in txt or "k=rsa" in txt:
                                 result["dkim"] = "found"
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.warning("domain_verify: DNS lookup failed for %s: %s", domain, e)
             except ImportError:
                 result["errors"].append("dns.resolver not available; install dnspython")
                 break

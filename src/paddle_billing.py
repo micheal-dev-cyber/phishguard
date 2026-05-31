@@ -1,8 +1,11 @@
+import logging
 import hmac
 import hashlib
 import requests
 from typing import Optional
 from src.env import ENV
+
+logger = logging.getLogger(__name__)
 
 PADDLE_API_URL = "https://api.paddle.com"
 PADDLE_SANDBOX_API_URL = "https://sandbox-api.paddle.com"
@@ -66,8 +69,8 @@ def generate_checkout_url(username: str, plan: str, success_url: str = "") -> Op
         if resp.status_code in (200, 201):
             data = resp.json().get("data", {})
             return data.get("urls", {}).get("checkout", data.get("checkout", {}).get("url"))
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("paddle_billing: Failed to create checkout URL: %s", e)
     return None
 
 
@@ -83,7 +86,8 @@ def verify_webhook_signature(request_body: bytes, signature_header: str) -> bool
         sig = parts.get("h1", "")
         expected = hmac.new(secret.encode(), f"{ts}{request_body.decode()}".encode(), hashlib.sha256).hexdigest()
         return hmac.compare_digest(sig, expected)
-    except Exception:
+    except Exception as e:
+        logger.warning("paddle_billing: Webhook signature verification failed: %s", e)
         return False
 
 
@@ -105,8 +109,8 @@ def verify_transaction(transaction_id: str) -> Optional[dict]:
                 "status": data.get("status"),
                 "custom_data": data.get("custom_data", {}),
             }
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("paddle_billing: Transaction verification failed: %s", e)
     return None
 
 
@@ -144,8 +148,8 @@ def get_subscription(subscription_id: str) -> Optional[dict]:
                 "current_billing_period": data.get("billing_cycle", {}),
                 "scheduled_change": data.get("scheduled_change"),
             }
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("paddle_billing: Failed to get subscription: %s", e)
     return None
 
 
@@ -171,8 +175,8 @@ def get_customer_portal_url(customer_id: str) -> Optional[str]:
         )
         if resp.status_code == 200:
             return resp.json().get("data", {}).get("urls", {}).get("general", {}).get("overview")
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("paddle_billing: Failed to create customer portal URL: %s", e)
     return None
 
 
@@ -202,8 +206,8 @@ def get_invoices(customer_id: str, limit: int = 10) -> list:
                 }
                 for inv in data
             ]
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("paddle_billing: Failed to get invoices: %s", e)
     return []
 
 
@@ -220,7 +224,8 @@ def pause_subscription(subscription_id: str) -> bool:
             timeout=10,
         )
         return resp.status_code in (200, 201)
-    except Exception:
+    except Exception as e:
+        logger.warning("paddle_billing: Failed to pause subscription: %s", e)
         return False
 
 
@@ -240,7 +245,8 @@ def cancel_subscription(subscription_id: str, reason: str = "") -> bool:
             timeout=10,
         )
         return resp.status_code in (200, 201)
-    except Exception:
+    except Exception as e:
+        logger.warning("paddle_billing: Failed to cancel subscription: %s", e)
         return False
 
 
@@ -257,7 +263,8 @@ def resume_subscription(subscription_id: str) -> bool:
             timeout=10,
         )
         return resp.status_code in (200, 201)
-    except Exception:
+    except Exception as e:
+        logger.warning("paddle_billing: Failed to resume subscription: %s", e)
         return False
 
 
@@ -279,7 +286,8 @@ def update_subscription_plan(subscription_id: str, new_plan: str) -> bool:
             timeout=10,
         )
         return resp.status_code == 200
-    except Exception:
+    except Exception as e:
+        logger.warning("paddle_billing: Failed to update subscription plan: %s", e)
         return False
 
 
@@ -316,8 +324,8 @@ def _save_subscription(username: str, plan: str, sub_id: str, status: str):
         )
         conn.commit()
         conn.close()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("paddle_billing: Failed to save subscription for %s: %s", username, e)
 
 
 def handle_webhook_event(payload: dict) -> dict:
@@ -464,6 +472,6 @@ def get_local_subscription(username: str) -> Optional[dict]:
                 "created_at": row[5],
                 "updated_at": row[6],
             }
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("paddle_billing: Failed to get subscription by username: %s", e)
     return None

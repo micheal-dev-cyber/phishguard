@@ -1,8 +1,11 @@
+import logging
 import streamlit as st
 import sqlite3
 import time
 from pathlib import Path
 from datetime import datetime, timedelta
+
+logger = logging.getLogger(__name__)
 
 DB_PATH = Path(__file__).parent.parent / "data" / "phishguard.db"
 
@@ -55,7 +58,8 @@ def render_performance_tab():
     try:
         from src.redis_cache import REDIS_ENABLED
         col_c1.metric("Redis", "Connected" if REDIS_ENABLED else "Disabled")
-    except Exception:
+    except Exception as e:
+        logger.warning("ui_performance: Redis check failed: %s", e)
         col_c1.metric("Redis", "Unavailable")
 
     col_c2.metric("Streamlit Cache", "Active")

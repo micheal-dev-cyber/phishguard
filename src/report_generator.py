@@ -1,6 +1,9 @@
+import logging
 from fpdf import FPDF
 from datetime import datetime
 from typing import Dict, Any, List, Optional
+
+logger = logging.getLogger(__name__)
 
 
 class PhishGuardReport(FPDF):
@@ -17,8 +20,8 @@ class PhishGuardReport(FPDF):
         if self.custom_logo_path:
             try:
                 self.image(self.custom_logo_path, x=12, y=4, w=30)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("report_generator: Failed to load custom logo: %s", e)
         self.set_font("Helvetica", "B", 10)
         self.set_text_color(56, 132, 255)
         self.set_xy(12, 6)

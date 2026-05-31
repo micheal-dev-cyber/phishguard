@@ -1,3 +1,4 @@
+import logging
 import sqlite3
 from pathlib import Path
 from datetime import datetime, timedelta
@@ -5,6 +6,8 @@ import streamlit as st
 import plotly.graph_objects as go
 import plotly.express as px
 from src.tenants import PLANS
+
+logger = logging.getLogger(__name__)
 
 DB_PATH = Path(__file__).parent.parent / "data" / "phishguard.db"
 
@@ -108,7 +111,8 @@ def get_founder_metrics():
             c.execute("SELECT COUNT(*) FROM feedback_loop")
             total_fb = c.fetchone()[0]
             accuracy = round(correct / total_fb * 100, 1) if total_fb > 0 else None
-        except Exception:
+        except Exception as e:
+            logger.warning("ui_founder_analytics: Feedback accuracy query failed: %s", e)
             accuracy = None
 
         # Recent signups (last 10)

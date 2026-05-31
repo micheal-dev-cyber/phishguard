@@ -94,8 +94,8 @@ def _worker():
             logger.error("Task queue worker error: %s", e)
             try:
                 conn.close()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("task_queue: Failed to close connection: %s", e)
         time.sleep(2)
 
 

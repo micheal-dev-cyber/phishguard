@@ -92,7 +92,8 @@ def export_user_data(username: str) -> dict:
                 c.execute(f"SELECT * FROM {table} WHERE username = ?", (username,))
                 cols = [desc[0] for desc in c.description]
                 data[table] = [dict(zip(cols, r)) for r in c.fetchall()]
-            except Exception:
+            except Exception as e:
+                logger.warning("gdpr: Failed to export table %s for %s: %s", table, username, e)
                 data[table] = []
         c.execute(
             "INSERT INTO gdpr_export_requests (username, status, completed_at, data_file) VALUES (?, 'completed', datetime('now'), ?)",
@@ -117,7 +118,8 @@ def delete_user_data(username: str) -> dict:
         try:
             c.execute(f"DELETE FROM {table} WHERE username = ?", (username,))
             deleted[table] = c.rowcount
-        except Exception:
+        except Exception as e:
+            logger.warning("gdpr: Failed to delete table %s for %s: %s", table, username, e)
             deleted[table] = 0
     c.execute("DELETE FROM tenants WHERE username = ?", (username,))
     deleted["tenants"] = c.rowcount

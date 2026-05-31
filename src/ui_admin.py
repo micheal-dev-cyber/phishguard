@@ -86,7 +86,7 @@ def render_admin_tab():
                 st.error("User not found")
 
         if st.button("🗑 Delete User", type="secondary", use_container_width=True) and del_user:
-            c.execute("DELETE FROM analyses WHERE id IN (SELECT id FROM analyses WHERE 1=0)")
+            c.execute("DELETE FROM analyses WHERE username=?", (del_user,))
             c.execute("DELETE FROM users WHERE username=?", (del_user,))
             conn.commit()
             if c.rowcount:

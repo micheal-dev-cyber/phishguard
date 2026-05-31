@@ -79,7 +79,8 @@ def is_email_verified(username: str) -> bool:
         row = c.fetchone()
         conn.close()
         return bool(row and row[0])
-    except Exception:
+    except Exception as e:
+        logger.warning("email_verify: Failed to check verification status for %s: %s", username, e)
         return True
 
 

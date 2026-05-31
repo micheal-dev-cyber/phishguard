@@ -212,9 +212,13 @@ def render_analytics_tab():
         st.markdown("#### 📤 Export & Compliance")
         col_e1, col_e2, col_e3 = st.columns(3)
         with col_e1:
-            csv_data = "timestamp,risk_score,severity,keyword_hits,suspicious_urls,email_preview\n"
+            import csv, io
+            buf = io.StringIO()
+            w = csv.writer(buf)
+            w.writerow(["timestamp","risk_score","severity","keyword_hits","suspicious_urls","email_preview"])
             for r in history:
-                csv_data += ",".join([str(v) for v in r]) + "\n"
+                w.writerow([str(v) for v in r])
+            csv_data = buf.getvalue()
             st.download_button("📥 Export CSV", csv_data, "phishguard_analytics.csv", "text/csv",
                                use_container_width=True)
 

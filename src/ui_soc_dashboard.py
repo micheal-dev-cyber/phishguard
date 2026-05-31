@@ -289,12 +289,8 @@ def render_soc_dashboard(username, is_admin):
             st.caption("Sender profiling data not yet available. Run analyses to populate.")
 
     st.divider()
-    col_r = st.columns([1, 3, 1])
-    with col_r[1]:
-        st.caption("🔄 Dashboard auto-refreshes every 15 seconds")
-    now = time.time()
-    last = st.session_state.get("soc_dash_refresh", 0)
-    if now - last >= 15:
-        st.session_state["soc_dash_refresh"] = now
-        time.sleep(0.1)
-        st.rerun()
+    st.caption("🔄 Dashboard auto-refreshes every 15 seconds")
+    st.markdown(
+        '<meta http-equiv="refresh" content="15">',
+        unsafe_allow_html=True
+    )

@@ -1,9 +1,28 @@
+import ipaddress
 import streamlit as st
 import json
 import hmac
 import hashlib
 import time
+from urllib.parse import urlparse
 from src.env import ENV
+
+
+def _is_safe_url(url: str) -> bool:
+    """Block requests to internal/private IPs to prevent SSRF."""
+    if not url:
+        return True
+    try:
+        parsed = urlparse(url)
+        host = parsed.hostname or ""
+        if host in ("localhost", "127.0.0.1", "::1", "0.0.0.0"):
+            return False
+        ip = ipaddress.ip_address(host)
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_unspecified:
+            return False
+    except ValueError:
+        pass
+    return True
 
 
 def render_webhook_tester_tab():
@@ -114,6 +133,10 @@ def render_webhook_tester_tab():
             to_sign = ts + "." + json.dumps(payload, separators=(",", ":"))
             sig = hmac.new(secret.encode(), to_sign.encode(), hashlib.sha256).hexdigest()
             headers["Paddle-Signature"] = f"ts={ts};h1={sig}"
+
+        if not _is_safe_url(target_endpoint):
+            st.error("❌ Target URL resolves to an internal/private address. Blocked for security.")
+            st.stop()
 
         try:
             resp = requests.post(target_endpoint, json=payload, headers=headers, timeout=10)

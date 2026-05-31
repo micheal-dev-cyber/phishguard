@@ -1,6 +1,9 @@
 # src/auth.py
+import logging
 import streamlit as st
 from src.tenants import verify_tenant, seed_admin_from_env, init_tenants
+
+logger = logging.getLogger(__name__)
 
 
 def _landing_page():
@@ -160,8 +163,8 @@ def _signup_form():
                     verify_url = f"{base_url}/?verify={v['token']}"
                     send_verification_email(new_email.strip(), verify_url)
                     st.info("📧 We sent a verification email. Check your inbox (and spam folder).")
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning("auth: Failed to send verification email for %s: %s", new_email.strip(), e)
                 st.session_state["authenticated"] = True
                 st.session_state["username"] = new_username.strip()
                 st.session_state["plan"] = "trial"
@@ -256,8 +259,8 @@ def _login_form():
                     st.error("No account found for that email.")
             else:
                 st.error("Invalid or expired magic link.")
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("auth: Magic link processing failed: %s", e)
 
     if login_btn:
         if not username or not password:
@@ -289,8 +292,8 @@ def _login_form():
                     try:
                         from src.session_manager import create_session
                         create_session(tenant["username"], ip_address="", user_agent="streamlit")
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.warning("auth: Session creation failed for %s: %s", tenant["username"], e)
 
                     # Check MFA enforcement
                     try:
@@ -301,8 +304,8 @@ def _login_form():
                             st.session_state["mfa_username"] = tenant["username"]
                             st.session_state.pop("authenticated", None)
                             st.rerun()
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.warning("auth: MFA check failed for %s: %s", tenant["username"], e)
                     st.rerun()
 
     # ── SSO Login Button ──────────────────────────────────────────────
@@ -311,8 +314,8 @@ def _login_form():
         sso = SSOManager()
         if sso.enabled:
             st.markdown(sso.get_login_button_html(), unsafe_allow_html=True)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("auth: SSO initialization failed: %s", e)
 
     st.markdown("<br>", unsafe_allow_html=True)
     col_fp, col_signup, col_back = st.columns([1, 1, 1])
@@ -1226,7 +1229,7 @@ def check_password() -> bool:
                     _vquota = PLANS.get("trial", {}).get("analyses_per_month", 10)
                     send_welcome_email(_vemail, _vuname, _vquota, "https://phishguard.ai")
             except Exception as _ve:
-                pass
+                logger.warning("auth: Welcome email failed for %s: %s", _vuname, _ve)
         else:
             st.toast("Verification link expired or invalid.")
         st.query_params.clear()

@@ -1,8 +1,11 @@
+import logging
 import sqlite3
 import bcrypt
 import time
 from datetime import datetime
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 DB_PATH = Path(__file__).parent.parent / "data" / "phishguard.db"
 
@@ -65,8 +68,8 @@ def _migrate_sha256():
                 new_hash = bcrypt.hashpw(pw_hash.encode(), bcrypt.gensalt()).decode()
                 c.execute("UPDATE tenants SET password_hash = ? WHERE username = ?",
                           (new_hash, username))
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("tenants: Password hash migration failed for %s: %s", username, e)
     conn.commit()
     conn.close()
 
@@ -110,8 +113,8 @@ def init_tenants():
     for col in ("email_verified", "mfa_enabled"):
         try:
             c.execute(f"ALTER TABLE tenants ADD COLUMN {col} INTEGER DEFAULT 0")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("tenants: Schema migration failed for column %s: %s", col, e)
     conn.commit()
     conn.close()
     _migrate_sha256()
@@ -163,7 +166,8 @@ def create_tenant(username: str, password: str, email: str = "",
         )
         conn.commit()
         return c.rowcount > 0
-    except Exception:
+    except Exception as e:
+        logger.warning("tenants: Failed to create tenant %s: %s", username, e)
         return False
     finally:
         conn.close()

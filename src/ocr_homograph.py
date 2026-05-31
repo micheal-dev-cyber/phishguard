@@ -143,8 +143,8 @@ def extract_images_from_bytes(data: bytes) -> list:
             stream.seek(0)
             img = Image.open(stream)
             images.append(img.convert("RGB"))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("ocr_homograph: Failed to open image from stream: %s", e)
 
         if not images:
             try:
@@ -160,10 +160,10 @@ def extract_images_from_bytes(data: bytes) -> list:
                             try:
                                 img = Image.open(BytesIO(payload))
                                 images.append(img.convert("RGB"))
-                            except Exception:
-                                pass
-            except Exception:
-                pass
+                            except Exception as e:
+                                logger.warning("ocr_homograph: Failed to open image from email part: %s", e)
+            except Exception as e:
+                logger.warning("ocr_homograph: Failed to parse email for images: %s", e)
     except Exception as exc:
         logger.error("Image extraction error: %s", exc)
 

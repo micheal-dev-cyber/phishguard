@@ -135,8 +135,8 @@ def get_onboarding_steps(username: str) -> list:
         for step in steps:
             if step["step"] in done_steps:
                 step["done"] = True
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("onboarding: Failed to load progress for %s: %s", username, e)
     return steps
 
 

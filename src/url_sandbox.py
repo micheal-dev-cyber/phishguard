@@ -325,17 +325,24 @@ async def analyse_url_sandbox(
     try:
         from playwright.async_api import async_playwright
 
+        # SECURITY WARNING: --no-sandbox and --disable-web-security bypass
+        # Chromium's security model. These are needed when running as root
+        # (e.g. HF Spaces) because Chromium refuses to start a sandbox as root.
+        # Set PHISHGUARD_SANDBOX_UNSAFE=1 to allow these flags.
+        # In production or CI, remove these flags or run as a non-root user.
+        _unsafe_flags = [
+            "--no-sandbox",
+            "--disable-setuid-sandbox",
+            "--disable-dev-shm-usage",
+            "--disable-gpu",
+            "--disable-web-security",
+            "--disable-features=IsolateOrigins,site-per-process",
+        ]
+        _launch_args = _unsafe_flags if os.environ.get("PHISHGUARD_SANDBOX_UNSAFE") == "1" else []
         async with async_playwright() as pw:
             browser = await pw.chromium.launch(
                 headless=True,
-                args=[
-                    "--no-sandbox",
-                    "--disable-setuid-sandbox",
-                    "--disable-dev-shm-usage",
-                    "--disable-gpu",
-                    "--disable-web-security",
-                    "--disable-features=IsolateOrigins,site-per-process",
-                ],
+                args=_launch_args,
             )
 
             context = await browser.new_context(
@@ -380,7 +387,7 @@ async def analyse_url_sandbox(
                 try:
                     await page.wait_for_load_state("networkidle", timeout=5000)
                 except Exception:
-                    pass
+                    logger.warning("url_sandbox: Network idle wait failed for %s", url)
 
                 # Build redirect chain
                 if response:
@@ -408,6 +415,7 @@ async def analyse_url_sandbox(
             try:
                 result.page_title = await page.title()
             except Exception:
+                logger.warning("url_sandbox: Failed to get page title for %s", url)
                 result.page_title = ""
 
             # Screenshot
