@@ -77,32 +77,8 @@ def mark_token_used(token: str):
 
 
 def send_reset_email(email: str, reset_url: str) -> dict:
-    from src.env import ENV
-    smtp_host = ENV.SMTP_HOST
-    smtp_port = ENV.SMTP_PORT
-    smtp_user = ENV.SMTP_USER
-    smtp_pass = ENV.SMTP_PASS
-    smtp_from = ENV.SMTP_FROM or smtp_user
-
-    if not smtp_user or not smtp_pass:
-        return {"success": False, "error": "SMTP not configured"}
-
-    msg = MIMEText(
-        f"Click the link below to reset your PhishGuard password:\n\n{reset_url}\n\n"
-        f"This link expires in 1 hour. If you did not request this, ignore this email."
-    )
-    msg["Subject"] = "PhishGuard — Password Reset"
-    msg["From"] = smtp_from
-    msg["To"] = email
-
-    try:
-        server = smtplib.SMTP(smtp_host, smtp_port, timeout=10)
-        server.starttls()
-        server.login(smtp_user, smtp_pass)
-        server.send_message(msg)
-        server.quit()
-        logger.info("Password reset email sent to %s", email)
-        return {"success": True}
-    except Exception as e:
-        logger.error("Failed to send reset email: %s", e)
-        return {"success": False, "error": str(e)}
+    from src.email_templates import render_html, send_html_email
+    html = render_html("reset", reset_url=reset_url)
+    if not html:
+        return {"success": False, "error": "Template not found"}
+    return send_html_email(email, "PhishGuard — Password Reset", html)

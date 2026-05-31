@@ -332,6 +332,9 @@ def get_css(theme: str = "dark") -> str:
         border-radius: 10px !important;
         padding: 12px 16px !important;
     }}
+    div[data-testid="stAlert"] svg {{ display: inline !important; }}
+    .stAlert p {{ font-size: 0.85rem !important; }}
+    div[data-testid="stNotification"] {{ border-radius: 12px !important; }}
 
     /* ── Sidebar ────────────────────────────────── */
     section[data-testid="stSidebar"] {{
@@ -467,3 +470,45 @@ def empty_state(icon: str, title: str, description: str, action_label: str = "",
         f'<div style="font-size:0.85rem;color:#64748b;max-width:360px;margin:0 auto 8px;line-height:1.5">{description}</div>'
         f'{action}</div>'
     )
+
+def feature_gate(feature: str, plan: str, plans: dict, upgrade_callback: str = "") -> str:
+    """Render an upgrade CTA if the plan doesn't include the requested feature."""
+    if feature in plans.get(plan, {}).get("features", []):
+        return ""
+    next_tier = None
+    tier_order = ["free", "trial", "starter", "professional", "business", "enterprise", "consultant"]
+    for t in tier_order:
+        if feature in plans.get(t, {}).get("features", []):
+            next_tier = plans[t]["label"]
+            break
+    return (
+        f'<div style="background:linear-gradient(135deg,#1a0a1a,#2a0f2a);border:2px solid #a855f7;'
+        f'border-radius:16px;padding:24px 20px;text-align:center;margin:12px 0">'
+        f'<div style="font-size:2rem;margin-bottom:6px">🔒</div>'
+        f'<div style="color:#f0f6ff;font-size:1rem;font-weight:700;margin-bottom:4px">'
+        f'Upgrade Required</div>'
+        f'<div style="color:#94a3b8;font-size:0.85rem">This feature requires the '
+        f'<strong>{next_tier or "Enterprise"}</strong> plan or higher.'
+        f'{" <a href=\'#\' style=\'color:#a855f7\'>Upgrade now →</a>" if upgrade_callback else ""}</div>'
+        f'</div>'
+    )
+
+def progress_bar(pct: int, color: str = "#3b82f6", height: int = 6) -> str:
+    return (
+        f'<div style="background:#1e293b;border-radius:6px;height:{height}px;overflow:hidden">'
+        f'<div style="background:{color};width:{min(pct,100)}%;height:100%;'
+        f'border-radius:6px;transition:width 0.3s ease"></div></div>'
+    )
+
+def metric_row(metrics: list) -> str:
+    """Render a row of stat cards. metrics = [(value, label, color?), ...]"""
+    cols = "".join(
+        f'<div style="flex:1;background:#111827;border:1px solid #1e293b;border-radius:10px;'
+        f'padding:12px 8px;text-align:center">'
+        f'<div style="font-size:1.3rem;font-weight:800;color:{c or "#f1f5f9"};letter-spacing:-0.02em">{v}</div>'
+        f'<div style="font-size:0.65rem;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;'
+        f'font-weight:600;margin-top:2px">{l}</div></div>'
+        for v, l, *rest in metrics
+        for c in (rest[0] if rest else [None])
+    )
+    return f'<div style="display:flex;gap:8px;margin:12px 0">{cols}</div>'

@@ -6,48 +6,44 @@ from collections import defaultdict
 from threading import Lock
 
 logger = logging.getLogger(__name__)
+from src.tenants import PLANS
 
-# Tier definitions matching PLANS in tenants.py
+# Tier definitions — features sourced from PLANS in tenants.py
 TIERS = {
     "trial": {
         "label": "Trial",
         "scans_per_month": 10,
         "concurrent_sessions": 1,
         "rate_per_minute": 5,
-        "features": ["basic_scan", "pdf_export"],
+        "features": PLANS["trial"]["features"],
     },
     "starter": {
         "label": "Starter",
         "scans_per_month": 100,
         "concurrent_sessions": 2,
         "rate_per_minute": 15,
-        "features": ["basic_scan", "threat_intel", "osint", "ai_report", "pdf_export", "email_alerts"],
+        "features": PLANS["starter"]["features"],
     },
     "business": {
         "label": "Business",
         "scans_per_month": 500,
         "concurrent_sessions": 5,
         "rate_per_minute": 30,
-        "features": ["basic_scan", "threat_intel", "osint", "ai_report", "pdf_export",
-                     "email_alerts", "api_access", "team_access", "priority_support"],
+        "features": PLANS["business"]["features"],
     },
     "consultant": {
         "label": "Consultant",
         "scans_per_month": 2000,
         "concurrent_sessions": 10,
         "rate_per_minute": 60,
-        "features": ["basic_scan", "threat_intel", "osint", "ai_report", "pdf_export",
-                     "email_alerts", "api_access", "team_access", "priority_support",
-                     "white_label", "custom_branding"],
+        "features": PLANS["consultant"]["features"],
     },
     "enterprise": {
         "label": "Enterprise",
         "scans_per_month": 999999,
         "concurrent_sessions": 50,
         "rate_per_minute": 120,
-        "features": ["basic_scan", "threat_intel", "osint", "ai_report", "pdf_export",
-                     "email_alerts", "api_access", "team_access", "priority_support",
-                     "white_label", "sla", "custom_integration"],
+        "features": PLANS["enterprise"]["features"],
     },
 }
 

@@ -29,8 +29,6 @@ if _sso_code:
             from src.tenants import verify_tenant, create_tenant
             _username = _info["email"].split("@")[0].replace(".", "_")
             _existing = verify_tenant(_username, _info["email"])
-            if not _existing or _existing.get("error") == "suspended":
-                pass
             if not _existing:
                 create_tenant(_username, _info["email"], email=_info["email"], plan="trial")
             st.session_state["authenticated"] = True
@@ -46,7 +44,7 @@ if _sso_code:
 
 # ── All src.* imports go AFTER set_page_config to avoid Streamlit init issues ──
 from src.detector import analyze_email
-from src.database import init_db, save_analysis, get_history
+from src.database import init_db, save_analysis, get_history, check_scan_quota
 from src.report_generator import generate_pdf_report
 from src.auth import check_password, logout
 from src.session_manager import create_session, list_sessions, revoke_session, revoke_all_sessions, cleanup_expired
@@ -116,6 +114,7 @@ from src.integrations import (
 )
 from src.auto_responder import send_phishing_warning
 from src.i18n import t, SUPPORTED_LANGUAGES
+from src.ui_founder_analytics import render_founder_analytics
 
 # ── RBAC permissions ────────────────────────────────────────────────────────
 from src.rbac import init_rbac, check_permission
@@ -216,19 +215,9 @@ def _cached_history(limit: int = 500):
     return get_history(limit)
 
 @st.cache_data(ttl=60)
-def _cached_stats():
-    from src.admin import get_stats as _gs
-    return _gs()
-
-@st.cache_data(ttl=60)
 def _cached_threats(limit: int = 10):
     from src.admin import get_recent_threats as _gt
     return _gt(limit)
-
-@st.cache_data(ttl=60)
-def _cached_daily_counts(days: int = 14):
-    from src.admin import get_daily_counts as _gd
-    return _gd(days)
 
 @st.cache_data(ttl=60)
 def _cached_all_analyses(limit: int = 100):
@@ -503,29 +492,54 @@ try:
 except Exception:
     pass
 
+# ── Sidebar Navigation Guide ──────────────────────────────────────────────────
+with st.sidebar:
+    st.markdown(
+        f"<div style='display:flex;align-items:center;gap:10px;margin-bottom:12px'>"
+        f"<span style='font-size:1.6rem'>🛡</span>"
+        f"<div><div style='font-weight:700;font-size:1.05rem'>{username}</div>"
+        f"<div style='font-size:0.7rem;color:#64748b'>{PLANS.get(plan, PLANS['trial'])['label']}</div></div></div>",
+        unsafe_allow_html=True
+    )
+    st.markdown("<hr style='border-color:#1e293b;margin:8px 0'>", unsafe_allow_html=True)
+    st.markdown("<div style='font-size:0.65rem;color:#475569;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px'>Detection</div>", unsafe_allow_html=True)
+    st.markdown("→ <span style='color:#94a3b8'>Scan</span> · <span style='color:#94a3b8'>Inbox</span>", unsafe_allow_html=True)
+    st.markdown("<div style='font-size:0.65rem;color:#475569;text-transform:uppercase;letter-spacing:0.05em;margin-top:10px;margin-bottom:4px'>Analysis</div>", unsafe_allow_html=True)
+    st.markdown("→ <span style='color:#94a3b8'>Dashboard</span> · <span style='color:#94a3b8'>Copilot</span> · <span style='color:#94a3b8'>History</span>", unsafe_allow_html=True)
+    st.markdown("<div style='font-size:0.65rem;color:#475569;text-transform:uppercase;letter-spacing:0.05em;margin-top:10px;margin-bottom:4px'>Security</div>", unsafe_allow_html=True)
+    st.markdown("→ <span style='color:#94a3b8'>Threat Intel</span> · <span style='color:#94a3b8'>SOC</span> · <span style='color:#94a3b8'>Webhooks</span>", unsafe_allow_html=True)
+    st.markdown("<div style='font-size:0.65rem;color:#475569;text-transform:uppercase;letter-spacing:0.05em;margin-top:10px;margin-bottom:4px'>Learning</div>", unsafe_allow_html=True)
+    st.markdown("→ <span style='color:#94a3b8'>Training</span> · <span style='color:#94a3b8'>Leaderboard</span>", unsafe_allow_html=True)
+    st.markdown("<div style='font-size:0.65rem;color:#475569;text-transform:uppercase;letter-spacing:0.05em;margin-top:10px;margin-bottom:4px'>Account</div>", unsafe_allow_html=True)
+    st.markdown("→ <span style='color:#94a3b8'>Billing</span> · <span style='color:#94a3b8'>Settings</span> · <span style='color:#94a3b8'>Team</span>" if is_admin else "→ <span style='color:#94a3b8'>Billing</span> · <span style='color:#94a3b8'>Settings</span>", unsafe_allow_html=True)
+    if is_admin:
+        st.markdown("<div style='font-size:0.65rem;color:#475569;text-transform:uppercase;letter-spacing:0.05em;margin-top:10px;margin-bottom:4px'>Admin</div>", unsafe_allow_html=True)
+        st.markdown("→ <span style='color:#94a3b8'>Admin</span> · <span style='color:#94a3b8'>Audit</span> · <span style='color:#94a3b8'>Performance</span>", unsafe_allow_html=True)
+    st.sidebar.markdown("<hr style='border-color:#1e293b;margin:8px 0'>", unsafe_allow_html=True)
+
 # ── Tabs ─────────────────────────────────────────────────────────────────────
 # Tab ordering must remain stable — existing code uses numbered tab references
 if is_admin:
     tabs = st.tabs([
-        "🔍 Analyze", "📥 Inbox", "🏠 Dashboard", "🤖 Copilot",
+        "🔍 Scan", "📬 Inbox", "🏠 Dashboard", "🤖 Copilot",
         "⚙ Admin", "👥 Team",
-        "💳 Billing", "⚙ Settings", "🧪 Training", "🏆 Leaderboard", "📊 History",
-        "🔬 Threat Intel", "📧 Sender", "🔗 Sandbox", "👁 OCR",
-        "🎯 Campaigns", "📖 API Docs",
-        "📋 Audit", "⚡ Performance", "💼 M&A",
+        "💳 Billing", "⚙ Settings", "🎓 Training", "🏆 Leaderboard", "📊 History",
+        "🛡 Threat Intel", "📧 Sender", "🔗 Sandbox", "👁 OCR",
+        "🎯 Campaigns", "📖 API",
+        "📋 Audit", "⚡ Perf", "💼 M&A",
         "🔌 Webhooks",
-        "📡 SOC", "📋 Timeline",
+        "📡 SOC", "📅 Timeline",
     ])
     tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12, tab13, tab14, tab15, tab16, tab17, tab_audit, tab_perf, tab_ma, tab_webhook, tab_soc, tab_timeline = tabs
     tab_stix, tab_sender, tab_sandbox, tab_ocr, tab_campaigns, tab_api_docs = tab12, tab13, tab14, tab15, tab16, tab17
 else:
     tabs = st.tabs([
-        "🔍 Analyze", "📥 Inbox", "🏠 Dashboard", "🤖 Copilot",
-        "💳 Billing", "⚙ Settings", "🧪 Training", "🏆 Leaderboard", "📊 History",
-        "🔬 Threat Intel", "📧 Sender", "🔗 Sandbox", "👁 OCR",
-        "🎯 Campaigns", "📖 API Docs",
+        "🔍 Scan", "📬 Inbox", "🏠 Dashboard", "🤖 Copilot",
+        "💳 Billing", "⚙ Settings", "🎓 Training", "🏆 Leaderboard", "📊 History",
+        "🛡 Threat Intel", "📧 Sender", "🔗 Sandbox", "👁 OCR",
+        "🎯 Campaigns", "📖 API",
         "🔌 Webhooks",
-        "📡 SOC", "📋 Timeline",
+        "📡 SOC", "📅 Timeline",
     ])
     tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12, tab13, tab14, tab15, tab_webhook, tab_soc, tab_timeline = tabs
     tab_stix, tab_sender, tab_sandbox, tab_ocr, tab_campaigns, tab_api_docs = tab10, tab11, tab12, tab13, tab14, tab15
@@ -1132,9 +1146,9 @@ with tab1:
                         st.error(f"AI analysis failed: {e}")
             with col_pdf:
                 ai_report_text = st.session_state.get("ai_report", "")
-                is_consultant = user_tier == "consultant"
-                wl_flag = st.session_state.get("whitelabel_pdf", False) and is_consultant
-                wl_logo = st.session_state.get("consultant_logo_path") if is_consultant else None
+                _has_wl = "white_label" in PLANS.get(user_tier, {}).get("features", [])
+                wl_flag = st.session_state.get("whitelabel_pdf", False) and _has_wl
+                wl_logo = st.session_state.get("consultant_logo_path") if _has_wl else None
                 pdf_bytes = generate_pdf_report(results, email_text_saved, ai_report_text, white_label=wl_flag, custom_logo_path=wl_logo)
                 sev_lower = results["severity"].lower()
                 st.download_button(label="📥 Download PDF Report", data=pdf_bytes, file_name=f"phishguard_report_{sev_lower}.pdf", mime="application/pdf", use_container_width=True, type="primary", key="pdf_simple")
@@ -1475,18 +1489,17 @@ with tab1:
                             st.error(f"AI analysis failed: {e}")
                 with col_pdf:
                     ai_report_text = st.session_state.get("ai_report", "")
-                    _is_consultant = user_tier == "consultant"
-                    _wl_flag = st.session_state.get("whitelabel_pdf", False) and _is_consultant
-                    _wl_logo = st.session_state.get("consultant_logo_path") if _is_consultant else None
+                    _has_wl = "white_label" in PLANS.get(user_tier, {}).get("features", [])
+                    _wl_flag = st.session_state.get("whitelabel_pdf", False) and _has_wl
+                    _wl_logo = st.session_state.get("consultant_logo_path") if _has_wl else None
                     pdf_bytes = generate_pdf_report(results, email_text_saved, ai_report_text, white_label=_wl_flag, custom_logo_path=_wl_logo)
                     sev_lower = results["severity"].lower()
                     st.download_button(label="📥 Download PDF Report", data=pdf_bytes, file_name=f"phishguard_report_{sev_lower}.pdf", mime="application/pdf", use_container_width=True, type="primary")
                 with col_stix:
-                    import json as _json_stix
                     from src.stix_exporter import build_enterprise_stix_bundle
                     _att_result = st.session_state.get("att_scan_result"); _sender_anom = st.session_state.get("sender_anomaly"); _perplex_t = st.session_state.get("perplexity_result")
                     stix_bundle = build_enterprise_stix_bundle(email_text=email_text_saved, results=results, osint_data=osint_data, vt_results=vt_results, attachment_result=_att_result, sender_anomaly=_sender_anom, perplexity_result=_perplex_t)
-                    stix_json = _json_stix.dumps(stix_bundle, indent=2)
+                    stix_json = json.dumps(stix_bundle, indent=2)
                     st.download_button(label="📤 STIX 2.1 Export", data=stix_json, file_name=f"phishguard_stix_{sev_lower}.json", mime="application/json", use_container_width=True, type="secondary")
                 if "ai_report" in st.session_state:
                     st.markdown(section_title("AI Security Analysis"), unsafe_allow_html=True)
@@ -1497,10 +1510,6 @@ with tab1:
 # TAB 3 — HOME DASHBOARD
 # ═════════════════════════════════════════════════════════════════════════════
 with tab3:
-    st.markdown("## 🏠 Dashboard")
-    st.markdown(f"<p style='color:#64748b;margin-top:-8px'>Welcome back, <strong>{username}</strong>.</p>",
-                unsafe_allow_html=True)
-
     # ── Onboarding Checklist ───────────────────────────────────────────────
     _chk_account = st.session_state.get("checklist_account", False)
     _chk_first_scan = st.session_state.get("checklist_first_scan", False)
@@ -1517,7 +1526,7 @@ with tab3:
     ]
     completed_count = sum(1 for _, _, done, _, _ in checklist_items if done)
     if completed_count < 5:
-        checklist_html = '<div style="background:linear-gradient(145deg,#0a0f1a,#0f1a2a);border:1px solid #1e293b;border-radius:14px;padding:16px 20px;margin-bottom:16px">'
+        checklist_html = '<div style="background:linear-gradient(145deg,#0a0f1a,#0f1a2a);border:1px solid #1e293b;border-radius:14px;padding:16px 20px;margin-bottom:20px">'
         checklist_html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
         checklist_html += f'<span style="color:#f0f6ff;font-weight:700;font-size:14px">🚀 Getting Started</span>'
         checklist_html += f'<span style="color:#3b82f6;font-size:12px;font-weight:600">{completed_count}/5</span></div>'
@@ -1531,48 +1540,75 @@ with tab3:
         checklist_html += '</div>'
         st.markdown(checklist_html, unsafe_allow_html=True)
 
-    # ── Quick Actions ──────────────────────────────────────────────────────
-    st.markdown("#### ⚡ Quick Actions")
-    qa_cols = st.columns(4)
-    with qa_cols[0]:
-        if st.button("🔍 Analyze Email", use_container_width=True, key="dash_analyze"):
-            st.session_state["active_tab"] = 0
-            st.rerun()
-    with qa_cols[1]:
-        if st.button("📥 Scan Inbox", use_container_width=True, key="dash_inbox"):
-            st.session_state["active_tab"] = 1
-            st.rerun()
-    with qa_cols[2]:
-        if st.button("🤖 AI Copilot", use_container_width=True, key="dash_copilot"):
-            st.session_state["active_tab"] = 3
-            st.rerun()
-    with qa_cols[3]:
-        if st.button("📊 Full Analytics", use_container_width=True, key="dash_analytics"):
-            st.markdown("---")
+    # ── Hero: Security Score + Quick Actions ───────────────────────────────
+    history = _cached_history(500)
+    if history:
+        scores = [row[1] for row in history]
+        severities = [row[2] for row in history]
+        total_scans = len(history)
+        avg_score = round(sum(scores) / total_scans, 1) if total_scans else 0
+        critical_count = sum(1 for s in severities if s == "CRITICAL")
+        high_count = sum(1 for s in severities if s == "HIGH")
+        threats_neutralized = critical_count + high_count
+        safe_count = sum(1 for s in severities if s == "LOW")
+        safe_pct = round(safe_count / total_scans * 100, 1) if total_scans else 0
+        health = "🟢 Healthy" if avg_score < 30 else "🟡 Moderate" if avg_score < 60 else "🔴 At Risk"
+    else:
+        total_scans = 0; avg_score = 0; critical_count = 0; high_count = 0
+        threats_neutralized = 0; safe_count = 0; safe_pct = 100; health = "🟢 No Data"
 
-    st.divider()
+    hero_col1, hero_col2 = st.columns([1.3, 1])
+    with hero_col1:
+        score_color = "#22c55e" if avg_score < 30 else "#eab308" if avg_score < 60 else "#ef4444"
+        st.markdown(
+            f"<div style='background:linear-gradient(145deg,#0a0f1a,#0f1a2a);border:1px solid #1e293b;"
+            f"border-radius:16px;padding:20px 24px;margin-bottom:16px'>"
+            f"<div style='display:flex;align-items:center;gap:20px'>"
+            f"<div style='text-align:center'>"
+            f"<div style='font-size:2.2rem;font-weight:800;color:{score_color};line-height:1'>{avg_score}</div>"
+            f"<div style='font-size:0.7rem;color:#64748b;margin-top:2px'>/ 100</div>"
+            f"</div>"
+            f"<div style='flex:1'>"
+            f"<div style='display:flex;align-items:center;gap:8px'>"
+            f"<span style='font-size:1.1rem;font-weight:700;color:#f0f6ff'>Security Posture</span>"
+            f"<span style='background:{score_color}20;color:{score_color};font-size:0.7rem;"
+            f"padding:1px 8px;border-radius:100px;font-weight:600'>{health}</span>"
+            f"</div>"
+            f"<div style='color:#64748b;font-size:0.75rem;margin-top:2px'>"
+            f"{total_scans} scans · {threats_neutralized} threats · {safe_pct}% clean</div>"
+            f"</div></div></div>", unsafe_allow_html=True
+        )
+    with hero_col2:
+        qa_cols = st.columns(3)
+        with qa_cols[0]:
+            if st.button("🔍 Analyze", use_container_width=True, key="dash_analyze", help="Scan an email for phishing"):
+                st.session_state["active_tab"] = 0
+                st.rerun()
+        with qa_cols[1]:
+            if st.button("📥 Inbox", use_container_width=True, key="dash_inbox", help="Scan your email inbox"):
+                st.session_state["active_tab"] = 1
+                st.rerun()
+        with qa_cols[2]:
+            if st.button("🤖 Copilot", use_container_width=True, key="dash_copilot", help="Ask AI about threats"):
+                st.session_state["active_tab"] = 3
+                st.rerun()
 
-    # ── Usage Summary ──────────────────────────────────────────────────────
+    # ── Usage bar + Upgrade callout ────────────────────────────────────────
     q = check_quota(username, plan)
     plan_label = PLANS.get(plan, PLANS["trial"])["label"]
     limit_display = "∞" if plan == "enterprise" else str(q["limit"])
     bar_color = "#ef4444" if q["pct"] >= 90 else "#f59e0b" if q["pct"] >= 70 else "#3b82f6"
-
     st.markdown(
-        f"<div style='display:flex;justify-content:space-between;align-items:center;"
-        f"background:#111827;border:1px solid #1e293b;border-radius:12px;padding:14px 20px;margin-bottom:16px'>"
-        f"<div><span style='color:#f0f6ff;font-weight:700;font-size:14px'>📊 Usage</span>"
-        f"<br><span style='color:#64748b;font-size:12px'>{plan_label} plan · {q['used']} / {limit_display} scans used</span></div>"
-        f"<div style='text-align:right;min-width:160px'>"
-        f"<div class='pg-quota-bg'><div class='pg-quota-fill' style='width:{min(q['pct'],100)}%;background:{bar_color}'></div></div>"
-        f"<span style='color:{bar_color};font-size:12px;font-weight:600'>{q['pct']}% used</span>"
-        + (f"<br><a href='#' style='color:#f59e0b;font-size:12px;text-decoration:none'>⬆ Upgrade to increase →</a>" if q['pct'] >= 70 else "") +
-        f"</div></div>",
-        unsafe_allow_html=True
+        f"<div style='background:#111827;border:1px solid #1e293b;border-radius:12px;padding:12px 20px;margin-bottom:16px;display:flex;align-items:center;gap:16px'>"
+        f"<span style='color:#94a3b8;font-size:0.8rem;font-weight:600;min-width:50px'>{plan_label}</span>"
+        f"<div style='flex:1;height:6px;background:#1e293b;border-radius:100px;overflow:hidden'>"
+        f"<div style='width:{min(q['pct'],100)}%;height:100%;background:{bar_color};border-radius:100px'></div></div>"
+        f"<span style='color:{bar_color};font-size:0.75rem;font-weight:600;min-width:80px'>{q['used']} / {limit_display}</span>"
+        + (f"<a href='#' onclick='alert(\"switch to billing tab\")' style='color:#f59e0b;font-size:0.75rem;text-decoration:none;font-weight:600' onclick=''>⬆ Upgrade</a>" if q['pct'] >= 70 else "") +
+        f"</div>", unsafe_allow_html=True
     )
 
-    # ── Stats overview (from history) ──────────────────────────────────────
-    history = _cached_history(500)
+    # ── Main content: Stats or empty state ─────────────────────────────────
     if not history:
         st.markdown(empty_state(
             "📊",
@@ -1584,31 +1620,18 @@ with tab3:
             st.session_state["active_tab"] = 0
             st.rerun()
     else:
-        scores = [row[1] for row in history]
-        severities = [row[2] for row in history]
-        timestamps = [row[0] for row in history]
-        total_scans = len(history)
-        avg_score = round(sum(scores) / total_scans, 1) if total_scans else 0
-        critical_count = sum(1 for s in severities if s == "CRITICAL")
-        high_count = sum(1 for s in severities if s == "HIGH")
-        medium_count = sum(1 for s in severities if s == "MEDIUM")
-        threats_neutralized = critical_count + high_count
-        safe_count = sum(1 for s in severities if s == "LOW")
-        safe_pct = round(safe_count / total_scans * 100, 1) if total_scans else 0
-
-        # ── Metric cards ─────────────────────────────────────────────────
-        st.markdown("#### 📈 At a Glance")
+        # ── Metric cards row ─────────────────────────────────────────────
         col_m1, col_m2, col_m3, col_m4, col_m5 = st.columns(5)
-        col_m1.metric("Total Scans", total_scans)
-        col_m2.metric("Avg Risk Score", f"{avg_score}/100")
-        col_m3.metric("Threats Neutralized", threats_neutralized, delta_color="inverse")
-        col_m4.metric("Critical Threats", critical_count, delta_color="inverse")
-        col_m5.metric("Clean (Safe %)", f"{safe_pct}%")
+        col_m1.metric("📊 Total Scans", total_scans)
+        col_m2.metric("🎯 Avg Risk Score", f"{avg_score}/100")
+        col_m3.metric("🛡 Threats Found", threats_neutralized, delta_color="inverse")
+        col_m4.metric("🔴 Critical", critical_count, delta_color="inverse")
+        col_m5.metric("✅ Safe %", f"{safe_pct}%")
 
         st.divider()
 
-        # ── Recent Activity ─────────────────────────────────────────────
-        st.markdown("#### 🕐 Recent Activity")
+        # ── Recent Threats Timeline ──────────────────────────────────────
+        st.markdown("#### 🕐 Recent Threats")
         recent = history[:5]
         _sev_emoji = {"CRITICAL": "🔴", "HIGH": "🟠", "MEDIUM": "🟡", "LOW": "🟢"}
         for row in recent:
@@ -1630,27 +1653,8 @@ with tab3:
 
         st.divider()
 
-        # ── SOC Analytics Dashboard (delegated) ──────────────────────────
-        with st.expander("📊 Open Full SOC Analytics Dashboard", expanded=False):
-            from src.ui_analytics import render_analytics_tab
-            render_analytics_tab()
-
-        st.divider()
-
-        # ── Threat Log ──────────────────────────────────────────────────
-        with st.expander(f"📋 Threat Log — Recent {min(total_scans, 50)} Scans"):
-            for row in history[:50]:
-                ts, sc, sev, kw, su, preview = row
-                emoji = _sev_emoji.get(sev, "⚪")
-                st.markdown(
-                    f"{emoji} **{sev}** | Score {sc}/100 | {ts[:16]} | "
-                    f"KW: {kw} | URLs: {su} | `{preview[:50]}`"
-                )
-
-        # ── Weekly Digest ──────────────────────────────────────────────────
-        st.divider()
-        st.markdown("#### 📬 Weekly Digest (Last 7 Days)")
-        st.caption("Summary of the last 7 days.")
+        # ── Weekly Digest ──────────────────────────────────────────────
+        st.markdown("#### 📬 7-Day Summary")
         weekly_scores = [row[1] for row in history if (datetime.now() - datetime.strptime(row[0][:10], "%Y-%m-%d")).days < 7] if history else []
         if weekly_scores:
             w_total = len(weekly_scores)
@@ -1665,109 +1669,70 @@ with tab3:
         else:
             st.info("No scans in the last 7 days.")
 
-        # ── Export options ──────────────────────────────────────────────
-        st.divider()
-        st.markdown("#### 📥 Export Data")
-        col_ex1, col_ex2, col_ex3 = st.columns(3)
-        with col_ex1:
-            if history:
-                import csv, io
-                out = io.StringIO()
-                w = csv.writer(out)
-                w.writerow(["Timestamp", "Risk Score", "Severity",
-                             "Keyword Hits", "Suspicious URLs", "Preview"])
-                w.writerows(history)
-                st.download_button(
-                    "📥 Export CSV (All History)", out.getvalue(),
-                    "phishguard_analytics.csv", "text/csv",
-                    use_container_width=True,
-                )
-        with col_ex2:
-            if history:
-                import json
-                json_data = json.dumps(
-                    [{"timestamp": r[0], "risk_score": r[1], "severity": r[2],
-                      "keyword_hits": r[3], "suspicious_urls": r[4], "preview": r[5]}
-                     for r in history], indent=2
-                )
-                st.download_button(
-                    "📥 Export JSON (All History)", json_data,
-                    "phishguard_analytics.json", "application/json",
-                    use_container_width=True,
-                )
-        with col_ex3:
-            last_results = st.session_state.get("results")
-            if last_results:
-                import json
-                result_json = json.dumps(last_results, indent=2, default=str)
-                st.download_button(
-                    "📥 Export Last Analysis JSON", result_json,
-                    "phishguard_last_analysis.json", "application/json",
-                    use_container_width=True,
-                )
-
-    # ── Compliance Reports ────────────────────────────────────────────────
-    st.divider()
-    st.markdown("### 📋 Compliance Reports")
-    st.markdown(
-        "<p style='color:#64748b;font-size:13px'>Generate SOC 2, GDPR, or HIPAA "
-        "PDF reports summarizing your phishing defense posture.</p>",
-        unsafe_allow_html=True
-    )
-
-    col_cr1, col_cr2 = st.columns(2)
-    with col_cr1:
-        cr_standard = st.selectbox(
-            "Standard", ["soc2", "gdpr", "hipaa"],
-            format_func=lambda x: x.upper(),
-            key="cr_standard"
-        )
-    with col_cr2:
-        cr_days = st.slider("Report period (days)", 7, 365, 90, key="cr_days")
-
-    # ── White-Label Toggle ─────────────────────────────────────────────────
-    whitelabel_enabled = st.checkbox(
-        "🔏 Enable White-Label (Remove PhishGuard Branding)",
-        key="whitelabel_toggle",
-        help="Generate reports without PhishGuard watermarks for client delivery.",
-    )
-    if whitelabel_enabled:
-        is_consultant = st.session_state.get("plan") in ("enterprise", "business")
-        if not is_consultant:
-            st.markdown(
-                "<div style='background:linear-gradient(135deg,#1a0a1a,#2a0f2a);"
-                "border:2px solid #a855f7;border-radius:16px;padding:24px 20px;"
-                "text-align:center;margin:12px 0'>"
-                "<div style='font-size:2rem;margin-bottom:6px'>💼</div>"
-                "<div style='color:#f0f6ff;font-size:1rem;font-weight:700;"
-                "margin-bottom:4px'>Consultant License Required</div>"
-                "<div style='color:#94a3b8;font-size:0.85rem'>White-label reports "
-                "are exclusive to the <strong>Consultant License ($149/mo)</strong>. "
-                "Rebrand threat intelligence reports with your own company logo "
-                "for commercial client delivery.</div>"
-                "</div>", unsafe_allow_html=True
-            )
-
-    if st.button("📄 Generate Compliance Report", type="primary", use_container_width=True):
-        from src.compliance_reports import ComplianceReport
-        with st.spinner(f"Generating {cr_standard.upper()} report..."):
-            report = ComplianceReport(standard=cr_standard, org_name=username,
-                                      date_range_days=cr_days)
-            pdf_bytes = report.generate()
-        st.session_state["compliance_report"] = pdf_bytes
-        st.session_state["compliance_standard"] = cr_standard
-        st.rerun()
-
-    if st.session_state.get("compliance_report"):
-        label = "🕊 Download White-Label Report" if whitelabel_enabled else "📥 Download PDF Report"
-        st.success(f"{st.session_state['compliance_standard'].upper()} report ready!")
-        st.download_button(
-            label,
-            st.session_state["compliance_report"],
-            f"phishguard_{st.session_state['compliance_standard']}_{datetime.now().strftime('%Y%m%d')}.pdf",
-            "application/pdf",
-            use_container_width=True,
-        )
+        # ── Advanced section (collapsible) ──────────────────────────────
+        with st.expander("📋 Advanced Tools & Data", expanded=False):
+            sub_tabs = st.tabs(["📊 SOC Analytics", "📋 Threat Log", "📥 Export Data", "📄 Compliance"])
+            with sub_tabs[0]:
+                from src.ui_analytics import render_analytics_tab
+                render_analytics_tab()
+            with sub_tabs[1]:
+                st.markdown(f"**Threat Log — Recent {min(total_scans, 50)} Scans**")
+                for row in history[:50]:
+                    ts, sc, sev, kw, su, preview = row
+                    emoji = _sev_emoji.get(sev, "⚪")
+                    st.markdown(f"{emoji} **{sev}** | Score {sc}/100 | {ts[:16]} | KW: {kw} | URLs: {su} | `{preview[:50]}`")
+            with sub_tabs[2]:
+                col_ex1, col_ex2, col_ex3 = st.columns(3)
+                with col_ex1:
+                    import csv, io
+                    out = io.StringIO()
+                    w = csv.writer(out)
+                    w.writerow(["Timestamp", "Risk Score", "Severity", "Keyword Hits", "Suspicious URLs", "Preview"])
+                    w.writerows(history)
+                    st.download_button("📥 CSV", out.getvalue(), "phishguard_analytics.csv", "text/csv", use_container_width=True)
+                with col_ex2:
+                    import json
+                    json_data = json.dumps(
+                        [{"timestamp": r[0], "risk_score": r[1], "severity": r[2], "keyword_hits": r[3], "suspicious_urls": r[4], "preview": r[5]} for r in history],
+                        indent=2
+                    )
+                    st.download_button("📥 JSON", json_data, "phishguard_analytics.json", "application/json", use_container_width=True)
+                with col_ex3:
+                    last_results = st.session_state.get("results")
+                    if last_results:
+                        result_json = json.dumps(last_results, indent=2, default=str)
+                        st.download_button("📥 Last Analysis", result_json, "phishguard_last_analysis.json", "application/json", use_container_width=True)
+            with sub_tabs[3]:
+                st.markdown("**Compliance Reports**")
+                col_cr1, col_cr2 = st.columns(2)
+                with col_cr1:
+                    cr_standard = st.selectbox("Standard", ["soc2", "gdpr", "hipaa"], format_func=lambda x: x.upper(), key="cr_standard")
+                with col_cr2:
+                    cr_days = st.slider("Period (days)", 7, 365, 90, key="cr_days")
+                whitelabel_enabled = st.checkbox("🔏 White-Label Branding", key="whitelabel_toggle", help="Remove PhishGuard watermarks for client delivery.")
+                if whitelabel_enabled:
+                    _has_wl = "white_label" in PLANS.get(plan, {}).get("features", [])
+                    if not _has_wl:
+                        st.markdown(
+                            f"<div style='background:linear-gradient(135deg,#1a0a1a,#2a0f2a);border:2px solid #a855f7;"
+                            f"border-radius:16px;padding:24px 20px;text-align:center;margin:12px 0'>"
+                            f"<div style='font-size:2rem;margin-bottom:6px'>💼</div>"
+                            f"<div style='color:#f0f6ff;font-size:1rem;font-weight:700;margin-bottom:4px'>Consultant License Required</div>"
+                            f"<div style='color:#94a3b8;font-size:0.85rem'>White-label reports are exclusive to the <strong>Consultant License</strong>. Rebrand reports with your own company logo for commercial client delivery.</div>"
+                            f"</div>", unsafe_allow_html=True
+                        )
+                if st.button("📄 Generate Report", type="primary", use_container_width=True):
+                    from src.compliance_reports import ComplianceReport
+                    with st.spinner(f"Generating {cr_standard.upper()} report..."):
+                        report = ComplianceReport(standard=cr_standard, org_name=username, date_range_days=cr_days)
+                        pdf_bytes = report.generate()
+                    st.session_state["compliance_report"] = pdf_bytes
+                    st.session_state["compliance_standard"] = cr_standard
+                    st.rerun()
+                if st.session_state.get("compliance_report"):
+                    label = "🕊 Download White-Label" if whitelabel_enabled else "📥 Download PDF"
+                    st.success(f"{st.session_state['compliance_standard'].upper()} report ready!")
+                    st.download_button(label, st.session_state["compliance_report"], f"phishguard_{st.session_state['compliance_standard']}_{datetime.now().strftime('%Y%m%d')}.pdf", "application/pdf", use_container_width=True)
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -1904,82 +1869,13 @@ if is_admin:
             unsafe_allow_html=True
         )
         if st.button("🔄 Refresh", key="refresh_admin"):
-            _cached_stats.clear()
             _cached_threats.clear()
-            _cached_daily_counts.clear()
+            st.cache_data.clear()
             st.rerun()
+
+        with st.expander("📊 Founder Analytics", expanded=True):
+            render_founder_analytics()
         st.divider()
-
-        stats = _cached_stats()
-        c1, c2, c3, c4 = st.columns(4)
-        c1.markdown(
-            "<div class='stat-card'>"
-            "<div style='font-size:2rem;font-weight:900;color:#60a5fa'>" +
-            str(stats["total_analyses"]) +
-            "</div><div style='color:#64748b;font-size:0.85rem'>Total Analyses</div></div>",
-            unsafe_allow_html=True
-        )
-        c2.markdown(
-            "<div class='stat-card'>"
-            "<div style='font-size:2rem;font-weight:900;color:#22c55e'>" +
-            str(stats["today_analyses"]) +
-            "</div><div style='color:#64748b;font-size:0.85rem'>Today</div></div>",
-            unsafe_allow_html=True
-        )
-        c3.markdown(
-            "<div class='stat-card'>"
-            "<div style='font-size:2rem;font-weight:900;color:#ff4444'>" +
-            str(stats["critical_count"]) +
-            "</div><div style='color:#64748b;font-size:0.85rem'>Critical Threats</div></div>",
-            unsafe_allow_html=True
-        )
-        c4.markdown(
-            "<div class='stat-card'>"
-            "<div style='font-size:2rem;font-weight:900;color:#ffaa00'>" +
-            str(stats["avg_risk_score"]) +
-            "</div><div style='color:#64748b;font-size:0.85rem'>Avg Risk Score</div></div>",
-            unsafe_allow_html=True
-        )
-
-        st.markdown("<br>", unsafe_allow_html=True)
-
-        col_ch1, col_ch2 = st.columns(2)
-        with col_ch1:
-            daily  = _cached_daily_counts(14)
-            dates  = [d["date"] for d in daily]
-            counts = [d["count"] for d in daily]
-            fig3 = go.Figure(go.Bar(
-                x=dates, y=counts, marker_color="#2563eb",
-                text=counts, textposition="outside"
-            ))
-            fig3.update_layout(
-                title="Analyses per Day (Last 14 Days)",
-                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                font_color="#e2e8f0", height=300, margin=dict(t=40, b=20, l=20, r=20)
-            )
-            fig3.update_xaxes(showgrid=False, tickangle=45)
-            fig3.update_yaxes(gridcolor="#1e3a5f")
-            st.plotly_chart(fig3, use_container_width=True)
-
-        with col_ch2:
-            sev_data = stats["severity_counts"]
-            if sev_data:
-                sev_colors = {
-                    "CRITICAL": "#ff4444", "HIGH": "#ff8800",
-                    "MEDIUM": "#ffaa00",   "LOW":  "#44aa44"
-                }
-                fig4 = go.Figure(go.Pie(
-                    labels=list(sev_data.keys()),
-                    values=list(sev_data.values()),
-                    marker_colors=[sev_colors.get(k, "#60a5fa") for k in sev_data],
-                    hole=0.4
-                ))
-                fig4.update_layout(
-                    title="Severity Distribution",
-                    paper_bgcolor="rgba(0,0,0,0)", font_color="#e2e8f0",
-                    height=300, margin=dict(t=40, b=20, l=20, r=20)
-                )
-                st.plotly_chart(fig4, use_container_width=True)
 
         # ── Risk Trend Chart (last 100 analyses) ────────────────────────────
         st.markdown("### 📈 Risk Score Trend")
@@ -2611,29 +2507,35 @@ with billing_tab:
         else:
             status_tag = s.capitalize()
 
+    bar_color = "#3b82f6" if q["pct"] < 70 else "#f59e0b" if q["pct"] < 90 else "#ef4444"
     st.markdown(
-        f"<div style='background:#111827;border:1px solid #1e3a5f;"
-        f"border-radius:16px;padding:28px 32px;margin-bottom:24px'>"
-        f"<div style='display:flex;justify-content:space-between;align-items:center'>"
+        f"<div style='background:linear-gradient(135deg,#0f172a,#1a1f2e);"
+        f"border:1px solid #1e3a5f;border-radius:16px;padding:28px 32px;margin-bottom:20px'>"
+        f"<div style='display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px'>"
         f"<div>"
-        f"<div style='color:#64748b;font-size:0.8rem;text-transform:uppercase;"
-        f"letter-spacing:0.08em;margin-bottom:4px'>Current Plan</div>"
-        f"<div style='color:#f0f6ff;font-size:1.8rem;font-weight:800'>"
+        f"<div style='color:#64748b;font-size:0.7rem;text-transform:uppercase;"
+        f"letter-spacing:0.1em;margin-bottom:2px'>Current Plan</div>"
+        f"<div style='color:#f0f6ff;font-size:2rem;font-weight:800'>"
         + plan_info["label"] + f"</div>"
-        f"<div style='color:#475569;font-size:0.85rem;margin-top:4px'>"
+        f"<div style='color:#94a3b8;font-size:1rem;margin-top:2px'>"
         + plan_info["price"] + f"</div>"
         f"</div>"
-        f"<div style='text-align:right'>"
-        + (f"<div style='color:{status_color};font-size:0.9rem;font-weight:600'>{status_tag}</div>"
+        f"<div style='text-align:right;min-width:180px'>"
+        + (f"<div style='color:{status_color};font-size:0.85rem;font-weight:600;margin-bottom:6px'>{status_tag}</div>"
            if status_tag else "")
-        + f"<div style='color:#94a3b8;font-size:0.9rem;margin-top:4px'>"
-        + str(q["usage"]) + " / " + str(q["limit"]) + " analyses used</div>"
-        f"<div style='background:#1e3a5f;border-radius:4px;height:6px;width:120px;margin:6px 0 0 auto'>"
-        f"<div style='background:#60a5fa;border-radius:4px;height:6px;width:"
-        + str(q["pct"]) + f"%'></div></div></div></div>"
-        + (f"<div style='color:#64748b;font-size:0.8rem;margin-top:12px;border-top:1px solid #1e3a5f;padding-top:12px'>"
-           f"Subscription ID: <code>{sub['subscription_id']}</code>"
-           + (f" | Next billing: <strong>{sub.get('next_billed_at', 'N/A')}</strong>" if sub.get('next_billed_at') else "")
+        + f"<div style='color:#94a3b8;font-size:0.85rem;margin-bottom:4px'>"
+        + str(q["usage"]) + " / " + str(q["limit"]) + " analyses this month</div>"
+        f"<div style='background:#1e3a5f;border-radius:4px;height:8px;width:160px;margin:0 0 4px auto'>"
+        f"<div style='background:{bar_color};border-radius:4px;height:8px;width:"
+        + str(min(q["pct"], 100)) + f"%'></div></div>"
+        + (f"<div style='color:{bar_color};font-size:0.75rem;font-weight:600'>{q['pct']}% used"
+           + (f" · <span style='color:#f59e0b'>⬆ <a href='#upgrade-options' style='color:#f59e0b;text-decoration:none'>Upgrade</a></span>"
+              if q["pct"] >= 70 else "")
+           + f"</div>" if plan != "enterprise" else f"<div style='color:#22c55e;font-size:0.75rem'>Unlimited</div>")
+        + f"</div></div>"
+        + (f"<div style='color:#64748b;font-size:0.75rem;margin-top:12px;border-top:1px solid #1e293b;padding-top:10px'>"
+           f"Subscription ID: <code style='color:#94a3b8'>{sub['subscription_id']}</code>"
+           + (f" · Next billing: <strong>{sub.get('next_billed_at', 'N/A')}</strong>" if sub.get('next_billed_at') else "")
            + f"</div>" if sub and sub.get('subscription_id') else "")
         + f"</div>",
         unsafe_allow_html=True
@@ -2747,6 +2649,7 @@ with billing_tab:
     st.caption(f"Rate: ${_rate:.2f}/mailbox/mo × {_mb} mailboxes = ${_monthly:,.2f}/mo")
 
     # ── API Prepaid Credits Overage ────────────────────────────────────────
+    quota_status = check_scan_quota(username)
     st.markdown("<div class='section-title'>⛽ API Prepaid Credits</div>",
                 unsafe_allow_html=True)
     col_cr1, col_cr2, col_cr3 = st.columns(3)
@@ -2767,28 +2670,55 @@ with billing_tab:
     if plan == "enterprise":
         st.success("🌟 You are on the **Enterprise** plan — unlimited analyses, all features enabled.")
     else:
+        # ── Smart upgrade suggestion ──────────────────────────────────────────
+        if q["pct"] >= 70:
+            tier_order = ["starter", "business", "consultant", "enterprise"]
+            plan_keys = [p for p in tier_order if PLANS[p]["analyses_per_month"] > PLANS[plan]["analyses_per_month"]]
+            if plan_keys:
+                suggested = plan_keys[0]
+                st.info(
+                    f"💡 **You've used {q['pct']}% of your {plan_info['label']} quota.** "
+                    f"Consider upgrading to **{PLANS[suggested]['label']}** "
+                    f"({PLANS[suggested]['analyses_per_month']} analyses/mo) "
+                    f"for only **{PLANS[suggested]['price']}**."
+                )
+
+        st.markdown("<div id='upgrade-options'></div>", unsafe_allow_html=True)
+
+        # ── Plan comparison table ─────────────────────────────────────────────
         upgrade_options = [
-            ("starter", "Starter", "$29/mo", ["100 analyses/mo", "VirusTotal + OSINT", "AI security reports", "Email alerts"]),
-            ("business", "Business", "$99/mo", ["500 analyses/mo", "Priority support", "Team access", "All features"]),
-            ("consultant", "Consultant", "$149/mo", ["2000 analyses/mo", "White-label", "SOC dashboard", "All features"]),
-            ("enterprise", "Enterprise", "Custom", ["Unlimited analyses", "SLA guarantee", "White-label", "Dedicated support"]),
+            ("starter", "Starter", "$29/mo", "$290/yr",
+             PLANS["starter"]["features"]),
+            ("business", "Business", "$99/mo", "$990/yr",
+             PLANS["business"]["features"]),
+            ("consultant", "Consultant", "$149/mo", "$1,490/yr",
+             PLANS["consultant"]["features"]),
+            ("enterprise", "Enterprise", "Custom", "Custom",
+             PLANS["enterprise"]["features"]),
         ]
+
+        annual_pricing = st.checkbox("Show annual pricing (save ~17%)", key="annual_toggle",
+                                     help="Annual plans billed yearly at ~10 months' cost")
+
         upgrade_cols = st.columns(len(upgrade_options))
-        for i, (pkey, plabel, pprice, pfeatures) in enumerate(upgrade_options):
+        for i, (pkey, plabel, pprice, pannual, pfeatures) in enumerate(upgrade_options):
             with upgrade_cols[i]:
                 featured = pkey == "business"
-                bg = "linear-gradient(160deg, #040f24, #071530)" if featured else "#0f172a"
                 already_on = plan == pkey
+                border_style = "2px solid #3b82f6" if featured else "1px solid rgba(255,255,255,0.08)"
+                bg = "linear-gradient(160deg, #040f24, #071530)" if featured else "#0f172a"
+                display_price = pannual if annual_pricing else pprice
+                price_suffix = "/yr" if annual_pricing else "/mo"
                 st.markdown(
-                    "<div style='background:" + bg + ";border:" + border + ";"
+                    "<div style='background:" + bg + ";border:" + border_style + ";"
                     "border-radius:16px;padding:24px 16px;text-align:center;"
-                    "height:280px;position:relative'>"
+                    "height:300px;position:relative'>"
                     + ("<div style='position:absolute;top:-10px;left:50%;transform:translateX(-50%);"
                        "background:#3b82f6;color:#020818;font-size:9px;font-weight:700;"
-                       "padding:3px 14px;border-radius:100px'>POPULAR</div>" if featured else "")
+                       "padding:3px 14px;border-radius:100px'>BEST VALUE</div>" if featured else "")
                     + "<div style='color:#94a3b8;font-weight:600;margin-bottom:6px'>" + plabel + "</div>"
-                    + "<div style='color:#f0f6ff;font-size:2rem;font-weight:800;margin-bottom:2px'>" + pprice + "</div>"
-                    + "<div style='color:#475569;font-size:0.7rem;margin-bottom:16px'>/ month</div>"
+                    + "<div style='color:#f0f6ff;font-size:1.8rem;font-weight:800;margin-bottom:2px'>" + display_price + "</div>"
+                    + "<div style='color:#475569;font-size:0.65rem;margin-bottom:14px'>" + price_suffix + "</div>"
                     + "".join("<div style='color:#94a3b8;font-size:0.75rem;padding:3px 0'>→ " + f + "</div>" for f in pfeatures)
                     + "</div>",
                     unsafe_allow_html=True
@@ -2796,7 +2726,9 @@ with billing_tab:
                 if already_on:
                     st.success("✅ Current Plan")
                 elif pkey == "enterprise":
-                    st.info("Contact sales for Enterprise")
+                    if st.button("📞 Contact Sales", key="bill_contact_" + pkey, use_container_width=True):
+                        st.session_state["show_upgrade"] = True
+                        st.rerun()
                 else:
                     if st.button("⬆ Upgrade", key="bill_up_" + pkey, use_container_width=True):
                         st.session_state["show_upgrade"] = True

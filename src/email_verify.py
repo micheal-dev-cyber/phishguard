@@ -84,32 +84,16 @@ def is_email_verified(username: str) -> bool:
 
 
 def send_verification_email(email: str, verify_url: str) -> dict:
-    from src.env import ENV
-    smtp_host = ENV.SMTP_HOST
-    smtp_port = ENV.SMTP_PORT
-    smtp_user = ENV.SMTP_USER
-    smtp_pass = ENV.SMTP_PASS
-    smtp_from = ENV.SMTP_FROM or smtp_user
+    from src.email_templates import render_html, send_html_email
+    html = render_html("verify", verify_url=verify_url)
+    if not html:
+        return {"success": False, "error": "Template not found"}
+    return send_html_email(email, "PhishGuard — Verify Your Email", html)
 
-    if not smtp_user or not smtp_pass:
-        return {"success": False, "error": "SMTP not configured"}
 
-    msg = MIMEText(
-        f"Welcome to PhishGuard!\n\nPlease verify your email by clicking the link below:\n\n{verify_url}\n\n"
-        f"This link expires in 24 hours."
-    )
-    msg["Subject"] = "PhishGuard — Verify Your Email"
-    msg["From"] = smtp_from
-    msg["To"] = email
-
-    try:
-        server = smtplib.SMTP(smtp_host, smtp_port, timeout=10)
-        server.starttls()
-        server.login(smtp_user, smtp_pass)
-        server.send_message(msg)
-        server.quit()
-        logger.info("Verification email sent to %s", email)
-        return {"success": True}
-    except Exception as e:
-        logger.error("Failed to send verification email: %s", e)
-        return {"success": False, "error": str(e)}
+def send_welcome_email(email: str, username: str, quota: int, app_url: str) -> dict:
+    from src.email_templates import render_html, send_html_email
+    html = render_html("welcome", username=username, quota=quota, app_url=app_url)
+    if not html:
+        return {"success": False, "error": "Template not found"}
+    return send_html_email(email, "Welcome to PhishGuard 🛡", html)

@@ -8,15 +8,7 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 logger = logging.getLogger("onboarding")
-
-
-PLAN_PRICING = {
-    "trial":      {"price": 0,    "label": "Free Trial",     "scans": 10},
-    "starter":    {"price": 29,   "label": "Starter",        "scans": 100},
-    "business":   {"price": 99,   "label": "Business",       "scans": 500},
-    "consultant": {"price": 149,  "label": "Consultant",     "scans": 2000},
-    "enterprise": {"price": 0,    "label": "Enterprise",     "scans": 99999, "custom": True},
-}
+from src.tenants import PLANS
 
 
 def create_checkout_session(plan: str, username: str, email: str, provider: str = "stripe") -> dict:
@@ -33,7 +25,7 @@ def _stripe_checkout(plan: str, username: str, email: str) -> dict:
     if not secret_key:
         return {"error": "Stripe not configured"}
 
-    pricing = PLAN_PRICING.get(plan, PLAN_PRICING["trial"])
+    pricing = PLANS.get(plan, PLANS["trial"])
     if pricing.get("custom"):
         return {"error": "Enterprise plan requires contact sales"}
 
@@ -41,7 +33,7 @@ def _stripe_checkout(plan: str, username: str, email: str) -> dict:
         "mode": "subscription",
         "line_items[0][price_data][currency]": "usd",
         "line_items[0][price_data][product_data][name]": f"PhishGuard {pricing['label']}",
-        "line_items[0][price_data][unit_amount]": str(pricing["price"] * 100),
+        "line_items[0][price_data][unit_amount]": str(pricing["price_monthly"] * 100),
         "line_items[0][price_data][recurring][interval]": "month",
         "line_items[0][quantity]": "1",
         "customer_email": email,
@@ -68,7 +60,7 @@ def _stripe_checkout(plan: str, username: str, email: str) -> dict:
 
 
 def _paddle_checkout(plan: str, username: str, email: str) -> dict:
-    pricing = PLAN_PRICING.get(plan, PLAN_PRICING["trial"])
+    pricing = PLANS.get(plan, PLANS["trial"])
     if pricing.get("custom"):
         return {"error": "Enterprise plan requires contact sales"}
     try:

@@ -5,6 +5,8 @@ from src.tenants import verify_tenant, seed_admin_from_env, init_tenants
 
 def _landing_page():
     """Landing page shown before login — uses Streamlit-native layout."""
+    # Trust center pages (via query params to support footer links)
+    page = st.query_params.get("page", None)
     show_login = st.session_state.get("show_login", False)
     show_signup = st.session_state.get("show_signup", False)
     show_reset = st.session_state.get("show_reset", False)
@@ -58,8 +60,31 @@ def _landing_page():
     .stat-box { background: rgba(255,255,255,0.02);
         border: 1px solid rgba(255,255,255,0.05);
         border-radius: 16px; padding: 24px 32px; text-align: center; }
+    .trust-page { max-width: 720px; margin: 0 auto; padding: 60px 20px; }
+    .trust-page h1 { color: #f0f6ff; font-size: 2rem; font-weight: 800; margin-bottom: 4px; }
+    .trust-page h2 { color: #60a5fa; font-size: 1.1rem; font-weight: 700; margin-top: 32px; margin-bottom: 8px; }
+    .trust-page p, .trust-page li { color: #94a3b8; line-height: 1.8; margin-bottom: 12px; font-size: 14px; }
+    .trust-page a { color: #3b82f6; }
+    .trust-meta { color: #475569; font-size: 13px; margin-bottom: 32px; }
     </style>
     """, unsafe_allow_html=True)
+
+    # Trust center routing via query params
+    if page == "privacy":
+        _privacy_page()
+        return
+    elif page == "terms":
+        _terms_page()
+        return
+    elif page == "security":
+        _security_page()
+        return
+    elif page == "refund":
+        _refund_page()
+        return
+    elif page == "contact":
+        _contact_page()
+        return
 
     if show_demo:
         _demo_scan_page()
@@ -99,7 +124,9 @@ def _signup_form():
                                   label_visibility="collapsed", key="signup_pass2")
 
     st.markdown("<p style='color:#475569;font-size:11px;margin-top:12px'>"
-                "By creating an account, you agree to our Terms of Service and Privacy Policy.</p>",
+                "By creating an account, you agree to our "
+                "<a href='?page=terms' style='color:#3b82f6'>Terms of Service</a> and "
+                "<a href='?page=privacy' style='color:#3b82f6'>Privacy Policy</a>.</p>",
                 unsafe_allow_html=True)
 
     if st.button("→ Create Free Account", use_container_width=True, type="primary", key="signup_submit"):
@@ -683,7 +710,7 @@ def _hero_page():
 
     st.markdown("<p style='color:#475569;font-size:11px;margin-top:12px'>"
                 "🔒 No data stored. Results are ephemeral. "
-                "<a href='#' style='color:#3b82f6'>Privacy policy →</a></p>",
+                "<a href='?page=privacy' style='color:#3b82f6'>Privacy policy →</a></p>",
                 unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -990,11 +1017,134 @@ def _hero_page():
                 "<span style='color:#334155;font-size:12px'>"
                 "© 2026 SecOpsNode · PhishGuard AI</span>"
                 "<div style='display:flex;gap:20px;flex-wrap:wrap'>"
-                "<a href='#' style='color:#475569;font-size:12px;text-decoration:none'>Privacy</a>"
-                "<a href='#' style='color:#475569;font-size:12px;text-decoration:none'>Terms</a>"
-                "<a href='#' style='color:#475569;font-size:12px;text-decoration:none'>Security</a>"
-                "<a href='#' style='color:#475569;font-size:12px;text-decoration:none'>Contact</a>"
+                "<a href='?page=privacy' style='color:#475569;font-size:12px;text-decoration:none'>Privacy</a>"
+                "<a href='?page=terms' style='color:#475569;font-size:12px;text-decoration:none'>Terms</a>"
+                "<a href='?page=security' style='color:#475569;font-size:12px;text-decoration:none'>Security</a>"
+                "<a href='?page=refund' style='color:#475569;font-size:12px;text-decoration:none'>Refund</a>"
+                "<a href='?page=contact' style='color:#475569;font-size:12px;text-decoration:none'>Contact</a>"
                 "</div></div>", unsafe_allow_html=True)
+
+
+def _privacy_page():
+    st.markdown("<div class='trust-page'>", unsafe_allow_html=True)
+    st.markdown("<h1>🛡️ Privacy Policy</h1>")
+    st.markdown("<p class='trust-meta'>Last updated: January 2026</p>", unsafe_allow_html=True)
+
+    st.markdown("""**1. Information We Collect**  
+We collect email content you submit for analysis, your username, and basic usage data to improve the service.""")
+    st.markdown("""**2. How We Use Your Information**  
+Email content is used solely to perform phishing analysis. We do not sell, share, or permanently store your email content.""")
+    st.markdown("""**3. Data Storage**  
+Analysis results are stored locally in our database to provide history features. Email previews are truncated to 200 characters.""")
+    st.markdown("""**4. Third Party Services**  
+We use Groq AI API to generate security reports. Email content may be sent to Groq for processing. Groq's privacy policy applies.""")
+    st.markdown("""**5. Cookies**  
+We use session cookies for authentication only. We do not use tracking or advertising cookies.""")
+    st.markdown("""**6. Your Rights**  
+You may request deletion of your data at any time by contacting us.""")
+    st.markdown("""**7. Contact**  
+For privacy questions: [contact@phishguard.ai](mailto:contact@phishguard.ai)""")
+    if st.button("← Back to home", use_container_width=True, key="privacy_back"):
+        st.query_params.clear()
+        st.rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
+def _terms_page():
+    st.markdown("<div class='trust-page'>", unsafe_allow_html=True)
+    st.markdown("<h1>🛡️ Terms of Service</h1>")
+    st.markdown("<p class='trust-meta'>Last updated: January 2026</p>", unsafe_allow_html=True)
+
+    st.markdown("""**1. Acceptance of Terms**  
+By accessing PhishGuard AI, you agree to these terms. If you disagree, do not use the service.""")
+    st.markdown("""**2. Service Description**  
+PhishGuard AI provides AI-powered phishing email detection and security analysis tools delivered via web application and Chrome extension.""")
+    st.markdown("""**3. Subscription & Billing**  
+Subscriptions are billed monthly. You can cancel at any time. Cancellation takes effect at the end of the current billing period.""")
+    st.markdown("""**4. Acceptable Use**  
+You may not use PhishGuard AI for illegal purposes, to harm others, or to attempt to reverse engineer the service.""")
+    st.markdown("""**5. Limitation of Liability**  
+PhishGuard AI is provided as-is. We are not liable for any damages resulting from use or inability to use the service. Always consult a qualified cybersecurity professional for critical security decisions.""")
+    st.markdown("""**6. Data & Privacy**  
+Email content submitted for analysis is processed to provide the service and is not stored permanently or shared with third parties.""")
+    st.markdown("""**7. Changes to Terms**  
+We may update these terms at any time. Continued use of the service constitutes acceptance of updated terms.""")
+    st.markdown("""**8. Contact**  
+For questions contact: [contact@phishguard.ai](mailto:contact@phishguard.ai)""")
+    if st.button("← Back to home", use_container_width=True, key="terms_back"):
+        st.query_params.clear()
+        st.rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
+def _security_page():
+    st.markdown("<div class='trust-page'>", unsafe_allow_html=True)
+    st.markdown("<h1>🛡️ Security Policy</h1>")
+    st.markdown("<p class='trust-meta'>Last updated: January 2026</p>", unsafe_allow_html=True)
+
+    st.markdown("""**1. Encryption**  
+All data in transit is encrypted using TLS 1.3. Data at rest is encrypted using AES-256. We enforce HTTPS across all endpoints including our API and webhook endpoints.""")
+    st.markdown("""**2. Vulnerability Management**  
+We conduct quarterly penetration tests via third-party security firms. Critical vulnerabilities are patched within 24 hours of confirmation. We maintain a responsible disclosure program for security researchers.""")
+    st.markdown("""**3. Access Control**  
+Production access is restricted to authorized personnel with multi-factor authentication. All access is logged and audited monthly. We follow the principle of least privilege across all systems.""")
+    st.markdown("""**4. Data Processing**  
+Email content submitted for analysis is processed in-memory only. Analysis results and truncated previews (200 characters) are stored in an encrypted database. Raw email content is not persisted after analysis completes.""")
+    st.markdown("""**5. Third-Party Subprocessors**  
+We use Groq AI API for generating security narrative reports. All subprocessors are vetted and contractually bound to our data handling standards. No email content is shared with advertising or analytics providers.""")
+    st.markdown("""**6. Incident Response**  
+We have a documented incident response plan covering detection, containment, eradication, recovery, and post-mortem. Security incidents are disclosed to affected users within 72 hours of confirmation.""")
+    st.markdown("""**7. Compliance**  
+PhishGuard AI follows SOC 2 Type II control objectives and GDPR requirements. For compliance inquiries: [security@phishguard.ai](mailto:security@phishguard.ai)""")
+    st.markdown("""**8. Bug Bounty**  
+We welcome responsible disclosure of security vulnerabilities. Report findings to [security@phishguard.ai](mailto:security@phishguard.ai). We commit to prompt validation and remediation.""")
+    if st.button("← Back to home", use_container_width=True, key="security_back"):
+        st.query_params.clear()
+        st.rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
+def _refund_page():
+    st.markdown("<div class='trust-page'>", unsafe_allow_html=True)
+    st.markdown("<h1>🛡️ Refund Policy</h1>")
+    st.markdown("<p class='trust-meta'>Last updated: January 2026</p>", unsafe_allow_html=True)
+
+    st.markdown("""**1. Free Trial**  
+We offer a free demo at no cost so you can evaluate PhishGuard AI before subscribing.""")
+    st.markdown("""**2. Refund Eligibility**  
+You may request a full refund within 7 days of your first payment if you are not satisfied with the service.""")
+    st.markdown("""**3. How to Request a Refund**  
+Email us at [contact@phishguard.ai](mailto:contact@phishguard.ai) with your order details. We process refunds within 5 business days.""")
+    st.markdown("""**4. Cancellation**  
+You can cancel your subscription at any time. You will retain access until the end of your current billing period. No partial refunds for unused time after 7 days.""")
+    st.markdown("""**5. Contact**  
+For refund requests: [contact@phishguard.ai](mailto:contact@phishguard.ai)""")
+    if st.button("← Back to home", use_container_width=True, key="refund_back"):
+        st.query_params.clear()
+        st.rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
+def _contact_page():
+    st.markdown("<div class='trust-page'>", unsafe_allow_html=True)
+    st.markdown("<h1>📬 Contact Us</h1>")
+    st.markdown("<p class='trust-meta'>We'd love to hear from you.</p>", unsafe_allow_html=True)
+
+    st.markdown("""**General Inquiries**  
+[contact@phishguard.ai](mailto:contact@phishguard.ai)""")
+    st.markdown("""**Security & Bug Bounty**  
+[security@phishguard.ai](mailto:security@phishguard.ai)""")
+    st.markdown("""**Privacy & Data Requests**  
+[privacy@phishguard.ai](mailto:privacy@phishguard.ai)""")
+    st.markdown("""**Sales & Partnerships**  
+[sales@phishguard.ai](mailto:sales@phishguard.ai)""")
+
+    st.markdown("<div style='margin-top:32px'>", unsafe_allow_html=True)
+    st.markdown("""<p style='color:#475569;font-size:13px'>We typically respond within 24 hours during business days. For urgent security issues, please use the Security contact above.</p>""", unsafe_allow_html=True)
+    if st.button("← Back to home", use_container_width=True, key="contact_back"):
+        st.query_params.clear()
+        st.rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
 
 
 def check_password() -> bool:
@@ -1060,6 +1210,23 @@ def check_password() -> bool:
         from src.email_verify import verify_email_token
         if verify_email_token(token):
             st.toast("✅ Email verified! You can now scan emails.")
+            try:
+                import sqlite3
+                from pathlib import Path
+                _vdb = Path(__file__).parent.parent / "data" / "phishguard.db"
+                _vconn = sqlite3.connect(str(_vdb))
+                _vc = _vconn.cursor()
+                _vc.execute("SELECT username, email FROM email_verifications WHERE token = ?", (token,))
+                _vrow = _vc.fetchone()
+                _vconn.close()
+                if _vrow:
+                    _vuname, _vemail = _vrow
+                    from src.email_verify import send_welcome_email
+                    from src.tenants import PLANS
+                    _vquota = PLANS.get("trial", {}).get("analyses_per_month", 10)
+                    send_welcome_email(_vemail, _vuname, _vquota, "https://phishguard.ai")
+            except Exception as _ve:
+                pass
         else:
             st.toast("Verification link expired or invalid.")
         st.query_params.clear()

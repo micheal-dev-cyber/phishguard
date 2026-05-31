@@ -4,32 +4,29 @@ ONBOARDING_STEPS = [
     {
         "title": "Welcome to PhishGuard AI",
         "icon": "🛡",
-        "description": "You just took the first step toward protecting your inbox from phishing attacks. Let's get you set up in under 60 seconds.",
+        "description": "You just took the first step toward protecting your inbox from phishing attacks. Let's get you set up — you'll run your first scan in under 2 minutes.",
+        "action": ("🚀 Jump to Scan", lambda: st.session_state.update({"show_onboarding": False, "active_tab": 0})),
     },
     {
-        "title": "What PhishGuard Does",
+        "title": "How It Works",
         "icon": "🔍",
-        "description": "PhishGuard analyzes emails using 6 detection engines: heuristics, URL matching, VirusTotal, OSINT, header forensics, and social engineering detection. Paste any suspicious email and get a clear risk score in seconds.",
+        "description": "PhishGuard uses 6 detection engines: heuristics, URL reputation, VirusTotal, OSINT, email header forensics, and social engineering detection. Paste any suspicious email and get a risk score in seconds.",
     },
     {
         "title": "Your First Scan",
         "icon": "📋",
-        "description": "Let's run your first scan. Paste a suspicious email into the Analyzer tab and click Scan. We've loaded an example to get you started — just click the Analyze tab and press Scan.",
+        "description": "Ready? Go to the Scan tab, paste an email, and click Analyze. We've loaded a sample phishing email to try — just head to Scan and press the button.",
+        "action": ("🔍 Take Me to Scan", lambda: st.session_state.update({"show_onboarding": False, "active_tab": 0})),
     },
     {
         "title": "Understanding Results",
         "icon": "📊",
-        "description": "Each scan produces a risk score (0-100), severity classification, threat indicators, and recommended actions. Toggle 'Show technical details' for the full analysis including VirusTotal, OSINT, and psychological manipulation scoring.",
+        "description": "Each scan shows a risk score (0-100), severity level, and a detailed breakdown. Toggle 'Show technical details' for VirusTotal, OSINT, and psychological manipulation analysis. Generate PDF reports or STIX threat intel bundles.",
     },
     {
-        "title": "Export & Share",
-        "icon": "📄",
-        "description": "Generate PDF reports, AI security narratives, and STIX 2.1 threat intelligence bundles. Share results with your team or compliance auditors. Enterprise plans support white-label reports.",
-    },
-    {
-        "title": "Next Steps",
+        "title": "You're Ready!",
         "icon": "🚀",
-        "description": "You're all set! Here's what to do next: run your first scan, explore the Dashboard for analytics, check your Usage & Billing, and upgrade when you need more analyses. The AI Copilot is always available to help.",
+        "description": "Explore the Dashboard for analytics, check your billing usage, and upgrade when you need more capacity. The AI Copilot is always here to help. Your 14-day free trial includes 50 scans.",
     },
 ]
 
@@ -79,6 +76,7 @@ def render_onboarding(username: str):
                 unsafe_allow_html=True)
 
     # Step content card
+    st.markdown("</div>", unsafe_allow_html=True)
     st.markdown(
         f"<div style='background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.08);"
         f"border-radius:24px;padding:40px 36px;text-align:center'>"
@@ -90,6 +88,15 @@ def render_onboarding(username: str):
         unsafe_allow_html=True
     )
 
+    # Action button (if step has one)
+    action = s.get("action")
+    if action:
+        label, _ = action
+        if st.button(label, use_container_width=True, type="primary", key=f"onboarding_action_{step}"):
+            _, fn = action
+            fn()
+            st.rerun()
+
     # Navigation buttons
     col_left, col_right = st.columns([1, 1])
     with col_left:
@@ -99,7 +106,7 @@ def render_onboarding(username: str):
                 st.rerun()
     with col_right:
         if step < total:
-            if st.button("Continue →", use_container_width=True, type="primary", key="onboarding_next"):
+            if st.button("Continue →", use_container_width=True, type="primary" if not action else "secondary", key="onboarding_next"):
                 st.session_state["onboarding_step"] = step + 1
                 st.rerun()
         else:
@@ -115,5 +122,4 @@ def render_onboarding(username: str):
         st.session_state.pop("onboarding_step", None)
         st.rerun()
 
-    st.markdown("</div>", unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
