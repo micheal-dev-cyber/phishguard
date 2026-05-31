@@ -286,6 +286,12 @@ if last_active:
         st.rerun()
 st.session_state["last_active"] = now
 
+# ── Onboarding Wizard ────────────────────────────────────────────────────────
+if st.session_state.get("show_onboarding", False):
+    from src.ui_onboarding import render_onboarding
+    render_onboarding(username)
+    st.stop()
+
 # ── Header ───────────────────────────────────────────────────────────────────
 col_title, col_quota, col_user = st.columns([2, 2, 1])
 
@@ -845,6 +851,7 @@ with tab1:
                 import time as _tmod; _start_time = _tmod.time()
                 results = analyze_email(email_text)
                 save_analysis(results, email_text)
+                st.session_state["checklist_first_scan"] = True
                 log_usage(username, "analysis", results["risk_score"])
                 lb_record_scan(
                     username,
@@ -1494,6 +1501,36 @@ with tab3:
     st.markdown(f"<p style='color:#64748b;margin-top:-8px'>Welcome back, <strong>{username}</strong>.</p>",
                 unsafe_allow_html=True)
 
+    # ── Onboarding Checklist ───────────────────────────────────────────────
+    _chk_account = st.session_state.get("checklist_account", False)
+    _chk_first_scan = st.session_state.get("checklist_first_scan", False)
+    _chk_first_report = st.session_state.get("checklist_first_report", False)
+    _chk_invite = st.session_state.get("checklist_invite", False)
+    _chk_upgrade = st.session_state.get("checklist_upgrade", False)
+
+    checklist_items = [
+        ("☐", "Create account", _chk_account, "✅", "Account created"),
+        ("☐", "Run your first scan", _chk_first_scan, "✅", "First scan complete"),
+        ("☐", "Generate your first report", _chk_first_report, "✅", "Report generated"),
+        ("☐", "Invite a teammate", _chk_invite, "✅", "Teammate invited"),
+        ("☐", "Explore upgrade options", _chk_upgrade, "✅", "Plan reviewed"),
+    ]
+    completed_count = sum(1 for _, _, done, _, _ in checklist_items if done)
+    if completed_count < 5:
+        checklist_html = '<div style="background:linear-gradient(145deg,#0a0f1a,#0f1a2a);border:1px solid #1e293b;border-radius:14px;padding:16px 20px;margin-bottom:16px">'
+        checklist_html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
+        checklist_html += f'<span style="color:#f0f6ff;font-weight:700;font-size:14px">🚀 Getting Started</span>'
+        checklist_html += f'<span style="color:#3b82f6;font-size:12px;font-weight:600">{completed_count}/5</span></div>'
+        checklist_html += f'<div style="background:#1e293b;border-radius:6px;height:4px;overflow:hidden;margin-bottom:12px">'
+        checklist_html += f'<div style="background:linear-gradient(90deg,#3b82f6,#22c55e);width:{completed_count*20}%;height:100%;border-radius:6px"></div></div>'
+        for item in checklist_items:
+            unchecked, label, done, checked, done_label = item
+            icon = checked if done else unchecked
+            color = "#22c55e" if done else "#64748b"
+            checklist_html += f'<div style="display:flex;align-items:center;gap:8px;padding:4px 0"><span style="color:{color}">{icon}</span><span style="color:{color};font-size:13px">{done_label if done else label}</span></div>'
+        checklist_html += '</div>'
+        st.markdown(checklist_html, unsafe_allow_html=True)
+
     # ── Quick Actions ──────────────────────────────────────────────────────
     st.markdown("#### ⚡ Quick Actions")
     qa_cols = st.columns(4)
@@ -1514,6 +1551,25 @@ with tab3:
             st.markdown("---")
 
     st.divider()
+
+    # ── Usage Summary ──────────────────────────────────────────────────────
+    q = check_quota(username, plan)
+    plan_label = PLANS.get(plan, PLANS["trial"])["label"]
+    limit_display = "∞" if plan == "enterprise" else str(q["limit"])
+    bar_color = "#ef4444" if q["pct"] >= 90 else "#f59e0b" if q["pct"] >= 70 else "#3b82f6"
+
+    st.markdown(
+        f"<div style='display:flex;justify-content:space-between;align-items:center;"
+        f"background:#111827;border:1px solid #1e293b;border-radius:12px;padding:14px 20px;margin-bottom:16px'>"
+        f"<div><span style='color:#f0f6ff;font-weight:700;font-size:14px'>📊 Usage</span>"
+        f"<br><span style='color:#64748b;font-size:12px'>{plan_label} plan · {q['used']} / {limit_display} scans used</span></div>"
+        f"<div style='text-align:right;min-width:160px'>"
+        f"<div class='pg-quota-bg'><div class='pg-quota-fill' style='width:{min(q['pct'],100)}%;background:{bar_color}'></div></div>"
+        f"<span style='color:{bar_color};font-size:12px;font-weight:600'>{q['pct']}% used</span>"
+        + (f"<br><a href='#' style='color:#f59e0b;font-size:12px;text-decoration:none'>⬆ Upgrade to increase →</a>" if q['pct'] >= 70 else "") +
+        f"</div></div>",
+        unsafe_allow_html=True
+    )
 
     # ── Stats overview (from history) ──────────────────────────────────────
     history = _cached_history(500)

@@ -1,150 +1,119 @@
 import streamlit as st
-from src.onboarding import get_onboarding_steps, complete_onboarding_step, activate_plan, PLAN_PRICING
+
+ONBOARDING_STEPS = [
+    {
+        "title": "Welcome to PhishGuard AI",
+        "icon": "🛡",
+        "description": "You just took the first step toward protecting your inbox from phishing attacks. Let's get you set up in under 60 seconds.",
+    },
+    {
+        "title": "What PhishGuard Does",
+        "icon": "🔍",
+        "description": "PhishGuard analyzes emails using 6 detection engines: heuristics, URL matching, VirusTotal, OSINT, header forensics, and social engineering detection. Paste any suspicious email and get a clear risk score in seconds.",
+    },
+    {
+        "title": "Your First Scan",
+        "icon": "📋",
+        "description": "Let's run your first scan. Paste a suspicious email into the Analyzer tab and click Scan. We've loaded an example to get you started — just click the Analyze tab and press Scan.",
+    },
+    {
+        "title": "Understanding Results",
+        "icon": "📊",
+        "description": "Each scan produces a risk score (0-100), severity classification, threat indicators, and recommended actions. Toggle 'Show technical details' for the full analysis including VirusTotal, OSINT, and psychological manipulation scoring.",
+    },
+    {
+        "title": "Export & Share",
+        "icon": "📄",
+        "description": "Generate PDF reports, AI security narratives, and STIX 2.1 threat intelligence bundles. Share results with your team or compliance auditors. Enterprise plans support white-label reports.",
+    },
+    {
+        "title": "Next Steps",
+        "icon": "🚀",
+        "description": "You're all set! Here's what to do next: run your first scan, explore the Dashboard for analytics, check your Usage & Billing, and upgrade when you need more analyses. The AI Copilot is always available to help.",
+    },
+]
 
 
-def render_onboarding_wizard(username: str):
-    steps = get_onboarding_steps(username)
-    all_done = all(s["done"] for s in steps)
-
-    if all_done:
-        return
+def render_onboarding(username: str):
+    step = st.session_state.get("onboarding_step", 1)
+    total = len(ONBOARDING_STEPS)
+    idx = step - 1
+    s = ONBOARDING_STEPS[idx]
 
     st.markdown("""
     <style>
-    .onboarding-card {
-        background: linear-gradient(135deg, #1e3a5f 0%, #111827 100%);
-        border: 1px solid #2563eb;
-        border-radius: 16px;
-        padding: 24px;
-        margin: 16px 0;
-    }
-    .onboarding-step {
-        display: flex; align-items: center;
-        padding: 8px 12px; margin: 4px 0;
-        background: rgba(255,255,255,0.02);
-        border-radius: 8px;
-    }
-    .onboarding-step.done { opacity: 0.5; }
-    .onboarding-step-number {
-        width: 28px; height: 28px; border-radius: 50%;
-        display: flex; align-items: center; justify-content: center;
-        font-weight: 700; font-size: 13px; margin-right: 12px; flex-shrink: 0;
-    }
+    .block-container { max-width: 640px !important; }
+    section[data-testid="stSidebar"] { display: none; }
+    #MainMenu { visibility: hidden; }
+    footer { display: none; }
+    .stApp { background: #020818; }
     </style>
     """, unsafe_allow_html=True)
 
-    with st.container():
-        st.markdown(f"""
-        <div class="onboarding-card">
-            <h3 style="color:#60a5fa;margin:0 0 4px 0">🚀 Welcome to PhishGuard</h3>
-            <p style="color:#94a3b8;font-size:13px;margin:0 0 16px 0">
-                Complete these steps to get the most out of the platform.
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
+    st.markdown("<div style='padding:40px 0 20px'>", unsafe_allow_html=True)
 
-        for i, step in enumerate(steps, 1):
-            done = step["done"]
-            color = "#22c55e" if done else "#475569"
-            icon = "✓" if done else str(i)
-            bg = "#064e3b" if done else "#1e293b"
+    # Progress bar
+    pct = int(step / total * 100)
+    st.markdown(
+        f"<div style='margin-bottom:32px'>"
+        f"<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:8px'>"
+        f"<span style='color:#475569;font-size:11px;letter-spacing:.1em;text-transform:uppercase'>"
+        f"Step {step} of {total}</span>"
+        f"<span style='color:#3b82f6;font-size:11px;font-weight:600'>{pct}% complete</span></div>"
+        f"<div style='background:#1e293b;border-radius:6px;height:6px;overflow:hidden'>"
+        f"<div style='background:linear-gradient(90deg,#3b82f6,#6366f1);width:{pct}%;height:100%;"
+        f"border-radius:6px;transition:width 0.3s ease'></div></div></div>",
+        unsafe_allow_html=True
+    )
 
-            st.markdown(f"""
-            <div class="onboarding-step {'done' if done else ''}">
-                <div class="onboarding-step-number" style="background:{bg};color:{color}">{icon}</div>
-                <div style="flex:1">
-                    <span style="color:{'#22c55e' if done else '#e2e8f0'};font-weight:600;font-size:14px">
-                        {step['label']}
-                    </span>
-                    <span style="color:#475569;font-size:11px;margin-left:8px">
-                        {'✅ Done' if done else '⏳ Pending'}
-                    </span>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+    # Step indicator dots
+    dots = []
+    for i in range(total):
+        if i + 1 == step:
+            dots.append("<span style='display:inline-block;width:10px;height:10px;border-radius:50%;background:#3b82f6;margin:0 4px'></span>")
+        elif i + 1 < step:
+            dots.append("<span style='display:inline-block;width:10px;height:10px;border-radius:50%;background:#22c55e;margin:0 4px'></span>")
+        else:
+            dots.append("<span style='display:inline-block;width:10px;height:10px;border-radius:50%;background:#1e293b;margin:0 4px'></span>")
+    st.markdown(f"<div style='text-align:center;margin-bottom:40px'>{''.join(dots)}</div>",
+                unsafe_allow_html=True)
 
-            if not done and i == _get_current_step_index(steps):
-                if step["step"] == "connect_email":
-                    _render_email_step(username, step)
-                elif step["step"] == "first_scan":
-                    _render_scan_step(username, step)
-                elif step["step"] == "configure_alerts":
-                    _render_alerts_step(username, step)
-                elif step["step"] == "invite_team":
-                    _render_invite_step(username, step)
-                elif step["step"] == "weekly_report":
-                    _render_report_step(username, step)
+    # Step content card
+    st.markdown(
+        f"<div style='background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.08);"
+        f"border-radius:24px;padding:40px 36px;text-align:center'>"
+        f"<div style='font-size:3.5rem;margin-bottom:16px'>{s['icon']}</div>"
+        f"<h2 style='font-size:1.5rem;font-weight:800;color:#f0f6ff;margin-bottom:12px;"
+        f"line-height:1.3'>{s['title']}</h2>"
+        f"<p style='color:#94a3b8;font-size:14px;line-height:1.7;max-width:460px;margin:0 auto 32px'>"
+        f"{s['description']}</p>",
+        unsafe_allow_html=True
+    )
 
-        st.progress(sum(1 for s in steps if s["done"]) / max(len(steps), 1))
-        st.caption(f"{sum(1 for s in steps if s['done'])} / {len(steps)} steps complete")
+    # Navigation buttons
+    col_left, col_right = st.columns([1, 1])
+    with col_left:
+        if step > 1:
+            if st.button("← Back", use_container_width=True, key="onboarding_back"):
+                st.session_state["onboarding_step"] = step - 1
+                st.rerun()
+    with col_right:
+        if step < total:
+            if st.button("Continue →", use_container_width=True, type="primary", key="onboarding_next"):
+                st.session_state["onboarding_step"] = step + 1
+                st.rerun()
+        else:
+            if st.button("🚀 Start Using PhishGuard", use_container_width=True, type="primary", key="onboarding_finish"):
+                st.session_state.pop("show_onboarding", None)
+                st.session_state.pop("onboarding_step", None)
+                st.session_state["checklist_account"] = True
+                st.rerun()
 
-        # Plan selector at bottom of wizard
-        st.divider()
-        st.markdown("##### 💳 Choose Your Plan")
-        plan_options = {v["label"]: k for k, v in PLAN_PRICING.items()}
-        selected_label = st.selectbox("Plan", list(plan_options.keys()), key="onboard_plan")
-        selected_plan = plan_options[selected_label]
-        pricing = PLAN_PRICING[selected_plan]
-        price_str = "Custom pricing" if pricing.get("custom") else f"${pricing['price']}/mo"
-        st.markdown(
-            f"<p style='color:#94a3b8;font-size:13px'>{pricing['scans']} scans/month — {price_str}</p>",
-            unsafe_allow_html=True,
-        )
-        if st.button("Activate Plan", type="primary", use_container_width=True):
-            activate_plan(username, selected_plan)
-            st.success(f"{selected_label} plan activated!")
-            st.rerun()
+    # Skip link
+    if st.button("Skip tutorial →", use_container_width=True, key="onboarding_skip"):
+        st.session_state.pop("show_onboarding", None)
+        st.session_state.pop("onboarding_step", None)
+        st.rerun()
 
-        if st.button("✕ Dismiss", use_container_width=True):
-            st.session_state["onboarding_dismissed"] = True
-            st.rerun()
-
-
-def _get_current_step_index(steps: list) -> int:
-    for i, s in enumerate(steps):
-        if not s["done"]:
-            return i + 1
-    return len(steps)
-
-
-def _complete(username, step):
-    complete_onboarding_step(username, step)
-    st.rerun()
-
-
-def _render_email_step(username, step):
-    st.text_input("Email address", placeholder="you@company.com",
-                  key="onboard_email", label_visibility="collapsed")
-    if st.button("📩 Send Verification", key="onboard_email_btn", use_container_width=True):
-        _complete(username, step["step"])
-
-
-def _render_scan_step(username, step):
-    st.text_area("Paste an email to scan", placeholder="Paste suspicious email content...",
-                 height=100, key="onboard_scan_text", label_visibility="collapsed")
-    if st.button("🔍 Run First Scan", key="onboard_scan_btn", use_container_width=True):
-        _complete(username, step["step"])
-
-
-def _render_alerts_step(username, step):
-    st.markdown("Connect a notification channel:")
-    if st.button("🔗 Connect Slack", key="onboard_slack", use_container_width=True):
-        _complete(username, step["step"])
-    if st.button("🔗 Connect Teams", key="onboard_teams", use_container_width=True):
-        _complete(username, step["step"])
-
-
-def _render_invite_step(username, step):
-    col_i1, col_i2 = st.columns([2, 1])
-    with col_i1:
-        invite_user = st.text_input("Username to invite", placeholder="colleague@company.com",
-                                    key="onboard_invite", label_visibility="collapsed")
-    with col_i2:
-        if st.button("📨 Invite", key="onboard_invite_btn", use_container_width=True):
-            _complete(username, step["step"])
-
-
-def _render_report_step(username, step):
-    st.markdown("Get a weekly PDF summary of threats and trends sent to your inbox.")
-    if st.button("📊 Enable Weekly Report", key="onboard_report_btn", use_container_width=True):
-        _complete(username, step["step"])
+    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)

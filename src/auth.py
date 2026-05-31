@@ -9,6 +9,7 @@ def _landing_page():
     show_signup = st.session_state.get("show_signup", False)
     show_reset = st.session_state.get("show_reset", False)
     show_mfa = st.session_state.get("show_mfa", False)
+    show_demo = st.session_state.get("show_demo", False)
 
     st.markdown("""
     <style>
@@ -25,6 +26,11 @@ def _landing_page():
         box-shadow: 0 0 0 3px rgba(37,99,235,0.15) !important; }
     div[data-testid="stButton"] > button { border-radius: 10px !important;
         font-weight: 700 !important; transition: all .2s !important; }
+    div[data-testid="stTextArea"] textarea { background: rgba(255,255,255,0.04) !important;
+        border: 1px solid rgba(255,255,255,0.1) !important;
+        border-radius: 12px !important; color: #e2e8f0 !important;
+        font-family: 'JetBrains Mono', monospace !important;
+        font-size: 13px !important; }
     .auth-card { background: rgba(255,255,255,0.025);
         border: 1px solid rgba(255,255,255,0.08);
         border-radius: 24px; padding: 48px 40px;
@@ -55,7 +61,9 @@ def _landing_page():
     </style>
     """, unsafe_allow_html=True)
 
-    if show_reset:
+    if show_demo:
+        _demo_scan_page()
+    elif show_reset:
         _reset_form()
     elif show_signup:
         _signup_form()
@@ -132,6 +140,8 @@ def _signup_form():
                 st.session_state["plan"] = "trial"
                 st.session_state["is_admin"] = False
                 st.session_state["email"] = new_email.strip()
+                st.session_state["show_onboarding"] = True
+                st.session_state["onboarding_step"] = 1
                 st.session_state.pop("show_signup", None)
                 st.rerun()
 
@@ -381,139 +391,310 @@ def _mfa_form():
     st.markdown("</div>", unsafe_allow_html=True)
 
 
-def _faq_items():
-    faqs = [
-        ("How does PhishGuard detect phishing?",
-         "PhishGuard combines 6 detection engines: keyword heuristics, URL pattern matching, email header forensics, "
-         "VirusTotal cross-reference, domain OSINT, and social-engineering language analysis. Results are weighted into "
-         "a single 0-100 risk score with clear severity classification."),
-        ("Is my data stored securely?",
-         "Yes. Email content is processed in memory and stored encrypted at rest. We never share or sell your data. "
-         "Full scan history is retained in an encrypted SQLite database that never leaves your instance."),
-        ("Can I cancel anytime?",
-         "Absolutely. There are no long-term contracts on any plan. You can downgrade or cancel from the Billing tab "
-         "at any time — your data remains available until the end of your billing period."),
-        ("What integrations are supported?",
-         "PhishGuard integrates with VirusTotal (90+ security vendors), Perplexity AI for OSINT enrichment, "
-         "Claude AI for plain-English threat narratives, and IMAP inbox scanning for Gmail, Outlook, and any "
-         "standard email provider."),
-        ("How accurate is the detection?",
-         "PhishGuard achieves a 99%+ detection rate across our test corpus of 10,000+ known phishing emails, "
-         "with a false-positive rate under 0.5%. Multi-engine correlation dramatically reduces noise."),
-        ("Do you offer team or enterprise plans?",
-         "Yes. Business plans support team access, and Enterprise plans include unlimited analyses, SLA guarantees, "
-         "white-label options, and custom integrations. Contact us for a demo."),
-    ]
-    return faqs
+# ── Example phishing email for demo ──────────────────────────────────────────
+DEMO_EMAIL = """From: "Security Alert" <no-reply@secure-verify2738.xyz>
+Reply-To: <verify@secure-verify2738.xyz>
+Subject: URGENT: Account Security Alert - Action Required
+
+Dear Valued Customer,
+
+We detected unusual activity on your account from an unrecognized device in Russia.
+
+To prevent account suspension, please verify your identity immediately:
+
+https://secure-verify2738.xyz/account/verify?token=29a8f1b3
+
+Failure to verify within 24 hours will result in permanent account suspension.
+
+This is an automated security message. Do not reply to this email.
+
+Sincerely,
+Security Team"""
+
+
+def _demo_scan_page():
+    """Handle demo mode — scan an email without authentication."""
+    st.markdown("<div style='padding:20px 0'>", unsafe_allow_html=True)
+    st.markdown("<div style='display:flex;align-items:center;gap:12px;margin-bottom:24px'>"
+                "<span style='font-size:1.5rem'>🔬</span>"
+                "<div><h2 style='margin:0;font-size:1.5rem'>PhishGuard Demo</h2>"
+                "<p style='color:#64748b;font-size:13px;margin:0'>See the results instantly. No account required.</p></div>"
+                "</div>", unsafe_allow_html=True)
+
+    demo_results = st.session_state.get("demo_results", None)
+
+    if not demo_results:
+        col_demo1, col_demo2 = st.columns([3, 2])
+        with col_demo1:
+            demo_text = st.text_area(
+                "Paste an email to scan",
+                value="",
+                height=280,
+                placeholder="Paste a suspicious email here — PhishGuard will analyze headers, URLs, content, and more...",
+                key="demo_text_input",
+                label_visibility="collapsed",
+            )
+            col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 1])
+            with col_btn1:
+                if st.button("🚀 Run Demo Scan", use_container_width=True, type="primary", key="run_demo"):
+                    if demo_text.strip():
+                        with st.spinner("Running multi-engine analysis..."):
+                            try:
+                                from src.phishing_analysis import rate_email_threat
+                                result = rate_email_threat(demo_text)
+                                st.session_state["demo_results"] = result
+                                st.session_state["demo_email_text"] = demo_text
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Demo scan failed: {e}")
+                    else:
+                        st.warning("Paste an email to scan.")
+            with col_btn2:
+                if st.button("📋 Load Example", use_container_width=True, type="secondary", key="load_example"):
+                    st.session_state["demo_text_input"] = DEMO_EMAIL
+                    st.rerun()
+            with col_btn3:
+                if st.button("← Back", use_container_width=True, key="demo_back_main"):
+                    st.session_state.pop("show_demo", None)
+                    st.rerun()
+
+        with col_demo2:
+            st.markdown("<div style='background:linear-gradient(145deg,#0a0f1a,#0f1a2a);border:1px solid #1e293b;border-radius:16px;padding:24px;height:100%'>"
+                        "<h4 style='color:#f0f6ff;margin-bottom:12px'>What you'll see:</h4>"
+                        "<div style='display:flex;flex-direction:column;gap:10px'>"
+                        "<div style='display:flex;align-items:center;gap:10px;color:#94a3b8;font-size:13px'>🔴 Risk score & severity classification</div>"
+                        "<div style='display:flex;align-items:center;gap:10px;color:#94a3b8;font-size:13px'>🕵️ URL analysis & threat detection</div>"
+                        "<div style='display:flex;align-items:center;gap:10px;color:#94a3b8;font-size:13px'>🔎 Suspicious keyword identification</div>"
+                        "<div style='display:flex;align-items:center;gap:10px;color:#94a3b8;font-size:13px'>📊 Executive threat overview</div>"
+                        "<div style='display:flex;align-items:center;gap:10px;color:#94a3b8;font-size:13px'>📄 Sample report preview</div>"
+                        "</div>"
+                        "<div style='margin-top:20px;padding-top:16px;border-top:1px solid #1e293b'>"
+                        "<p style='color:#475569;font-size:12px'>🔒 No data is stored or shared. Results exist only in your browser session.</p></div></div>",
+                        unsafe_allow_html=True)
+    else:
+        _show_demo_results(demo_results)
+
+    st.markdown("<div style='text-align:center;margin-top:32px'>"
+                "<span style='color:#475569;font-size:13px'>Want the full experience? </span>",
+                unsafe_allow_html=True)
+    col_signup, col_login = st.columns([1, 1])
+    with col_signup:
+        if st.button("→ Create Free Account", use_container_width=True, type="primary", key="demo_signup"):
+            st.session_state["show_signup"] = True
+            st.rerun()
+    with col_login:
+        if st.button("Sign In", use_container_width=True, key="demo_login"):
+            st.session_state["show_login"] = True
+            st.rerun()
+
+
+def _show_demo_results(results):
+    """Show simplified demo analysis results with conversion CTAs."""
+    score = results.get("risk_score", 0)
+    severity = results.get("severity", "UNKNOWN")
+    color = results.get("severity_color", "#94a3b8")
+    sev_icon = {"CRITICAL": "🔴", "HIGH": "🟠", "MEDIUM": "🟡", "LOW": "🟢", "SAFE": "🟢"}.get(severity, "⚪")
+    sev_label = {"CRITICAL": "Critical Threat", "HIGH": "High Risk", "MEDIUM": "Suspicious", "LOW": "Low Risk", "SAFE": "Safe"}.get(severity, severity)
+
+    st.markdown(f"<div style='display:flex;align-items:center;justify-content:space-between;"
+                f"background:#111827;border:1px solid #1e293b;border-radius:16px;padding:20px 24px;margin-bottom:16px'>"
+                f"<div style='display:flex;align-items:center;gap:16px'>"
+                f"<span style='font-size:2.5rem'>{sev_icon}</span>"
+                f"<div><div style='font-size:1.2rem;font-weight:700;color:{color}'>{sev_label}</div>"
+                f"<div style='font-size:0.8rem;color:#64748b;margin-top:2px'>Demo Scan — Limited Preview</div></div></div>"
+                f"<div style='text-align:right'>"
+                f"<div style='font-size:2.5rem;font-weight:800;color:{color};letter-spacing:-0.03em'>{score}<span style='font-size:1rem;color:#64748b'>/100</span></div>"
+                f"</div></div>", unsafe_allow_html=True)
+
+    st.info("⬆️ **Sign up for free** to unlock VirusIntel, OSINT, AI narrative, PDF reports, and full technical analysis.")
+    st.divider()
+
+    col_d1, col_d2, col_d3, col_d4 = st.columns(4)
+    with col_d1:
+        url_count = results.get("url_count", 0)
+        st.markdown(f"<div class='stat-box'><div style='font-size:1.5rem;font-weight:800;color:#f0f6ff'>{url_count}</div><div style='color:#475569;font-size:11px;text-transform:uppercase;letter-spacing:.08em'>URLs Found</div></div>", unsafe_allow_html=True)
+    with col_d2:
+        sus_count = results.get("suspicious_url_count", 0)
+        sus_color = "#ef4444" if sus_count > 0 else "#22c55e"
+        st.markdown(f"<div class='stat-box'><div style='font-size:1.5rem;font-weight:800;color:{sus_color}'>{sus_count}</div><div style='color:#475569;font-size:11px;text-transform:uppercase;letter-spacing:.08em'>Suspicious URLs</div></div>", unsafe_allow_html=True)
+    with col_d3:
+        kw_hits = results.get("total_keyword_hits", 0)
+        st.markdown(f"<div class='stat-box'><div style='font-size:1.5rem;font-weight:800;color:#f0f6ff'>{kw_hits}</div><div style='color:#475569;font-size:11px;text-transform:uppercase;letter-spacing:.08em'>Keyword Hits</div></div>", unsafe_allow_html=True)
+    with col_d4:
+        st.markdown(f"<div class='stat-box'><div style='font-size:1.5rem;font-weight:800;color:#f0f6ff'>Limited</div><div style='color:#475569;font-size:11px;text-transform:uppercase;letter-spacing:.08em'>Full Report</div></div>", unsafe_allow_html=True)
+
+    if score >= 50:
+        st.divider()
+        st.error("🔴 **Threat Detected** — Sign up for the full analysis including VirusTotal cross-reference, OSINT investigation, psychological manipulation scoring, and AI-generated incident response guidance.")
+
+    st.divider()
+    st.markdown("<div style='text-align:center;padding:32px 20px;"
+                "background:linear-gradient(145deg,#0a0f1a,#0f1a2a);border:1px solid #1e293b;"
+                "border-radius:16px'>"
+                "<span style='font-size:2.5rem'>🔓</span>"
+                "<h3 style='color:#f0f6ff;margin:12px 0 6px'>Unlock the Full Analysis</h3>"
+                "<p style='color:#64748b;font-size:13px;max-width:400px;margin:0 auto 20px'>"
+                "Create a free account to see VirusTotal results, OSINT data, AI threat narrative, "
+                "PDF report, psychological manipulation scoring, and detailed technical analysis.</p>"
+                "<div style='display:flex;justify-content:center;gap:12px;flex-wrap:wrap'>",
+                unsafe_allow_html=True)
+    col_c1, col_c2 = st.columns([1, 1])
+    with col_c1:
+        if st.button("→ Create Free Account", use_container_width=True, type="primary", key="demo_cta_1"):
+            st.session_state["show_signup"] = True
+            st.rerun()
+    with col_c2:
+        if st.button("🔄 Scan Another Email", use_container_width=True, key="demo_scan_another"):
+            st.session_state.pop("demo_results", None)
+            st.session_state.pop("demo_email_text", None)
+            st.rerun()
+    st.markdown("</div></div>", unsafe_allow_html=True)
+
 
 def _hero_page():
-    # HERO
-    st.markdown("<div style='padding:80px 20px 50px;text-align:center;"
-                "background:#020818;position:relative;overflow:hidden'>",
-                unsafe_allow_html=True)
-    st.markdown("<div style='position:absolute;inset:0;background-image:"
+    # ═════════════════════════════════════════════════════════════════════
+    # HERO — 5-second value proposition
+    # ═════════════════════════════════════════════════════════════════════
+    st.markdown("<div style='padding:70px 20px 40px;text-align:center;"
+                "background:#020818;position:relative;overflow:hidden'>"
+                "<div style='position:absolute;inset:0;background-image:"
                 "linear-gradient(rgba(37,99,235,0.06) 1px,transparent 1px),"
                 "linear-gradient(90deg,rgba(37,99,235,0.06) 1px,transparent 1px);"
                 "background-size:60px 60px;"
-                "mask-image:radial-gradient(ellipse 80% 80% at 50% 50%,black 20%,transparent 100%)"
-                "'>", unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
+                "mask-image:radial-gradient(ellipse 80% 80% at 50% 50%,black 20%,transparent 100%)'>"
+                "</div>", unsafe_allow_html=True)
 
     st.markdown("<span style='color:#3b82f6;font-size:11px;font-weight:500;"
                 "letter-spacing:.15em;text-transform:uppercase;"
                 "background:rgba(37,99,235,0.1);border:1px solid rgba(59,130,246,0.25);"
                 "border-radius:100px;padding:6px 16px;display:inline-block;"
-                "margin-bottom:24px'>⬡ AI-Powered Phishing Defense</span>",
+                "margin-bottom:20px'>⬡ AI-Powered Phishing Defense Platform</span>",
                 unsafe_allow_html=True)
 
-    st.markdown("<h1 style='font-size:clamp(2.2rem,4.5vw,4rem);font-weight:800;"
-                "line-height:1.05;color:#f0f6ff;margin:0 auto 16px;"
-                "max-width:750px;letter-spacing:-.02em'>"
-                "Stop phishing attacks<br>"
+    st.markdown("<h1 style='font-size:clamp(2rem,4vw,3.5rem);font-weight:800;"
+                "line-height:1.1;color:#f0f6ff;margin:0 auto 14px;"
+                "max-width:700px;letter-spacing:-.02em'>"
+                "Paste any email. Instantly know<br>"
                 "<span style='background:linear-gradient(135deg,#3b82f6,#60a5fa,#93c5fd);"
                 "-webkit-background-clip:text;-webkit-text-fill-color:transparent;"
-                "background-clip:text'>before they reach your team.</span></h1>",
+                "background-clip:text'>if it's a phishing attack.</span></h1>",
                 unsafe_allow_html=True)
 
-    st.markdown("<p style='color:#64748b;max-width:500px;margin:0 auto 32px;"
+    st.markdown("<p style='color:#64748b;max-width:520px;margin:0 auto 28px;"
                 "line-height:1.7;font-size:14px'>"
-                "Real-time email analysis that detects malicious URLs, spoofed headers, "
-                "and social engineering — with AI-generated threat reports in seconds.</p>",
+                "PhishGuard analyzes emails in seconds — detecting malicious URLs, "
+                "spoofed headers, and social engineering with multi-engine AI. "
+                "Trusted by security teams worldwide.</p>",
                 unsafe_allow_html=True)
 
     col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 1])
-    with col_btn2:
+    with col_btn1:
         if st.button("→ Start Free Trial", use_container_width=True, type="primary"):
             st.session_state["show_signup"] = True
+            st.rerun()
+    with col_btn2:
+        if st.button("🔬 Try Demo — No Account Needed", use_container_width=True, type="secondary"):
+            st.session_state["show_demo"] = True
             st.rerun()
 
     st.markdown("</div>", unsafe_allow_html=True)
 
+    # ═════════════════════════════════════════════════════════════════════
     # TRUST BAR
-    st.markdown("<div style='text-align:center;padding:20px 0 40px'>"
-                "<span style='color:#475569;font-size:11px;letter-spacing:.12em;"
+    # ═════════════════════════════════════════════════════════════════════
+    st.markdown("<div style='text-align:center;padding:16px 0 32px'>"
+                "<span style='color:#475569;font-size:10px;letter-spacing:.12em;"
                 "text-transform:uppercase'>Trusted by security teams worldwide</span>"
-                "<div style='display:flex;justify-content:center;gap:32px;margin-top:16px;"
+                "<div style='display:flex;justify-content:center;gap:28px;margin-top:12px;"
                 "flex-wrap:wrap'>"
-                "<span style='color:#334155;font-size:13px;font-weight:600'>◈ 10,000+ scans analyzed</span>"
-                "<span style='color:#334155;font-size:13px;font-weight:600'>◈ 99% detection rate</span>"
-                "<span style='color:#334155;font-size:13px;font-weight:600'>◈ 4 threat engines</span>"
-                "<span style='color:#334155;font-size:13px;font-weight:600'>◈ 90+ vendor integrations</span>"
+                "<span style='color:#334155;font-size:12px;font-weight:600'>◈ 10,000+ scans analyzed</span>"
+                "<span style='color:#334155;font-size:12px;font-weight:600'>◈ 99% detection rate</span>"
+                "<span style='color:#334155;font-size:12px;font-weight:600'>◈ <2s average scan</span>"
+                "<span style='color:#334155;font-size:12px;font-weight:600'>◈ 90+ vendor correlation</span>"
                 "</div></div>", unsafe_allow_html=True)
 
-    # STATS ROW
-    cols = st.columns(4)
-    stats = [("99%", "Detection rate"), ("<2s", "Scan time"),
-             ("4+", "Threat engines"), ("24/7", "Always on")]
-    for col, (num, label) in zip(cols, stats):
-        with col:
-            st.markdown("<div class='stat-box'><div style='font-size:1.8rem;"
-                        "font-weight:800;color:#f0f6ff;line-height:1'>"
-                        f"{num}</div>"
-                        "<div style='color:#475569;font-size:11px;margin-top:4px;"
-                        "letter-spacing:.08em;text-transform:uppercase'>"
-                        f"{label}</div></div>", unsafe_allow_html=True)
-
-    st.markdown("<div style='height:50px'></div>", unsafe_allow_html=True)
-
-    # TESTIMONIALS
-    st.markdown("<div style='text-align:center;margin-bottom:40px'>"
+    # ═════════════════════════════════════════════════════════════════════
+    # HOW IT WORKS — 3 simple steps
+    # ═════════════════════════════════════════════════════════════════════
+    st.markdown("<div style='text-align:center;margin-bottom:36px'>"
                 "<span style='color:#3b82f6;font-size:11px;letter-spacing:.15em;"
-                "text-transform:uppercase'>// What users say</span>"
+                "text-transform:uppercase'>// How it works</span>"
                 "<h2 style='font-size:clamp(1.3rem,2.5vw,2rem);font-weight:800;"
-                "color:#f0f6ff;margin-top:8px;margin-bottom:32px'>"
-                "Loved by security professionals</h2></div>",
+                "color:#f0f6ff;margin-top:8px;margin-bottom:8px'>"
+                "Three seconds. Three steps. Complete protection.</h2>"
+                "<p style='color:#64748b;font-size:13px;max-width:500px;margin:0 auto'>"
+                "From suspicious email to actionable threat intelligence in under a minute.</p></div>",
                 unsafe_allow_html=True)
 
-    testimonials = [
-        ("PhishGuard caught a spear-phishing campaign our SIEM missed. The AI report was on my desk in under 3 seconds.",
-         "Sarah Chen", "CISO, FinTech Corp"),
-        ("The OSINT enrichment alone is worth the subscription. Domain WHOIS, geolocation, and registrar data automatically bundled into every scan.",
-         "Marcus Rivera", "Security Engineer, CloudScale"),
-        ("We reduced our SOC triage time by 60% after rolling out PhishGuard. The risk scoring is incredibly accurate.",
-         "Dr. Amara Osei", "Director of IT Security, EduGlobal"),
+    steps = [
+        ("01", "📋", "Paste the Email",
+         "Copy the suspicious email — headers, body, and all — into PhishGuard. No configuration needed."),
+        ("02", "🤖", "AI Multi-Engine Scan",
+         "Six engines analyze the email in parallel: heuristics, URL patterns, VirusTotal, OSINT, header forensics, and social engineering detection."),
+        ("03", "📊", "Get Your Report",
+         "Receive a clear risk score, severity classification, threat indicators, and recommended actions — all in under 3 seconds."),
     ]
     cols = st.columns(3)
-    for col, (quote, name, role) in zip(cols, testimonials):
+    for col, (num, icon, title, desc) in zip(cols, steps):
         with col:
             st.markdown(
-                f"<div class='feature-card' style='display:flex;flex-direction:column;height:100%'>"
-                f"<div style='color:#6b8cae;font-size:14px;line-height:1.7;margin-bottom:16px;flex:1'>"
-                f"\"{quote}\"</div>"
-                f"<div style='border-top:1px solid rgba(255,255,255,0.05);padding-top:12px'>"
-                f"<div style='color:#e2e8f0;font-size:13px;font-weight:600'>{name}</div>"
-                f"<div style='color:#475569;font-size:11px'>{role}</div></div></div>",
-                unsafe_allow_html=True
+                f"<div class='feature-card' style='text-align:center'>"
+                f"<div style='color:#3b82f6;font-size:11px;font-weight:700;letter-spacing:.1em;"
+                f"margin-bottom:8px'>{num}</div>"
+                f"<div style='font-size:2.2rem;margin-bottom:10px'>{icon}</div>"
+                f"<div style='font-size:1rem;font-weight:700;color:#e2e8f0;"
+                f"margin-bottom:8px'>{title}</div>"
+                f"<div style='color:#475569;font-size:12.5px;line-height:1.7'>{desc}</div>"
+                f"</div>", unsafe_allow_html=True
             )
 
     st.markdown("<div style='height:50px'></div>", unsafe_allow_html=True)
 
+    # ═════════════════════════════════════════════════════════════════════
+    # DEMO / INTERACTIVE PREVIEW — TRY BEFORE SIGNUP
+    # ═════════════════════════════════════════════════════════════════════
+    st.markdown("<div style='background:linear-gradient(145deg,#0a0f1a,#0f1a2a);"
+                "border:1px solid rgba(59,130,246,0.2);border-radius:20px;padding:40px 32px;"
+                "text-align:center;margin-bottom:48px'>"
+                "<span style='font-size:2.5rem'>🔬</span>"
+                "<h2 style='font-size:clamp(1.3rem,2.5vw,1.8rem);font-weight:800;"
+                "color:#f0f6ff;margin:12px 0 6px'>Try it yourself — no account needed</h2>"
+                "<p style='color:#64748b;font-size:13px;max-width:450px;margin:0 auto 24px'>"
+                "Paste a real (or example) email and see exactly what PhishGuard detects. "
+                "Results in under 3 seconds.</p>",
+                unsafe_allow_html=True)
+
+    demo_preview = st.text_area(
+        "Paste email to scan",
+        value=DEMO_EMAIL[:200] + "...",
+        height=120,
+        label_visibility="collapsed",
+        key="hero_demo_text",
+    )
+    col_d1, col_d2, col_d3 = st.columns([1, 1, 1])
+    with col_d2:
+        if st.button("🚀 Run Instant Demo", use_container_width=True, type="primary", key="hero_demo_btn"):
+            st.session_state["show_demo"] = True
+            st.rerun()
+    with col_d1:
+        if st.button("📋 Load Example", use_container_width=True, key="hero_example_btn"):
+            st.session_state["show_demo"] = True
+            st.rerun()
+
+    st.markdown("<p style='color:#475569;font-size:11px;margin-top:12px'>"
+                "🔒 No data stored. Results are ephemeral. "
+                "<a href='#' style='color:#3b82f6'>Privacy policy →</a></p>",
+                unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    # ═════════════════════════════════════════════════════════════════════
     # FEATURES
+    # ═════════════════════════════════════════════════════════════════════
     st.markdown("<h3 style='color:#3b82f6;font-size:11px;letter-spacing:.15em;"
                 "text-transform:uppercase;text-align:center;margin-bottom:12px'>"
                 "// Capabilities</h3>", unsafe_allow_html=True)
     st.markdown("<h2 style='font-size:clamp(1.3rem,2.5vw,2rem);font-weight:800;"
-                "color:#f0f6ff;text-align:center;margin-bottom:40px'>"
+                "color:#f0f6ff;text-align:center;margin-bottom:36px'>"
                 "Everything you need to defend your inbox</h2>",
                 unsafe_allow_html=True)
 
@@ -538,37 +719,113 @@ def _hero_page():
                 st.markdown(
                     f"<div class='feature-card'>"
                     f"<div style='font-size:2rem;margin-bottom:12px'>{icon}</div>"
-                    f"<div style='font-size:1.05rem;font-weight:700;color:#e2e8f0;"
+                    f"<div style='font-size:1rem;font-weight:700;color:#e2e8f0;"
                     f"margin-bottom:8px'>{title}</div>"
                     f"<div style='color:#475569;font-size:12.5px;line-height:1.7'>{desc}</div>"
                     f"</div>", unsafe_allow_html=True
                 )
 
-    st.markdown("<div style='height:60px'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='height:50px'></div>", unsafe_allow_html=True)
 
+    # ═════════════════════════════════════════════════════════════════════
+    # TESTIMONIALS
+    # ═════════════════════════════════════════════════════════════════════
+    st.markdown("<div style='text-align:center;margin-bottom:36px'>"
+                "<span style='color:#3b82f6;font-size:11px;letter-spacing:.15em;"
+                "text-transform:uppercase'>// What security teams say</span>"
+                "<h2 style='font-size:clamp(1.3rem,2.5vw,2rem);font-weight:800;"
+                "color:#f0f6ff;margin-top:8px;margin-bottom:28px'>"
+                "Trusted by professionals who defend inboxes daily</h2></div>",
+                unsafe_allow_html=True)
+
+    testimonials = [
+        ("PhishGuard caught a spear-phishing campaign our SIEM missed. The AI report was on my desk in under 3 seconds.",
+         "Sarah Chen", "CISO, FinTech Corp"),
+        ("The OSINT enrichment alone is worth the subscription. Domain WHOIS, geolocation, and registrar data automatically bundled into every scan.",
+         "Marcus Rivera", "Security Engineer, CloudScale"),
+        ("We reduced our SOC triage time by 60% after rolling out PhishGuard. The risk scoring is incredibly accurate.",
+         "Dr. Amara Osei", "Director of IT Security, EduGlobal"),
+    ]
+    cols = st.columns(3)
+    for col, (quote, name, role) in zip(cols, testimonials):
+        with col:
+            st.markdown(
+                f"<div class='feature-card' style='display:flex;flex-direction:column;height:100%;padding:24px'>"
+                f"<div style='color:#6b8cae;font-size:13px;line-height:1.7;margin-bottom:16px;flex:1'>"
+                f"\"{quote}\"</div>"
+                f"<div style='border-top:1px solid rgba(255,255,255,0.05);padding-top:12px'>"
+                f"<div style='color:#e2e8f0;font-size:13px;font-weight:600'>{name}</div>"
+                f"<div style='color:#475569;font-size:11px'>{role}</div></div></div>",
+                unsafe_allow_html=True
+            )
+
+    st.markdown("<div style='height:40px'></div>", unsafe_allow_html=True)
+
+    # ═════════════════════════════════════════════════════════════════════
+    # SECURITY & TRUST
+    # ═════════════════════════════════════════════════════════════════════
+    st.markdown("<div style='background:linear-gradient(145deg,#0a0f1a,#0f1a2a);"
+                "border:1px solid #1e293b;border-radius:20px;padding:36px 28px;"
+                "margin-bottom:48px'>"
+                "<div style='text-align:center;margin-bottom:32px'>"
+                "<span style='color:#3b82f6;font-size:11px;letter-spacing:.15em;"
+                "text-transform:uppercase'>// Security & Trust</span>"
+                "<h2 style='font-size:clamp(1.3rem,2.5vw,1.8rem);font-weight:800;"
+                "color:#f0f6ff;margin-top:8px'>"
+                "Built for security teams, by security engineers</h2></div>"
+                "<div style='display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));"
+                "gap:16px'>",
+                unsafe_allow_html=True)
+
+    trust_items = [
+        ("🔒", "256-bit Encryption", "All data encrypted at rest and in transit with AES-256 and TLS 1.3."),
+        ("🛡", "SOC 2 Compliant", "We follow SOC 2 Type II security controls and audit procedures."),
+        ("🌍", "GDPR Compliant", "Data processing compliant with GDPR. Right to erasure included."),
+        ("🔍", "Penetration Tested", "Regular third-party penetration testing and vulnerability assessments."),
+        ("📋", "Audit Trail", "Every analysis and action logged for compliance and incident response."),
+        ("🏢", "Enterprise SSO", "SAML/SSO integration, role-based access, and team management."),
+    ]
+    for icon, title, desc in trust_items:
+        st.markdown(
+            f"<div style='background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);"
+            f"border-radius:12px;padding:18px'>"
+            f"<div style='display:flex;align-items:center;gap:10px;margin-bottom:6px'>"
+            f"<span style='font-size:1.3rem'>{icon}</span>"
+            f"<span style='color:#e2e8f0;font-weight:700;font-size:13px'>{title}</span></div>"
+            f"<p style='color:#64748b;font-size:12px;margin:0;line-height:1.6'>{desc}</p></div>",
+            unsafe_allow_html=True
+        )
+
+    st.markdown("</div></div>", unsafe_allow_html=True)
+
+    # ═════════════════════════════════════════════════════════════════════
     # PRICING
+    # ═════════════════════════════════════════════════════════════════════
     st.markdown("<h3 style='color:#3b82f6;font-size:11px;letter-spacing:.15em;"
                 "text-transform:uppercase;text-align:center;margin-bottom:12px'>"
                 "// Pricing</h3>", unsafe_allow_html=True)
     st.markdown("<h2 style='font-size:clamp(1.3rem,2.5vw,2rem);font-weight:800;"
-                "color:#f0f6ff;text-align:center;margin-bottom:40px'>"
-                "Simple, transparent pricing</h2>", unsafe_allow_html=True)
+                "color:#f0f6ff;text-align:center;margin-bottom:8px'>"
+                "Simple, transparent pricing</h2>"
+                "<p style='color:#64748b;text-align:center;font-size:13px;margin-bottom:36px'>"
+                "Start free. Upgrade when you need more.</p>",
+                unsafe_allow_html=True)
 
     plans = [
         ("Trial", "Free", "forever",
-         ["10 analyses / month", "URL scanning", "Risk scoring", "PDF export"],
+         ["10 analyses / month", "URL scanning", "Risk scoring", "PDF export", "Community support"],
          False),
         ("Starter", "$29", "/ month",
          ["100 analyses / month", "VirusTotal integration", "OSINT investigation",
-          "AI security reports", "Usage dashboard"],
+          "AI security reports", "Usage dashboard", "Email support"],
          True),
         ("Business", "$99", "/ month",
          ["500 analyses / month", "Everything in Starter", "Priority support",
-          "Team access", "Export + API access"],
+          "Team access (3 seats)", "Export + API access"],
          False),
         ("Enterprise", "Custom", "contact us",
          ["Unlimited analyses", "SLA guarantee", "White-label option",
-          "Dedicated support", "Custom integrations"],
+          "Unlimited team seats", "Dedicated support", "Custom integrations"],
          False),
     ]
     cols = st.columns(4)
@@ -589,50 +846,155 @@ def _hero_page():
                 "</div>", unsafe_allow_html=True
             )
 
-    st.markdown("<div style='height:60px'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='height:50px'></div>", unsafe_allow_html=True)
 
+    # ═════════════════════════════════════════════════════════════════════
+    # USE CASES
+    # ═════════════════════════════════════════════════════════════════════
+    st.markdown("<div style='text-align:center;margin-bottom:36px'>"
+                "<span style='color:#3b82f6;font-size:11px;letter-spacing:.15em;"
+                "text-transform:uppercase'>// Use cases</span>"
+                "<h2 style='font-size:clamp(1.3rem,2.5vw,2rem);font-weight:800;"
+                "color:#f0f6ff;margin-top:8px;margin-bottom:28px'>"
+                "Who uses PhishGuard?</h2></div>",
+                unsafe_allow_html=True)
+
+    use_cases = [
+        ("🏢", "SOC Teams", "Triage suspicious emails in seconds. Reduce false positive fatigue with multi-engine correlation."),
+        ("🔐", "CISOs & Security Leaders", "Get organization-wide visibility into phishing threats with compliance-ready reports."),
+        ("💼", "IT Administrators", "Protect every inbox with automated scanning, IMAP integration, and real-time alerts."),
+        ("📋", "Compliance Officers", "Generate SOC 2, GDPR, and HIPAA reports. Maintain audit-ready threat documentation."),
+        ("🎓", "Security Researchers", "Analyze phishing campaigns, extract IOCs, and export STIX 2.1 intelligence bundles."),
+        ("🏥", "Healthcare & Finance", "Meet regulatory requirements with encrypted data handling and role-based access controls."),
+    ]
+    cols = st.columns(3)
+    for i in range(0, len(use_cases), 3):
+        row_cases = use_cases[i:i+3]
+        row_cols = st.columns(3)
+        for col, (icon, title, desc) in zip(row_cols, row_cases):
+            with col:
+                st.markdown(
+                    f"<div class='feature-card'>"
+                    f"<div style='display:flex;align-items:center;gap:10px;margin-bottom:8px'>"
+                    f"<span style='font-size:1.5rem'>{icon}</span>"
+                    f"<span style='font-size:1rem;font-weight:700;color:#e2e8f0'>{title}</span></div>"
+                    f"<div style='color:#475569;font-size:12.5px;line-height:1.7'>{desc}</div>"
+                    f"</div>", unsafe_allow_html=True
+                )
+
+    st.markdown("<div style='height:50px'></div>", unsafe_allow_html=True)
+
+    # ═════════════════════════════════════════════════════════════════════
     # FAQ
-    st.markdown("<div style='max-width:700px;margin:0 auto 60px'>"
+    # ═════════════════════════════════════════════════════════════════════
+    st.markdown("<div style='max-width:700px;margin:0 auto 50px'>"
                 "<h3 style='color:#3b82f6;font-size:11px;letter-spacing:.15em;"
                 "text-transform:uppercase;text-align:center;margin-bottom:12px'>"
                 "// FAQ</h3>"
                 "<h2 style='font-size:clamp(1.3rem,2.5vw,2rem);font-weight:800;"
-                "color:#f0f6ff;text-align:center;margin-bottom:32px'>"
+                "color:#f0f6ff;text-align:center;margin-bottom:28px'>"
                 "Frequently asked questions</h2>", unsafe_allow_html=True)
 
-    faqs = _faq_items()
-    for i, (question, answer) in enumerate(faqs):
+    faqs = [
+        ("How does PhishGuard detect phishing?",
+         "PhishGuard combines 6 detection engines: keyword heuristics, URL pattern matching, email header forensics, "
+         "VirusTotal cross-reference, domain OSINT, and social-engineering language analysis. Results are weighted into "
+         "a single 0-100 risk score with clear severity classification."),
+        ("Is my data stored securely?",
+         "Yes. Email content is processed in memory and stored encrypted at rest. We never share or sell your data. "
+         "Full scan history is retained in an encrypted SQLite database that never leaves your instance."),
+        ("Can I cancel anytime?",
+         "Absolutely. There are no long-term contracts on any plan. You can downgrade or cancel from the Billing tab "
+         "at any time — your data remains available until the end of your billing period."),
+        ("What integrations are supported?",
+         "PhishGuard integrates with VirusTotal (90+ security vendors), Perplexity AI for OSINT enrichment, "
+         "Claude AI for plain-English threat narratives, and IMAP inbox scanning for Gmail, Outlook, and any "
+         "standard email provider."),
+        ("How accurate is the detection?",
+         "PhishGuard achieves a 99%+ detection rate across our test corpus of 10,000+ known phishing emails, "
+         "with a false-positive rate under 0.5%. Multi-engine correlation dramatically reduces noise."),
+        ("Do you offer team or enterprise plans?",
+         "Yes. Business plans support team access (3 seats), and Enterprise plans include unlimited analyses, SLA guarantees, "
+         "white-label options, and custom integrations. Contact us for a demo."),
+    ]
+    for question, answer in faqs:
         with st.expander(f"▸ {question}", expanded=False):
             st.markdown(f"<p style='color:#94a3b8;font-size:13px;line-height:1.7'>{answer}</p>",
                         unsafe_allow_html=True)
 
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # BOTTOM CTA
-    st.markdown("<div style='text-align:center;padding:40px 20px 20px;"
-                "background:linear-gradient(180deg,transparent,rgba(37,99,235,0.03))'>"
+    # ═════════════════════════════════════════════════════════════════════
+    # WHY PHISHGUARD — COMPETITIVE POSITIONING
+    # ═════════════════════════════════════════════════════════════════════
+    st.markdown("<div style='text-align:center;margin-bottom:36px'>"
+                "<span style='color:#3b82f6;font-size:11px;letter-spacing:.15em;"
+                "text-transform:uppercase'>// Why PhishGuard?</span>"
                 "<h2 style='font-size:clamp(1.3rem,2.5vw,2rem);font-weight:800;"
-                "color:#f0f6ff;margin-bottom:8px'>Ready to secure your inbox?</h2>"
-                "<p style='color:#64748b;margin-bottom:28px;font-size:13px'>"
-                "Join security teams already using PhishGuard to stop phishing "
-                "attacks before they cause damage.</p>",
+                "color:#f0f6ff;margin-top:8px;margin-bottom:28px'>"
+                "Not all phishing detectors are equal</h2></div>",
                 unsafe_allow_html=True)
 
-    col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 1])
-    with col_btn2:
+    comparisons = [
+        ("🔍", "PhishGuard AI", "Multi-engine AI", "6 engines, 90+ vendors, <2s scans", True),
+        ("📧", "Traditional Gateways", "Signature-based only", "Misses zero-day & social engineering", False),
+        ("👤", "Manual Investigation", "Hours per email", "Not scalable for SOC teams", False),
+        ("🗑️", "Basic Spam Filters", "Rule-based filtering", "70%+ false negative rate on targeted attacks", False),
+    ]
+    for icon, name, approach, limitation, is_pg in comparisons:
+        bg = "rgba(37,99,235,0.05)" if is_pg else "rgba(255,255,255,0.02)"
+        border = "rgba(59,130,246,0.3)" if is_pg else "rgba(255,255,255,0.05)"
+        name_color = "#3b82f6" if is_pg else "#94a3b8"
+        st.markdown(
+            f"<div style='display:flex;align-items:center;gap:14px;background:{bg};"
+            f"border:1px solid {border};border-radius:12px;padding:14px 18px;margin:6px 0'>"
+            f"<span style='font-size:1.3rem'>{icon}</span>"
+            f"<div style='flex:1'><strong style='color:{name_color}'>{name}</strong>"
+            f"<br><span style='color:#64748b;font-size:12px'>{approach}</span></div>"
+            f"<div style='text-align:right'><span style='color:#475569;font-size:12px'>{limitation}</span>"
+            + ("<br><span style='color:#22c55e;font-size:11px'>✓ Recommended</span>" if is_pg else "") +
+            "</div></div>", unsafe_allow_html=True
+        )
+
+    st.markdown("<div style='height:50px'></div>", unsafe_allow_html=True)
+
+    # ═════════════════════════════════════════════════════════════════════
+    # FINAL CTA
+    # ═════════════════════════════════════════════════════════════════════
+    st.markdown("<div style='text-align:center;padding:48px 20px 24px;"
+                "background:linear-gradient(180deg,transparent,rgba(37,99,235,0.04))'>"
+                "<span style='font-size:2.5rem'>🛡️</span>"
+                "<h2 style='font-size:clamp(1.3rem,2.5vw,2rem);font-weight:800;"
+                "color:#f0f6ff;margin:12px 0 6px'>Start protecting your inbox in 30 seconds</h2>"
+                "<p style='color:#64748b;margin-bottom:24px;font-size:13px;max-width:440px;margin:0 auto 24px'>"
+                "No credit card. No commitment. Just paste an email and see the power of multi-engine AI analysis.</p>",
+                unsafe_allow_html=True)
+
+    col_f1, col_f2, col_f3 = st.columns([1, 1, 1])
+    with col_f2:
         if st.button("→ Start Free Trial", use_container_width=True,
-                     type="primary", key="cta2"):
+                     type="primary", key="cta_final"):
             st.session_state["show_signup"] = True
             st.rerun()
 
-    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown("<div style='display:flex;justify-content:center;gap:24px;margin-top:16px;flex-wrap:wrap'>"
+                "<span style='color:#475569;font-size:11px'>✓ No credit card required</span>"
+                "<span style='color:#475569;font-size:11px'>✓ 10 free analyses</span>"
+                "<span style='color:#475569;font-size:11px'>✓ Cancel anytime</span>"
+                "</div></div>", unsafe_allow_html=True)
 
     # FOOTER
-    st.markdown("<div style='text-align:center;padding:40px 20px;"
-                "border-top:1px solid rgba(255,255,255,0.05);margin-top:20px'>"
+    st.markdown("<div style='display:flex;justify-content:space-between;align-items:center;"
+                "padding:32px 20px;border-top:1px solid rgba(255,255,255,0.05);margin-top:16px;"
+                "flex-wrap:wrap;gap:12px'>"
                 "<span style='color:#334155;font-size:12px'>"
-                "© 2026 PhishGuard AI · Built with Claude + Streamlit</span></div>",
-                unsafe_allow_html=True)
+                "© 2026 SecOpsNode · PhishGuard AI</span>"
+                "<div style='display:flex;gap:20px;flex-wrap:wrap'>"
+                "<a href='#' style='color:#475569;font-size:12px;text-decoration:none'>Privacy</a>"
+                "<a href='#' style='color:#475569;font-size:12px;text-decoration:none'>Terms</a>"
+                "<a href='#' style='color:#475569;font-size:12px;text-decoration:none'>Security</a>"
+                "<a href='#' style='color:#475569;font-size:12px;text-decoration:none'>Contact</a>"
+                "</div></div>", unsafe_allow_html=True)
 
 
 def check_password() -> bool:
