@@ -236,56 +236,10 @@ def _cached_all_analyses(limit: int = 100):
     return _ga(limit)
 
 theme = st.session_state.get("theme", "dark")
-bg_main = "#0d1117" if theme == "dark" else "#ffffff"
-bg_card = "#111827" if theme == "dark" else "#f3f4f6"
-text_main = "#e2e8f0" if theme == "dark" else "#1f2937"
-text_sec  = "#94a3b8" if theme == "dark" else "#6b7280"
-border_c  = "#1e3a5f" if theme == "dark" else "#d1d5db"
 from src.ui_theme import apply_theme
 apply_theme(theme)
-st.markdown("""
-<style>
-.block-container { padding-top: 1.5rem; }
-.stApp { background-color: """ + bg_main + """; }
-.tag {
-    display: inline-block; background: #1e3a5f; color: #60a5fa;
-    border-radius: 6px; padding: 3px 10px; margin: 3px;
-    font-size: 13px; font-family: monospace;
-}
-.url-box {
-    background: #1a0a0a; border: 1px solid #ff4444; border-radius: 8px;
-    padding: 10px 14px; font-family: monospace; font-size: 13px;
-    color: #ff8888; margin: 5px 0;
-}
-.safe-url-box {
-    background: #0a1a0a; border: 1px solid #44aa44; border-radius: 8px;
-    padding: 10px 14px; font-family: monospace; font-size: 13px;
-    color: #88cc88; margin: 5px 0;
-}
-.section-title {
-    color: #60a5fa; font-size: 1.1rem; font-weight: 700;
-    margin: 18px 0 8px 0; border-left: 3px solid #60a5fa; padding-left: 10px;
-}
-.stat-card {
-    background: #111827; border: 1px solid #1e3a5f;
-    border-radius: 12px; padding: 20px; text-align: center;
-}
-.quota-bar-bg { background: #1e3a5f; border-radius: 6px; height: 10px; margin: 6px 0; }
-.quota-bar-fill { border-radius: 6px; height: 10px; }
-.quarantine-badge { display:inline-block; background:#ff4444; color:#fff; border-radius:100px;
-    padding:2px 10px; font-size:10px; font-weight:700; letter-spacing:.08em; margin-left:6px; }
-@media (max-width: 768px) {
-    .block-container { padding: 1rem 0.5rem !important; }
-    .auth-card { padding: 24px 16px !important; }
-    h1 { font-size: 1.8rem !important; }
-    h2 { font-size: 1.3rem !important; }
-    div[data-testid="column"] { min-width: 100% !important; }
-    .stTabs [data-baseweb="tab-list"] { gap: 0 !important; overflow-x: auto !important; }
-    .stTabs [data-baseweb="tab"] { font-size: 11px !important; padding: 4px 8px !important; }
-    .stat-card { padding: 12px 8px !important; }
-}
-</style>
-""", unsafe_allow_html=True)
+from src.ui_design_system import inject_design_system, card, stat_card, badge, section_title, url_box
+inject_design_system(theme)
 
 init_db()
 log_config_status()
@@ -333,15 +287,16 @@ if last_active:
 st.session_state["last_active"] = now
 
 # ── Header ───────────────────────────────────────────────────────────────────
-col_title, col_quota, col_user = st.columns([3, 2, 1])
+col_title, col_quota, col_user = st.columns([2, 2, 1])
 
 with col_title:
     st.markdown(
-        "<h1 style='color:#60a5fa;font-size:2rem;margin-bottom:0'>🛡 PhishGuard AI</h1>",
-        unsafe_allow_html=True
-    )
-    st.markdown(
-        "<p style='color:#94a3b8;margin-top:2px'>AI-Powered Phishing & Threat Detection</p>",
+        f"<div style='display:flex;align-items:center;gap:10px;margin-top:6px'>"
+        f"<span style='font-size:1.8rem'>🛡</span>"
+        f"<div><div style='font-size:1.4rem;font-weight:800;color:var(--text-primary,#f1f5f9);"
+        f"letter-spacing:-0.03em'>PhishGuard AI</div>"
+        f"<div style='font-size:0.75rem;color:var(--text-secondary,#94a3b8);margin-top:-2px'>"
+        f"AI-Powered Phishing & Threat Detection</div></div></div>",
         unsafe_allow_html=True
     )
 
@@ -349,193 +304,49 @@ with col_quota:
     q = check_quota(username, plan)
     plan_label = PLANS.get(plan, PLANS["trial"])["label"]
     limit_display = "∞" if plan == "enterprise" else str(q["limit"])
-    bar_color = "#ff4444" if q["pct"] >= 90 else "#ffaa00" if q["pct"] >= 70 else "#60a5fa"
+    bar_color = "#ef4444" if q["pct"] >= 90 else "#f59e0b" if q["pct"] >= 70 else "#3b82f6"
     bar_width = q["pct"] if plan != "enterprise" else 0
-    upgrade_link = ""
-    if plan != "enterprise" and paddle_configured():
-        upgrade_link = "<span style='cursor:pointer;color:#3b82f6;font-size:11px' onclick=''>⬆ Upgrade</span>"
-    quota_html = (
-        "<div style='margin-top:10px;padding:8px 14px;background:#111827;"
-        "border-radius:10px;border:1px solid #1e3a5f'>"
-        "<div style='display:flex;justify-content:space-between;"
-        "font-size:12px;color:#94a3b8;margin-bottom:4px'>"
-        "<span>📊 " + plan_label + " plan " + upgrade_link + "</span>"
-        "<span>" + str(q["usage"]) + " / " + limit_display + " analyses</span>"
-        "</div>"
-        "<div class='quota-bar-bg'>"
-        "<div class='quota-bar-fill' style='width:" + str(bar_width) + "%;background:" + bar_color + "'></div>"
-        "</div></div>"
-    )
-    st.markdown(quota_html, unsafe_allow_html=True)
 
-    # ── Pay-Per-Scan Credit Counter ───────────────────────────────────────
-    if "sandbox_credits" not in st.session_state:
-        st.session_state["sandbox_credits"] = 3
-    credits = st.session_state["sandbox_credits"]
-    credit_pct = min(100, credits)  # visual meter out of 100 max
-    credit_color = "#22c55e" if credits > 20 else "#eab308" if credits > 5 else "#ef4444"
     st.markdown(
-        "<div style='margin-top:8px;padding:10px 14px;background:#111827;"
-        "border-radius:10px;border:1px solid #1e3a5f'>"
-        "<div style='display:flex;justify-content:space-between;font-size:12px;"
-        "color:#94a3b8;margin-bottom:4px'>"
-        "<span>🔬 Deep Sandbox Credits</span>"
-        "<span style='color:" + credit_color + ";font-weight:700'>"
-        + str(credits) + " / 100</span></div>"
-        "<div style='background:#1e3a5f;border-radius:4px;height:5px'>"
-        "<div style='background:" + credit_color + ";border-radius:4px;height:5px;"
-        "width:min(" + str(credit_pct) + "%,100%)'></div></div>"
-        "</div>", unsafe_allow_html=True
+        f"<div style='background:#111827;border:1px solid #1e293b;border-radius:10px;"
+        f"padding:8px 14px;margin-top:6px'>"
+        f"<div style='display:flex;justify-content:space-between;font-size:0.7rem;"
+        f"color:#94a3b8;margin-bottom:4px'>"
+        f"<span style='font-weight:600'>{plan_label}</span>"
+        f"<span>{q['usage']} / {limit_display} scans</span></div>"
+        f"<div class='pg-quota-bg'><div class='pg-quota-fill' "
+        f"style='width:{bar_width}%;background:{bar_color}'></div></div></div>",
+        unsafe_allow_html=True
     )
-    col_cc1, col_cc2 = st.columns(2)
-    with col_cc1:
-        if st.button("💰 Buy 100 Credits ($10)", key="buy_credits", use_container_width=True):
-            st.session_state["show_credit_checkout"] = True
-    with col_cc2:
-        if st.button("🔁 Reset Demo", key="reset_credits", use_container_width=True):
-            st.session_state["sandbox_credits"] = 3
-            st.rerun()
-    if st.session_state.get("show_credit_checkout"):
-        st.info(
-            "🛒 Checkout simulation: 100 Advanced Sandbox Credits for $10. "
-            "In production this would redirect to Stripe/Paddle checkout.",
-            icon="💳"
-        )
-
-    # ── Consumption Metering & Hard Spending Cap ───────────────────────────
-    from src.database import check_scan_quota, get_spending_cap, set_spending_cap
-    quota_status = check_scan_quota(username)
-    cap_status = get_spending_cap(username)
-    st.markdown(
-        "<div style='margin-top:8px;padding:10px 14px;background:#111827;"
-        "border-radius:10px;border:1px solid #1e3a5f'>"
-        "<div style='display:flex;justify-content:space-between;font-size:12px;"
-        "color:#94a3b8;margin-bottom:4px'>"
-        "<span>📊 Monthly Scans</span>"
-        "<span style='font-weight:700'>" + str(quota_status["used"]) + " / "
-        + str(quota_status["limit"]) + "</span></div>"
-        "<div style='background:#1e3a5f;border-radius:4px;height:5px'>"
-        "<div style='background:#60a5fa;border-radius:4px;height:5px;"
-        "width:min(" + str(int(quota_status["used"] / max(quota_status["limit"], 1) * 100)) + "%,100%)'></div></div>"
-        "</div>", unsafe_allow_html=True
-    )
-    if cap_status["paused"]:
-        st.warning("⛔ Spending cap reached — scanning paused. Increase your cap to continue.")
-    st.markdown(
-        "<div style='margin-top:6px;padding:8px 14px;background:#111827;"
-        "border-radius:10px;border:1px solid #1e3a5f'>"
-        "<div style='display:flex;justify-content:space-between;font-size:12px;"
-        "color:#94a3b8;margin-bottom:4px'>"
-        "<span>💵 Hard Spending Cap</span>"
-        "<span>$" + f"{cap_status['current_spend']:.2f}" + " / $"
-        + f"{cap_status['hard_cap_usd']:.0f}" + "</span></div>"
-        "</div>", unsafe_allow_html=True
-    )
-    cap_val = st.slider(
-        "Set monthly cap ($)",
-        min_value=0, max_value=500, value=int(cap_status["hard_cap_usd"]),
-        step=10, key="cap_slider",
-        label_visibility="collapsed",
-    )
-    if cap_val != int(cap_status["hard_cap_usd"]):
-        set_spending_cap(username, float(cap_val))
-        st.rerun()
-
-    if st.button("⬆ Upgrade Plan", key="upgrade_btn", use_container_width=True):
-        st.session_state["show_upgrade"] = True
-        st.rerun()
-
-    # ── Consultant White-Label Controls ────────────────────────────────────
-    tier = plan
-    is_consultant_plan = tier == "consultant"
-    st.markdown("<hr style='border-color:#1e3a5f;margin:12px 0'>", unsafe_allow_html=True)
-    st.markdown("<div style='font-size:13px;color:#94a3b8;margin-bottom:6px'>📄 Report Branding</div>",
-                unsafe_allow_html=True)
-    if is_consultant_plan:
-        uploaded_logo = st.file_uploader(
-            "Upload company logo for PDF reports",
-            type=["png", "jpg", "jpeg", "svg"],
-            key="consultant_logo_upload",
-            label_visibility="collapsed",
-        )
-        if uploaded_logo:
-            import tempfile
-            _tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
-            _tmp.write(uploaded_logo.getvalue())
-            st.session_state["consultant_logo_path"] = _tmp.name
-        wl_checked = st.checkbox("Export as White-Label Report", key="whitelabel_pdf")
-        if wl_checked:
-            st.caption("✅ All PhishGuard/SecOpsNode branding will be stripped")
-    else:
-        st.file_uploader(
-            "Upload company logo for PDF reports",
-            type=["png", "jpg", "jpeg", "svg"],
-            key="consultant_logo_locked",
-            disabled=True,
-            label_visibility="collapsed",
-            help="Available on Consultant Tier ($149/mo)",
-        )
-        st.checkbox(
-            "Export as White-Label Report",
-            key="whitelabel_pdf_locked",
-            disabled=True,
-            help="Available on Consultant Tier ($149/mo)",
-        )
-        st.caption("🔒 <span style='color:#eab308'>Available on Consultant Tier ($149/mo)</span>",
-                   unsafe_allow_html=True)
 
 with col_user:
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # ── Notification Center + Auto-Poll ──────────────────────────────────
-    from src.notifications import unread_count, get_notifications, mark_read, mark_all_read
+    from src.notifications import unread_count
     n_count = unread_count(username)
-    n_badge = f'<span style="background:#ff4444;color:#fff;border-radius:50%;padding:1px 6px;font-size:10px;margin-left:4px">{n_count}</span>' if n_count else ""
+    from src.ui_theme import render_theme_toggle
+
     st.markdown(
-        f'<div style="text-align:right;font-size:13px;color:#94a3b8">'
-        f'🔔{n_badge} 👤 {username}</div>',
-        unsafe_allow_html=True,
+        f"<div style='display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:6px'>"
+        f"<span style='font-size:0.8rem;color:#64748b'>👤 {username}</span>"
+        + (
+            f"<span style='background:#ef4444;color:#fff;border-radius:100px;"
+            f"padding:1px 7px;font-size:0.65rem;font-weight:700'>{n_count}</span>"
+            if n_count else ""
+        ) +
+        f"</div>",
+        unsafe_allow_html=True
     )
 
-    # Auto-poll: rerun every 30 seconds for live notification count
-    poll_interval = st.session_state.get("notification_check", 0)
-    if poll_interval >= 30:
-        st.session_state["notification_check"] = 0
-        st.rerun()
-    st.session_state["notification_check"] = poll_interval + 1
-    st.caption(f"Next check in {30 - poll_interval}s")
+    col_nav1, col_nav2, col_nav3 = st.columns(3)
+    with col_nav1:
+        if st.button("⬆ Upgrade", key="upgrade_btn_header", use_container_width=True):
+            st.session_state["show_upgrade"] = True
+            st.rerun()
+    with col_nav2:
+        render_theme_toggle()
+    with col_nav3:
+        if st.button("🚪 Logout", key="logout_btn", use_container_width=True):
+            logout()
 
-    if n_count > 0:
-        with st.expander(f"🔔 {n_count} Notification(s)", expanded=False):
-            for n in get_notifications(username, limit=10):
-                colors = {"critical": "#ff4444", "warning": "#ff8800", "success": "#22c55e", "info": "#60a5fa"}
-                c = colors.get(n["severity"], "#60a5fa")
-                read_marker = "" if not n["is_read"] else "opacity:0.5"
-                st.markdown(
-                    f"<div style='border-left:3px solid {c};padding:4px 8px;margin:4px 0;"
-                    f"background:#111827;border-radius:6px;font-size:12px;{read_marker}'>"
-                    f"<span style='color:{c};font-weight:700'>{n['severity'].upper()}</span> "
-                    f"<span style='color:#e2e8f0;font-weight:600'>{n['title']}</span> "
-                    f"<span style='color:#94a3b8'>{n['message'][:80]}</span>"
-                    f"<span style='color:#475569;display:block;font-size:10px'>{n['created_at'][:19]}</span>"
-                    f"</div>",
-                    unsafe_allow_html=True,
-                )
-                if st.button("✓ Mark read", key=f"notif_read_{n['id']}", use_container_width=True):
-                    mark_read(n["id"])
-                    st.rerun()
-            if st.button("✓ Mark All Read", key="mark_all_read", use_container_width=True):
-                mark_all_read(username)
-                st.rerun()
-
-    # ── Theme Toggle ─────────────────────────────────────────────────────
-    from src.ui_theme import render_theme_toggle
-    render_theme_toggle()
-
-    if st.button("Logout", use_container_width=True):
-        logout()
-
-    # ── Language Selector ─────────────────────────────────────────────────
     lang = st.session_state.get("lang", "en")
     selected_lang = st.selectbox(
         "Language", list(SUPPORTED_LANGUAGES.keys()),
@@ -1239,71 +1050,51 @@ with tab1:
         _restricted_blur = is_restricted
 
         st.divider()
-        quarantine_badge = ""
-        q_key = f"quarantine_threshold_{username}"
-        q_thresh = st.session_state.get(q_key, 70)
-        if results["risk_score"] >= q_thresh and results.get("severity") in ("HIGH", "CRITICAL"):
-            quarantine_badge = " <span class='quarantine-badge'>🛡 QUARANTINED</span>"
-        st.markdown(f"## 📊 Analysis Results{quarantine_badge}", unsafe_allow_html=True)
 
         score    = results["risk_score"]
         severity = results["severity"]
         color    = results["severity_color"]
 
-        col_gauge, col_m1, col_m2, col_m3, col_m4 = st.columns([1.2, 1, 1, 1, 1])
-        with col_gauge:
-            lang_badges = ""
-            lang_map = {"EN": {"label": "EN", "color": "#3b82f6"}, "FR": {"label": "FR", "color": "#22c55e"}, "AR": {"label": "AR", "color": "#f59e0b"}}
-            for lc in results.get("languages_detected", ["EN"]):
-                info = lang_map.get(lc, {"label": lc, "color": "#94a3b8"})
-                lang_badges += f"<span style='background:{info['color']}20;color:{info['color']};border:1px solid {info['color']}44;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600;margin-left:4px'>{info['label']}</span>"
-            fig = go.Figure(go.Indicator(
-                mode="gauge+number", value=score,
-                domain={"x": [0, 1], "y": [0, 1]},
-                title={"text": f"<b>{severity}</b> {lang_badges}", "font": {"color": color, "size": 16}},
-                gauge={
-                    "axis": {"range": [0, 100], "tickcolor": "#94a3b8"},
-                    "bar":  {"color": color},
-                    "bgcolor": "#111827",
-                    "steps": [
-                        {"range": [0,  25], "color": "#0a2a0a"},
-                        {"range": [25, 50], "color": "#2a2a0a"},
-                        {"range": [50, 75], "color": "#2a1a0a"},
-                        {"range": [75,100], "color": "#2a0a0a"},
-                    ],
-                    "threshold": {
-                        "line": {"color": color, "width": 3},
-                        "thickness": 0.75, "value": score
-                    },
-                },
-                number={"font": {"color": color, "size": 48}}
-            ))
-            fig.update_layout(
-                height=220, margin=dict(t=40, b=10, l=20, r=20),
-                paper_bgcolor="rgba(0,0,0,0)", font_color="#e2e8f0"
-            )
-            st.plotly_chart(fig, use_container_width=True)
+        # ── Executive Summary ──────────────────────────────────────────────────
+        q_key = f"quarantine_threshold_{username}"
+        q_thresh = st.session_state.get(q_key, 70)
+        is_quarantined = results["risk_score"] >= q_thresh and results.get("severity") in ("HIGH", "CRITICAL")
+        sev_icon = {"CRITICAL":"🔴","HIGH":"🟠","MEDIUM":"🟡","LOW":"🟢","SAFE":"🟢"}.get(severity, "⚪")
+        sev_label = {"CRITICAL":"Critical Threat","HIGH":"High Risk","MEDIUM":"Suspicious","LOW":"Low Risk","SAFE":"Safe"}.get(severity, severity)
 
-        with col_m1: st.metric("🔗 URLs Found",      results["url_count"])
-        with col_m2: st.metric("🚨 Suspicious URLs", results["suspicious_url_count"])
-        with col_m3: st.metric("🎯 Keyword Hits",    results["total_keyword_hits"])
-        # ── AI-Author Probability (Perplexity Analyzer) ─────────────────────
-        _perplex = st.session_state.get("perplexity_result", {})
-        _ai_prob = _perplex.get("ai_probability", 0)
-        _pcolor = "#ff4444" if _ai_prob >= 70 else "#ffaa00" if _ai_prob >= 40 else "#44aa44"
-        with col_m4:
-            st.markdown(
-                f"<div style='background:#111827;border:1px solid #1e3a5f;border-radius:10px;"
-                f"padding:12px 16px;text-align:center'>"
-                f"<div style='color:#64748b;font-size:13px;margin-bottom:4px'>🤖 AI-Author</div>"
-                f"<div style='font-size:1.6rem;font-weight:700;color:{_pcolor}'>{_ai_prob}%</div>"
-                f"<div style='color:#475569;font-size:10px'>{_perplex.get('summary','')[:40]}</div>"
-                f"</div>",
-                unsafe_allow_html=True,
-            )
+        st.markdown(
+            f"<div style='display:flex;align-items:center;justify-content:space-between;"
+            f"background:#111827;border:1px solid #1e293b;border-radius:16px;padding:20px 24px;margin-bottom:16px'>"
+            f"<div style='display:flex;align-items:center;gap:16px'>"
+            f"<span style='font-size:2.5rem'>{sev_icon}</span>"
+            f"<div><div style='font-size:1.2rem;font-weight:700;color:{color}'>{sev_label}</div>"
+            f"<div style='font-size:0.8rem;color:#64748b;margin-top:2px'>Risk Score</div></div></div>"
+            f"<div style='text-align:right'>"
+            f"<div style='font-size:2.5rem;font-weight:800;color:{color};letter-spacing:-0.03em'>{score}<span style='font-size:1rem;color:#64748b'>/100</span></div>"
+            + (f"<span class='pg-badge pg-badge-critical' style='margin-top:4px'>🛡 Quarantined</span>" if is_quarantined else "") +
+            f"</div></div>",
+            unsafe_allow_html=True
+        )
 
         # ── Deep Analysis: Blur/Section-Cutoff for restricted tiers ────────
         _restricted_blur = is_restricted
+        # ── Threat Overview Metrics ───────────────────────────────────────────
+        st.markdown(section_title("Threat Overview"), unsafe_allow_html=True)
+        col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+        with col_m1:
+            st.markdown(stat_card(str(results["url_count"]), "URLs Found"), unsafe_allow_html=True)
+        with col_m2:
+            sc = results["suspicious_url_count"]
+            sc_color = "#ef4444" if sc > 0 else "#22c55e"
+            st.markdown(stat_card(str(sc), "Suspicious URLs", sc_color), unsafe_allow_html=True)
+        with col_m3:
+            st.markdown(stat_card(str(results["total_keyword_hits"]), "Keyword Hits"), unsafe_allow_html=True)
+        with col_m4:
+            _perplex = st.session_state.get("perplexity_result", {})
+            _ai_prob = _perplex.get("ai_probability", 0)
+            _pcolor = "#ef4444" if _ai_prob >= 70 else "#f59e0b" if _ai_prob >= 40 else "#22c55e"
+            st.markdown(stat_card(f"{_ai_prob}%", "AI-Author Prob.", _pcolor), unsafe_allow_html=True)
+
         if _restricted_blur:
             st.markdown(
                 "<div style='position:relative;overflow:hidden'>"
@@ -1311,381 +1102,223 @@ with tab1:
                 unsafe_allow_html=True,
             )
 
-        # ── Phishing DNA / Known Campaign Alert ─────────────────────────────
+        # ── Phishing DNA Detection ──────────────────────────────────────────
         _dna_known = st.session_state.get("dna_known", False)
         _dna_match = st.session_state.get("dna_match")
         if _dna_known and _dna_match:
             _sim_pct = round(_dna_match["similarity"] * 100, 1)
             st.markdown(
-                f"<div style='background:#2a0a0a;border:1px solid #ff4444;border-radius:10px;"
-                f"padding:12px 18px;margin:10px 0;display:flex;align-items:center;gap:12px'>"
+                f"<div class='pg-card-danger' style='display:flex;align-items:center;gap:12px;margin:12px 0'>"
                 f"<span style='font-size:1.5rem'>🧬</span>"
-                f"<div><strong style='color:#ff4444'>Known Phishing Campaign Variant Detected</strong><br>"
+                f"<div><strong style='color:#ef4444'>Known Phishing Campaign Variant Detected</strong><br>"
                 f"<span style='color:#94a3b8;font-size:13px'>"
-                f"{_sim_pct}% signature match with a previously flagged phishing campaign. "
-                f"Preview: <code style='color:#60a5fa'>{_dna_match['match'].get('preview','')[:80]}</code></span></div>"
+                f"{_sim_pct}% signature match — <code style='color:#60a5fa'>{_dna_match['match'].get('preview','')[:80]}</code></span></div>"
                 f"</div>",
                 unsafe_allow_html=True,
             )
 
-        # ── AitM & OTP Harvester Detection ─────────────────────────────────
+        # ── AitM Detection ─────────────────────────────────────────────────
         if aitm_result and aitm_result.get("detected"):
-            _ac = {"CRITICAL": "#ff4444", "HIGH": "#ff8800", "MEDIUM": "#ffaa00", "LOW": "#94a3b8"}.get(
-                aitm_result.get("severity", ""), "#94a3b8"
-            )
+            _ac = {"CRITICAL": "#ef4444", "HIGH": "#f97316", "MEDIUM": "#f59e0b", "LOW": "#94a3b8"}.get(
+                aitm_result.get("severity", ""), "#94a3b8")
             _ai = {"CRITICAL": "🔴", "HIGH": "🟠", "MEDIUM": "🟡", "LOW": "⚪"}.get(
-                aitm_result.get("severity", ""), "⚪"
-            )
+                aitm_result.get("severity", ""), "⚪")
             st.markdown(
-                f"<div style='background:#1a0a0a;border:1px solid {_ac};border-radius:10px;"
-                f"padding:12px 18px;margin:10px 0'>"
-                f"<div style='display:flex;align-items:center;gap:10px'>"
+                f"<div style='background:linear-gradient(135deg,rgba(239,68,68,0.08),rgba(244,63,94,0.05));"
+                f"border:1px solid {_ac}44;border-radius:12px;padding:14px 18px;margin:10px 0'>"
+                f"<div style='display:flex;align-items:center;gap:12px'>"
                 f"<span style='font-size:1.3rem'>{_ai} 🕵️</span>"
                 f"<div><strong style='color:{_ac}'>{aitm_result.get('label', '')}</strong>"
                 f"<br><span style='color:#94a3b8;font-size:13px'>"
                 f"Confidence: {aitm_result['confidence']}/100 · "
-                f"URL: {aitm_result.get('url_score',0)} · "
-                f"Body: {aitm_result.get('body_score',0)} · "
-                f"Domain: {aitm_result.get('domain_score',0)}</span></div></div>",
+                f"Score: {aitm_result.get('url_score',0)}/{aitm_result.get('body_score',0)}/{aitm_result.get('domain_score',0)}"
+                f"</span></div></div>",
                 unsafe_allow_html=True,
             )
             if aitm_result.get("indicators"):
                 with st.expander(f"📋 AitM Indicators ({len(aitm_result['indicators'])})"):
                     for ind in aitm_result["indicators"]:
                         st.markdown(f"- {ind}")
-            st.markdown("</div>", unsafe_allow_html=True)
 
         # ── Email Authentication (SPF/DKIM/DMARC) ──────────────────────────
         if header_auth:
+            st.markdown(section_title("Email Authentication"), unsafe_allow_html=True)
             auth_overall = header_auth.get("overall", "")
-            auth_color = {"PASS": "#44aa44", "WARNING": "#ffaa00", "FAIL": "#ff4444", "UNKNOWN": "#94a3b8"}.get(auth_overall, "#94a3b8")
+            auth_color = {"PASS": "#22c55e", "WARNING": "#f59e0b", "FAIL": "#ef4444", "UNKNOWN": "#94a3b8"}.get(auth_overall, "#94a3b8")
             auth_icon = {"PASS": "✅", "WARNING": "⚠️", "FAIL": "🔴", "UNKNOWN": "❓"}.get(auth_overall, "❓")
             st.markdown(
-                f"<div class='section-title'>{auth_icon} Email Authentication — <span style='color:{auth_color}'>{auth_overall}</span>"
-                f" <span style='font-size:11px;color:#475569;font-weight:400'>(+{header_auth.get('risk_contribution',0)} risk)</span></div>",
-                unsafe_allow_html=True,
+                f"<div style='color:#64748b;font-size:0.85rem;margin-bottom:8px'>"
+                f"{auth_icon} Overall: <span style='color:{auth_color};font-weight:700'>{auth_overall}</span>"
+                f" · <span style='color:#475569'>+{header_auth.get('risk_contribution',0)} risk</span></div>",
+                unsafe_allow_html=True
             )
-        cols = st.columns(3)
-        for col, (label, key, color_map) in zip(cols, [
-                ("SPF", "spf_status", {"pass":"#44aa44","fail":"#ff4444","softfail":"#ffaa00","neutral":"#ffaa00","missing":"#94a3b8"}),
-                ("DKIM", "dkim_status", {"pass":"#44aa44","fail":"#ff4444","signed":"#ffaa00","missing":"#94a3b8"}),
-                ("DMARC", "dmarc_status", {"pass":"#44aa44","fail":"#ff4444","bestguesspass":"#88cc88","missing":"#94a3b8"}),
+            cols = st.columns(3)
+            for col, (label, key, color_map) in zip(cols, [
+                ("SPF", "spf_status", {"pass":"#22c55e","fail":"#ef4444","softfail":"#f59e0b","neutral":"#f59e0b","missing":"#94a3b8"}),
+                ("DKIM", "dkim_status", {"pass":"#22c55e","fail":"#ef4444","signed":"#f59e0b","missing":"#94a3b8"}),
+                ("DMARC", "dmarc_status", {"pass":"#22c55e","fail":"#ef4444","bestguesspass":"#86efac","missing":"#94a3b8"}),
             ]):
                 val = header_auth.get(key, "missing")
                 c = color_map.get(val, "#94a3b8")
                 dot = "🟢" if val in ("pass",) else "🔴" if val in ("fail",) else "🟡"
                 with col:
-                    st.markdown(
-                        f"<div style='background:#111827;border:1px solid #1e3a5f;border-radius:10px;"
-                        f"padding:12px;text-align:center'>"
-                        f"<div style='color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:.08em'>{label}</div>"
-                        f"<div style='font-size:1.2rem;font-weight:700;color:{c}'>{dot} {val.upper()}</div>"
-                        f"</div>",
-                        unsafe_allow_html=True,
-                    )  # end with col
+                    st.markdown(stat_card(f"{dot} {val.upper()}", label, c), unsafe_allow_html=True)
+            st.caption(header_auth.get("details", ""))
 
-        st.caption(header_auth.get("details", ""))
-
-        # ── Perplexity Analyzer (AI-written text detector) ──────────────────
+        # ── AI-Generated Text Analysis ──────────────────────────────────
         _perplex_data = st.session_state.get("perplexity_result", {})
         if _perplex_data.get("signals"):
-            with st.expander(f"🤖 AI-Generated Text Analysis — {_perplex_data.get('summary','')}"):
-                st.markdown(f"**AI-Author Probability:** {_perplex_data.get('ai_probability',0)}%")
+            st.markdown(section_title("AI-Generated Text Analysis"), unsafe_allow_html=True)
+            with st.expander(f"📝 {_perplex_data.get('summary','')} — AI Probability {_perplex_data.get('ai_probability',0)}%"):
                 cols_perp = st.columns(4)
-                cols_perp[0].metric("Burstiness", _perplex_data.get("burstiness",0), help="High = human-like variation")
+                cols_perp[0].metric("Burstiness", _perplex_data.get("burstiness",0), help="High = human-like")
                 cols_perp[1].metric("Lexical Diversity", _perplex_data.get("lexical_diversity",0), help="Unique word ratio")
                 cols_perp[2].metric("Avg Sentence Len", _perplex_data.get("avg_sentence_len",0))
                 cols_perp[3].metric("Hedging Phrases", _perplex_data.get("hedging_count",0))
-                st.caption("Signals detected: " + ", ".join(_perplex_data.get("signals", [])))
+                st.caption("Signals: " + ", ".join(_perplex_data.get("signals", [])))
 
-        st.divider()
-
-        # ── Combined Threat Score ─────────────────────────────────────────────
-        combined_score = st.session_state.get("combined_score")
-        if combined_score and combined_score.get("has_vt_data"):
-            st.markdown("<div class='section-title'>🔬 Combined Threat Intelligence Score</div>",
-                        unsafe_allow_html=True)
-            col_cs1, col_cs2, col_cs3 = st.columns(3)
-            with col_cs1:
-                st.metric("Composite Score",
-                          f"{combined_score['composite_score']}/100",
-                          delta=f"VT contrib: +{combined_score['vt_contribution']:.0f}")
-            with col_cs2:
-                st.metric("VT Malicious Detections",
-                          combined_score["vt_malicious_count"])
-            with col_cs3:
-                st.metric("VT Suspicious Detections",
-                          combined_score["vt_suspicious_count"])
-
-        # ── Webhook alert status ─────────────────────────────────────────────
-        webhook_result = st.session_state.get("webhook_result")
-        if webhook_result:
-            if webhook_result.get("success"):
-                st.success("🚨 Webhook alert sent to your notification channel.")
-            else:
-                st.warning(f"Webhook delivery failed: {webhook_result.get('error', 'Unknown')}")
-
-        # Keyword matches
+        # ── Phishing Indicators ────────────────────────────────────────────
         if results["keyword_matches"]:
-            st.markdown("<div class='section-title'>🎯 Phishing Indicators</div>",
-                        unsafe_allow_html=True)
+            st.markdown(section_title("Phishing Indicators"), unsafe_allow_html=True)
             for category, keywords in results["keyword_matches"].items():
                 with st.expander(f"**{category.upper()}** — {len(keywords)} match(es)"):
-                    tags = " ".join(
-                        "<span class='tag'>" + kw + "</span>" for kw in keywords
-                    )
+                    tags = " ".join(f"<span class='pg-tag'>{kw}</span>" for kw in keywords)
                     st.markdown(tags, unsafe_allow_html=True)
 
-        # ── Phishing Kit Fingerprinting ──────────────────────────────────────────
+        # ── Phishing Kit Fingerprinting ────────────────────────────────────
         kit_data = results.get("kit_fingerprinting", {})
         if kit_data and kit_data.get("total_kits_detected", 0) > 0:
-            st.markdown("<div class='section-title'>🕵️ Phishing Kit Fingerprinting</div>",
-                        unsafe_allow_html=True)
+            st.markdown(section_title("Phishing Kit Fingerprinting"), unsafe_allow_html=True)
             for match in kit_data["matches"]:
                 icon = "🔴" if match["confidence"] >= 70 else "🟡" if match["confidence"] >= 40 else "🟢"
-                sev_color = {"CRITICAL": "#ff4444", "HIGH": "#ff8800", "MEDIUM": "#ffaa00"}.get(match["severity"], "#94a3b8")
+                sev_color = {"CRITICAL": "#ef4444", "HIGH": "#f97316", "MEDIUM": "#f59e0b"}.get(match["severity"], "#94a3b8")
                 with st.expander(f"{icon} **{match['name']}** — {match['confidence']}% match", expanded=match["confidence"] >= 50):
-                    st.caption(f"Severity: <span style='color:{sev_color}'>{match['severity']}</span> — {match['description']}",
-                               unsafe_allow_html=True)
+                    st.caption(f"Severity: <span style='color:{sev_color}'>{match['severity']}</span> — {match['description']}", unsafe_allow_html=True)
                     mp = match["matched_patterns"]
                     cols = st.columns(6)
-                    labels = ["HTML", "CSS", "Form Fields", "JS", "File Paths", "Headers"]
-                    for i, (key, label) in enumerate(zip(["html","css","form_fields","js","file_paths","headers"], labels)):
-                        cols[i].metric(label, mp.get(key, 0))
+                    for i, (k, lb) in enumerate(zip(["html","css","form_fields","js","file_paths","headers"], ["HTML","CSS","Forms","JS","Paths","Headers"])):
+                        cols[i].metric(lb, mp.get(k, 0))
 
-        # ── XAI Psychological Trigger Breakdown ─────────────────────────────────
+        # ── Psychological Manipulation Analysis ────────────────────────────
         xai_result = st.session_state.get("xai_result")
         if xai_result and xai_result.get("triggers"):
-            st.markdown("<div class='section-title'>🧠 Psychological Manipulation Analysis</div>",
-                        unsafe_allow_html=True)
-
+            st.markdown(section_title("Psychological Manipulation Analysis"), unsafe_allow_html=True)
             xai_score = xai_result["total_manipulation_score"]
             xai_color = xai_result["overall_color"]
             col_x1, col_x2 = st.columns([1, 2])
-
             with col_x1:
                 fig_xai = go.Figure(go.Indicator(
-                    mode="gauge+number",
-                    value=xai_score,
+                    mode="gauge+number", value=xai_score,
                     domain={"x": [0, 1], "y": [0, 1]},
-                    title={"text": f"<b>Manipulation Score</b>", "font": {"color": xai_color, "size": 14}},
-                    gauge={
-                        "axis": {"range": [0, 100], "tickcolor": "#94a3b8"},
-                        "bar": {"color": xai_color},
-                        "bgcolor": "#111827",
-                        "steps": [
-                            {"range": [0, 25], "color": "#0a2a0a"},
-                            {"range": [25, 50], "color": "#2a2a0a"},
-                            {"range": [50, 75], "color": "#2a1a0a"},
-                            {"range": [75, 100], "color": "#2a0a0a"},
-                        ],
-                        "threshold": {
-                            "line": {"color": xai_color, "width": 3},
-                            "thickness": 0.75, "value": xai_score,
-                        },
-                    },
+                    title={"text": "<b>Manipulation Score</b>", "font": {"color": xai_color, "size": 14}},
+                    gauge={"axis": {"range": [0, 100], "tickcolor": "#94a3b8"}, "bar": {"color": xai_color},
+                           "bgcolor": "#111827",
+                           "steps": [{"range": [0,25],"color":"#0a2a0a"},{"range":[25,50],"color":"#2a2a0a"},{"range":[50,75],"color":"#2a1a0a"},{"range":[75,100],"color":"#2a0a0a"}],
+                           "threshold": {"line": {"color": xai_color, "width": 3}, "thickness": 0.75, "value": xai_score}},
                     number={"font": {"color": xai_color, "size": 40}},
                 ))
-                fig_xai.update_layout(
-                    height=200, margin=dict(t=30, b=0, l=10, r=10),
-                    paper_bgcolor="rgba(0,0,0,0)", font_color="#e2e8f0",
-                )
+                fig_xai.update_layout(height=200, margin=dict(t=30,b=0,l=10,r=10), paper_bgcolor="rgba(0,0,0,0)", font_color="#e2e8f0")
                 st.plotly_chart(fig_xai, use_container_width=True)
-
             with col_x2:
                 triggers = xai_result["triggers"]
                 categories = [t["label"] for t in triggers]
                 raw_scores = [t["raw_score"] for t in triggers]
                 fig_radar = go.Figure()
-                fig_radar.add_trace(go.Scatterpolar(
-                    r=raw_scores + [raw_scores[0]],
-                    theta=categories + [categories[0]],
-                    fill="toself",
-                    name="Trigger Intensity",
-                    line_color="#3b82f6",
-                    fillcolor="rgba(59, 130, 246, 0.15)",
-                ))
-                fig_radar.update_layout(
-                    polar=dict(
-                        radialaxis=dict(visible=True, range=[0, 100],
-                                        tickcolor="#475569", gridcolor="#1e3a5f"),
-                        bgcolor="rgba(0,0,0,0)",
-                    ),
-                    height=200, margin=dict(t=10, b=10, l=30, r=30),
-                    paper_bgcolor="rgba(0,0,0,0)", font_color="#e2e8f0",
-                    showlegend=False,
-                )
+                fig_radar.add_trace(go.Scatterpolar(r=raw_scores + [raw_scores[0]], theta=categories + [categories[0]], fill="toself", name="Trigger Intensity", line_color="#3b82f6", fillcolor="rgba(59,130,246,0.15)"))
+                fig_radar.update_layout(polar=dict(radialaxis=dict(visible=True,range=[0,100],tickcolor="#475569",gridcolor="#1e3a5f"),bgcolor="rgba(0,0,0,0)"), height=200, margin=dict(t=10,b=10,l=30,r=30), paper_bgcolor="rgba(0,0,0,0)", font_color="#e2e8f0", showlegend=False)
                 st.plotly_chart(fig_radar, use_container_width=True)
-
-            st.markdown(
-                f"<p style='color:{xai_color};font-size:0.9rem;margin-bottom:12px'>"
-                f"{xai_result['trigger_count']} manipulation tactic(s) detected — "
-                f"{xai_result['overall_severity']} social engineering risk.</p>",
-                unsafe_allow_html=True
-            )
-
+            st.markdown(f"<p style='color:{xai_color};font-size:0.9rem;margin-bottom:12px'>{xai_result['trigger_count']} tactic(s) — {xai_result['overall_severity']} risk.</p>", unsafe_allow_html=True)
             for t in triggers:
-                with st.expander(
-                    f"{t['icon']} {t['label']} — Score {t['raw_score']}/100 "
-                    f"(<span style='color:{t['severity_color']}'>{t['severity']}</span>)",
-                    expanded=t["raw_score"] >= 50
-                ):
+                with st.expander(f"{t['icon']} {t['label']} — {t['raw_score']}/100 (<span style='color:{t['severity_color']}'>{t['severity']}</span>)", expanded=t["raw_score"] >= 50):
                     st.markdown(f"*{t['description']}*")
                     if t.get("key_phrases"):
-                        st.markdown(
-                            "**Detected patterns:** " + ", ".join(
-                                f"`{p}`" for p in t["key_phrases"][:6]
-                            )
-                        )
+                        st.markdown("**Patterns:** " + ", ".join(f"`{p}`" for p in t["key_phrases"][:6]))
                     if t.get("evidence"):
-                        st.markdown("**Why this was flagged:**")
+                        st.markdown("**Why flagged:**")
                         for ev in t["evidence"][:4]:
                             st.markdown(f"- {ev['explanation']}")
+            st.markdown(f"<details><summary style='color:#3b82f6;font-size:0.85rem;cursor:pointer'>📋 Full XAI explanation</summary><div style='background:#0f172a;border:1px solid #1e293b;border-radius:8px;padding:16px;font-family:monospace;font-size:12px;color:#94a3b8;margin-top:8px;white-space:pre-wrap'>{format_xai_report(xai_result)}</div></details>", unsafe_allow_html=True)
 
-            # Show XAI markdown report as downloadable context
-            st.markdown(
-                f"<details><summary style='color:#60a5fa;font-size:0.85rem;cursor:pointer'>"
-                f"📋 View full XAI explanation</summary>"
-                f"<div style='background:#0f172a;border:1px solid #1e3a5f;border-radius:8px;"
-                f"padding:16px;font-family:monospace;font-size:12px;color:#94a3b8;"
-                f"margin-top:8px;white-space:pre-wrap'>{format_xai_report(xai_result)}</div>"
-                f"</details>",
-                unsafe_allow_html=True
-            )
-
-        # URL results
+        # ── URLs & Threat Intelligence ─────────────────────────────────────
         if results["suspicious_urls"]:
-            st.markdown("<div class='section-title'>🔗 Suspicious URLs Detected</div>",
-                        unsafe_allow_html=True)
+            st.markdown(section_title("Suspicious URLs"), unsafe_allow_html=True)
             for item in results["suspicious_urls"]:
-                url_val = item["url"]
-                st.markdown(
-                    "<div class='url-box'>🚨 " + url_val + "</div>",
-                    unsafe_allow_html=True
-                )
+                st.markdown(url_box(item["url"], True), unsafe_allow_html=True)
         elif results["urls_found"]:
-            st.markdown("<div class='section-title'>🔗 URLs Found (no pattern threats)</div>",
-                        unsafe_allow_html=True)
+            st.markdown(section_title("URLs Found"), unsafe_allow_html=True)
             for url in results["urls_found"]:
-                st.markdown(
-                    "<div class='safe-url-box'>🔗 " + url + "</div>",
-                    unsafe_allow_html=True
-                )
+                st.markdown(url_box(url, False), unsafe_allow_html=True)
 
-        # VirusTotal
-        if vt_results:
-            st.markdown(
-                "<div class='section-title'>🌐 Threat Intelligence (VirusTotal)</div>",
-                unsafe_allow_html=True
-            )
-            for vt in vt_results:
-                status  = vt.get("status", "error")
-                url     = vt.get("url", "")
-                mal     = vt.get("malicious", 0)
-                sus     = vt.get("suspicious", 0)
-                total   = vt.get("total_vendors", 0)
-                threats = vt.get("threat_names", [])
-                vt_link = vt.get("vt_link", "")
-
+        # ── Combined Threat Score + VirusTotal ─────────────────────────────
+        combined_score = st.session_state.get("combined_score")
+        if vt_results or (combined_score and combined_score.get("has_vt_data")):
+            st.markdown(section_title("Threat Intelligence"), unsafe_allow_html=True)
+            if combined_score and combined_score.get("has_vt_data"):
+                col_cs1, col_cs2, col_cs3 = st.columns(3)
+                with col_cs1: st.metric("Composite Score", f"{combined_score['composite_score']}/100", delta=f"VT: +{combined_score['vt_contribution']:.0f}")
+                with col_cs2: st.metric("Malicious", combined_score["vt_malicious_count"])
+                with col_cs3: st.metric("Suspicious", combined_score["vt_suspicious_count"])
+            for vt in (vt_results or []):
+                status = vt.get("status", "error")
+                url = vt.get("url", "")
+                mal = vt.get("malicious", 0); total = vt.get("total_vendors", 0)
+                threats = vt.get("threat_names", []); vt_link = vt.get("vt_link", "")
                 if status == "malicious":
-                    threat_str = ", ".join(threats) if threats else ""
-                    st.markdown(
-                        "<div class='url-box'>🔴 <b>MALICIOUS</b> — " + url[:70] +
-                        "<br><span style='font-size:12px'>" +
-                        str(mal) + "/" + str(total) + " vendors flagged " + threat_str +
-                        "</span></div>",
-                        unsafe_allow_html=True
-                    )
+                    st.markdown(url_box(f"🔴 MALICIOUS — {url[:70]} ({mal}/{total} vendors)", True), unsafe_allow_html=True)
                 elif status == "suspicious":
-                    st.markdown(
-                        "<div style='background:#2a1a0a;border:1px solid #ff8800;"
-                        "border-radius:8px;padding:10px 14px;margin:4px 0'>"
-                        "🟠 <b>SUSPICIOUS</b> — " + url[:70] + "</div>",
-                        unsafe_allow_html=True
-                    )
+                    st.markdown(url_box(f"🟠 SUSPICIOUS — {url[:70]}", True), unsafe_allow_html=True)
                 elif status == "clean":
-                    st.markdown(
-                        "<div class='safe-url-box'>🟢 <b>CLEAN</b> — " + url[:70] +
-                        "<br><span style='font-size:12px'>No threats from " +
-                        str(total) + " vendors</span></div>",
-                        unsafe_allow_html=True
-                    )
-                else:
-                    st.markdown(
-                        "<div style='background:#111827;border:1px solid #1e3a5f;"
-                        "border-radius:8px;padding:10px 14px;margin:4px 0;"
-                        "font-size:12px;color:#64748b'>⚪ Could not check: " +
-                        url[:70] + "</div>",
-                        unsafe_allow_html=True
-                    )
+                    st.markdown(url_box(f"🟢 CLEAN — {url[:70]} ({total} vendors)", False), unsafe_allow_html=True)
                 if vt_link and status != "error":
-                    st.markdown(
-                        "<a href='" + vt_link + "' target='_blank' "
-                        "style='font-size:11px;color:#60a5fa'>View on VirusTotal →</a>",
-                        unsafe_allow_html=True
-                    )
+                    st.markdown(f"<a href='{vt_link}' target='_blank' style='font-size:11px;color:#3b82f6'>View on VirusTotal →</a>", unsafe_allow_html=True)
 
-        # OSINT
+        # ── OSINT Investigation ────────────────────────────────────────────
         if osint_data and osint_data.get("domain_results"):
-            st.markdown("<div class='section-title'>🔎 OSINT Investigation</div>",
-                        unsafe_allow_html=True)
-            sender_val = osint_data.get("sender", "")
-            if sender_val:
-                st.markdown("**Sender:** `" + sender_val + "`")
+            st.markdown(section_title("OSINT Investigation"), unsafe_allow_html=True)
             osint_risk = osint_data.get("osint_risk_score", 0)
-            if osint_risk >= 75:
-                st.error(f"🔴 OSINT Risk Score: {osint_risk}/100 — High confidence threat infrastructure")
-            elif osint_risk >= 50:
-                st.warning(f"🟠 OSINT Risk Score: {osint_risk}/100 — Suspicious infrastructure")
-            elif osint_risk >= 25:
-                st.warning(f"🟡 OSINT Risk Score: {osint_risk}/100 — Some suspicious indicators")
-            else:
-                st.success(f"🟢 OSINT Risk Score: {osint_risk}/100 — No major concerns")
-
+            if osint_risk >= 75:        st.error(f"🔴 OSINT Risk: {osint_risk}/100 — High confidence threat infrastructure")
+            elif osint_risk >= 50:      st.warning(f"🟠 OSINT Risk: {osint_risk}/100 — Suspicious infrastructure")
+            elif osint_risk >= 25:      st.warning(f"🟡 OSINT Risk: {osint_risk}/100 — Some indicators")
+            else:                       st.success(f"🟢 OSINT Risk: {osint_risk}/100 — No concerns")
             for dr in osint_data["domain_results"]:
-                domain_name  = dr["domain"]
-                domain_score = dr["risk_score"]
-                with st.expander(f"🌐 **{domain_name}** — Risk: {domain_score}/100"):
+                with st.expander(f"🌐 **{dr['domain']}** — Risk: {dr['risk_score']}/100"):
                     dc1, dc2, dc3 = st.columns(3)
-                    dc1.metric("Risk Score", str(domain_score) + "/100")
+                    dc1.metric("Score", f"{dr['risk_score']}/100")
                     dc2.metric("Country", dr.get("country", "Unknown"))
-                    age_val = dr.get("domain_age_days")
-                    dc3.metric("Domain Age",
-                               str(age_val) + " days" if age_val else "Unknown")
+                    dc3.metric("Age", f"{dr.get('domain_age_days', '?')}d")
                     for ind in dr.get("risk_indicators", []):
-                        st.markdown("- " + ind)
+                        st.markdown(f"- {ind}")
 
-        # Attachment / Header / Language
+        # ── Webhook Status ─────────────────────────────────────────────────
+        webhook_result = st.session_state.get("webhook_result")
+        if webhook_result:
+            if webhook_result.get("success"):
+                st.success("🚨 Alert sent to your notification channel.")
+            else:
+                st.warning(f"Webhook failed: {webhook_result.get('error', 'Unknown')}")
+
+        # ── Attachment / Header / Language Findings ────────────────────────
         if results["has_attachments"]:
-            st.warning("📎 **Attachment detected** — Do NOT open files from unverified senders.")
-
+            st.warning("📎 Attachment detected — do NOT open from unverified senders.")
         header = results.get("header_analysis", {})
         if header.get("findings"):
-            st.markdown("<div class='section-title'>📨 Email Header Analysis</div>",
-                        unsafe_allow_html=True)
+            st.markdown(section_title("Header Analysis Findings"), unsafe_allow_html=True)
             for finding in header["findings"]:
                 st.error("🚨 " + finding)
-
         attach = results.get("attachment_analysis", {})
         if attach.get("findings"):
-            st.markdown("<div class='section-title'>📎 Attachment Analysis</div>",
-                        unsafe_allow_html=True)
+            st.markdown(section_title("Attachment Analysis"), unsafe_allow_html=True)
             for finding in attach["findings"]:
                 st.error("🚨 " + finding)
-
         lang = results.get("language_analysis", {})
         if lang.get("findings"):
-            st.markdown(
-                "<div class='section-title'>🧠 Language & Manipulation Analysis</div>",
-                unsafe_allow_html=True
-            )
+            st.markdown(section_title("Language Analysis"), unsafe_allow_html=True)
             for finding in lang["findings"]:
                 st.warning("⚠ " + finding)
 
-        # Verdict
+        # ── Security Verdict ───────────────────────────────────────────────
         st.divider()
-        st.markdown("<div class='section-title'>📋 Security Verdict</div>",
-                    unsafe_allow_html=True)
+        st.markdown(section_title("Security Verdict"), unsafe_allow_html=True)
         if score >= 75:
             st.error("🔴 **CRITICAL THREAT** — Strong phishing indicators detected. Do not click any links.")
         elif score >= 50:
@@ -1695,204 +1328,95 @@ with tab1:
         else:
             st.success("🟢 **LOW RISK** — No major phishing indicators found. Stay vigilant.")
 
-        # ── Multi-LLM Jury Ensemble ──────────────────────────────────────────
+        # ── Multi-LLM Jury ─────────────────────────────────────────────────
         jury_result = st.session_state.get("jury_result")
         if jury_result and "final_score" in jury_result:
+            st.markdown(section_title("Multi-LLM Jury Consensus"), unsafe_allow_html=True)
             jr = jury_result
-            st.markdown("<div class='section-title'>🧠 Multi-LLM Jury Consensus</div>",
-                        unsafe_allow_html=True)
             col_j1, col_j2, col_j3 = st.columns(3)
-            with col_j1:
-                delta_j = jr.get("final_score", 0) - score
-                st.metric("⚖️ Ensemble Score", f"{jr['final_score']:.0f}/100",
-                          delta=f"{delta_j:+.0f} vs heuristic")
-            with col_j2:
-                st.metric("🔤 Linguistic Jury",
-                          f"{jr.get('linguistic_score', 0):.0f}/100")
-            with col_j3:
-                st.metric("🏢 Corporate Jury",
-                          f"{jr.get('corporate_score', 0):.0f}/100")
+            with col_j1: st.metric("Ensemble Score", f"{jr['final_score']:.0f}/100", delta=f"{jr.get('final_score',0)-score:+.0f} vs heuristic")
+            with col_j2: st.metric("Linguistic Jury", f"{jr.get('linguistic_score',0):.0f}/100")
+            with col_j3: st.metric("Corporate Jury", f"{jr.get('corporate_score',0):.0f}/100")
+            if jr.get("final_score",0) > score + 15:
+                st.warning("⚠️ Jury rates this **significantly higher** than heuristic — priority threat.")
+            elif jr.get("final_score",0) < score - 15:
+                st.info("ℹ️ Jury rates this **lower** — heuristic flags may be false positives.")
 
-            if jr.get("final_score", 0) > score + 15:
-                st.warning(
-                    "⚠️ The jury ensemble rates this email **significantly higher** "
-                    "than the heuristic scan. Consider it a priority threat."
-                )
-            elif jr.get("final_score", 0) < score - 15:
-                st.info(
-                    "ℹ️ The jury ensemble rates this email **lower** than the heuristic scan. "
-                    "Heuristic flags may be false positives."
-                )
-
-        # ── Phishing Reverse Honeypot (Counter-Measure) ─────────────────────
+        # ── Honeypot Counter-Measure ───────────────────────────────────────
         if score >= 50:
             st.divider()
-            st.markdown("<div class='section-title'>🪤 Counter-Measure Deployment</div>",
-                        unsafe_allow_html=True)
-            if st.button("⚔️ Deploy Deception Payload", use_container_width=True,
-                         type="secondary", key="honeypot_btn"):
+            st.markdown(section_title("Counter-Measure Deployment"), unsafe_allow_html=True)
+            if st.button("⚔️ Deploy Deception Payload", use_container_width=True, type="secondary", key="honeypot_btn"):
                 from src.honeypot_generator import generate_honeypot
                 with st.spinner("Generating deceptive payload..."):
                     honeypot = generate_honeypot(email_text_saved)
                 st.session_state["honeypot"] = honeypot
-                st.success("✅ Deception payload generated. You may copy and send it to the attacker.")
+                st.success("✅ Deception payload generated.")
                 st.rerun()
             _hp = st.session_state.get("honeypot")
             if _hp:
-                st.markdown(
-                    f"<div style='background:#0a1a0a;border:1px solid #44aa44;border-radius:10px;"
-                    f"padding:14px 18px;margin:8px 0'>"
-                    f"<div style='color:#44aa44;font-weight:700;margin-bottom:6px'>"
-                    f"📨 {_hp.get('subject','')}</div>"
-                    f"<div style='color:#94a3b8;font-size:12px'>"
-                    f"From: {_hp.get('sender_name','')} ({_hp.get('sender_email','')})<br>"
-                    f"Payload: {_hp.get('payload_type','')}</div>"
-                    f"<div style='background:#000;border-radius:8px;padding:12px;margin:8px 0;"
-                    f"font-size:12px;color:#e2e8f0;white-space:pre-wrap;font-family:monospace'>"
-                    f"{_hp.get('body','')}</div>"
-                    f"</div>",
-                    unsafe_allow_html=True,
-                )
-                import json as _json
-                _pd = _hp.get("payload_data", "{}")
-                if isinstance(_pd, str):
-                    try:
-                        _pd = _json.loads(_pd)
-                    except Exception:
-                        pass
-                with st.expander("📦 Extracted Payload Data (for tracking)"):
-                    st.json(_pd)
-                if st.button("✕ Clear Payload", key="clear_hp"):
-                    st.session_state.pop("honeypot", None)
-                    st.rerun()
+                st.markdown(f"<div class='pg-card-success' style='margin:8px 0'><div style='color:#22c55e;font-weight:700'>{_hp.get('subject','')}</div><div style='color:#94a3b8;font-size:12px'>From: {_hp.get('sender_name','')} — {_hp.get('payload_type','')}</div></div>", unsafe_allow_html=True)
+                if st.button("✕ Clear", key="clear_hp"):
+                    st.session_state.pop("honeypot", None); st.rerun()
 
-        # ── Close blur overlay for restricted tiers ────────────────────────
+        # ── Close blur for restricted tiers ───────────────────────────────
         if _restricted_blur:
             st.markdown("</div></div>", unsafe_allow_html=True)
 
-        # ── Abrupt Visibility Cutoff Paywall Gate ──────────────────────────
-        is_restricted = _restricted_blur
-
-        if is_restricted:
+        # ── Upgrade Gate + Export ──────────────────────────────────────────
+        if _restricted_blur:
             st.divider()
             st.markdown(
-                "<div style='background:linear-gradient(145deg,#0a0f1a,#0f1a2a);"
-                "border:3px solid #eab308;border-radius:20px;padding:32px 28px;"
-                "text-align:center;margin:12px 0 24px 0;position:relative;overflow:hidden'>"
-                # Blur overlay background effect
-                "<div style='position:absolute;top:0;left:0;right:0;bottom:0;"
-                "background:rgba(10,15,26,0.85);backdrop-filter:blur(4px);z-index:0'></div>"
-                # Content on top
-                "<div style='position:relative;z-index:1'>"
-                "<div style='font-size:3rem;margin-bottom:8px'>🔒</div>"
-                "<div style='color:#f0f6ff;font-size:1.5rem;font-weight:800;"
-                "margin-bottom:4px'>Premium Analysis Restricted</div>"
-                "<div style='color:#94a3b8;font-size:0.9rem;margin-bottom:20px'>"
-                "AI Security Audit, Threat Links, and PDF Reports are locked on your current plan.</div>"
-                # Breach Cost ROI Calculator
-                "<div style='background:rgba(234,179,8,0.08);border:1px solid rgba(234,179,8,0.3);"
-                "border-radius:14px;padding:20px;margin:0 auto 20px auto;max-width:400px'>"
-                "<div style='color:#eab308;font-weight:700;font-size:1.1rem;margin-bottom:12px'>"
-                "💰 Breach Cost ROI Calculator</div>"
-                "<div style='color:#94a3b8;font-size:12px;margin-bottom:8px'>"
-                "Your company size:</div>"
-                + "<div style='margin:0 auto;max-width:300px'>__BREACH_SLIDER__</div>"
-                + "<div style='color:#e2e8f0;font-size:0.9rem;margin-top:12px'>"
-                "Estimated cost of a single successful BEC breach at your firm:</div>"
-                "<div style='color:#ef4444;font-size:2rem;font-weight:800;margin:8px 0'>"
-                "__BREACH_COST__</div>"
-                "<div style='color:#64748b;font-size:0.8rem'>"
-                "Protect your company today for just <strong>$99/mo</strong>.</div>"
-                "</div>"
-                "<a href='#billing-tab' style='display:inline-block;"
-                "background:linear-gradient(135deg,#eab308,#f59e0b);color:#0a0f1a;"
-                "padding:12px 40px;border-radius:12px;text-decoration:none;font-weight:700;"
-                "font-size:1rem'>⬆ Upgrade to Business Tier</a>"
-                "</div></div>",
-                unsafe_allow_html=False  # we build it below
+                "<div style='background:linear-gradient(145deg,#0a0f1a,#0f1a2a);border:2px solid #f59e0b;border-radius:20px;padding:32px 28px;text-align:center;margin:12px 0'>"
+                "<div style='font-size:2.5rem;margin-bottom:8px'>🔒</div>"
+                "<div style='color:#f1f5f9;font-size:1.3rem;font-weight:800;margin-bottom:4px'>Premium Analysis Restricted</div>"
+                "<div style='color:#94a3b8;font-size:0.85rem;margin-bottom:20px'>Upgrade to unlock AI Security Audit, Threat Links, and PDF Reports.</div>"
+                "<div style='background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.3);border-radius:14px;padding:20px;margin:0 auto 20px;max-width:400px'>"
+                "<div style='color:#f59e0b;font-weight:700;margin-bottom:12px'>💰 Breach Cost Calculator</div>"
+                "<div style='color:#94a3b8;font-size:12px;margin-bottom:8px'>Your company size:</div></div>",
+                unsafe_allow_html=True
             )
-            # Build breach cost slider + result dynamically
-            breach_employees = st.slider("Employees", 10, 500, 50, key="breach_slider",
-                                         label_visibility="collapsed")
+            breach_employees = st.slider("Employees", 10, 500, 50, key="breach_slider", label_visibility="collapsed")
             breach_cost = breach_employees * 900
             st.markdown(
-                f"<div style='text-align:center;margin:-20px 0 20px 0;"
-                f"background:#111827;border:1px solid #1e3a5f;border-radius:12px;"
-                f"padding:16px;max-width:400px;margin-left:auto;margin-right:auto'>"
-                f"<div style='color:#94a3b8;font-size:13px'>Estimated cost of a single "
-                f"successful BEC breach at your firm:</div>"
-                f"<div style='color:#ef4444;font-size:2.2rem;font-weight:800'>"
-                f"${breach_cost:,}</div>"
-                f"<div style='color:#64748b;font-size:11px;margin-top:4px'>"
-                f"Based on {breach_employees} employees × $900 avg cost per employee</div>"
+                f"<div style='text-align:center;background:#111827;border:1px solid #1e293b;border-radius:12px;padding:16px;max-width:400px;margin:0 auto'>"
+                f"<div style='color:#94a3b8;font-size:13px'>Cost of a single BEC breach:</div>"
+                f"<div style='color:#ef4444;font-size:2rem;font-weight:800'>${breach_cost:,}</div>"
                 f"</div>",
                 unsafe_allow_html=True
             )
         else:
-            # Export — full access
+            # Export
             st.divider()
-            st.markdown("<div class='section-title'>📄 Export & AI Analysis</div>",
-                        unsafe_allow_html=True)
+            st.markdown(section_title("Export & AI Analysis"), unsafe_allow_html=True)
             col_ai, col_pdf, col_stix = st.columns(3)
-
             with col_ai:
-                if st.button("🤖 Generate AI Security Report",
-                             use_container_width=True, type="secondary"):
+                if st.button("🤖 AI Security Report", use_container_width=True, type="secondary"):
                     try:
-                        with st.spinner("AI is writing your security report..."):
+                        with st.spinner("Writing security report..."):
                             ai_report = generate_ai_report(email_text_saved, results)
                         st.session_state["ai_report"] = ai_report
                         save_analysis(results, email_text_saved, ai_report)
                     except Exception as e:
                         st.error(f"AI analysis failed: {e}")
-
             with col_pdf:
                 ai_report_text = st.session_state.get("ai_report", "")
-                # Check for consultant white-label
                 is_consultant = user_tier == "consultant"
                 wl_flag = st.session_state.get("whitelabel_pdf", False) and is_consultant
                 wl_logo = st.session_state.get("consultant_logo_path") if is_consultant else None
-                pdf_bytes = generate_pdf_report(results, email_text_saved, ai_report_text,
-                                                white_label=wl_flag, custom_logo_path=wl_logo)
+                pdf_bytes = generate_pdf_report(results, email_text_saved, ai_report_text, white_label=wl_flag, custom_logo_path=wl_logo)
                 sev_lower = results["severity"].lower()
-                st.download_button(
-                    label="📥 Download PDF Report",
-                    data=pdf_bytes,
-                    file_name=f"phishguard_report_{sev_lower}.pdf",
-                    mime="application/pdf",
-                    use_container_width=True,
-                    type="primary"
-                )
-
+                st.download_button(label="📥 Download PDF Report", data=pdf_bytes, file_name=f"phishguard_report_{sev_lower}.pdf", mime="application/pdf", use_container_width=True, type="primary")
             with col_stix:
                 import json as _json_stix
                 from src.stix_exporter import build_enterprise_stix_bundle
-                _att_result = st.session_state.get("att_scan_result")
-                _sender_anom = st.session_state.get("sender_anomaly")
-                _perplex = st.session_state.get("perplexity_result")
-                stix_bundle = build_enterprise_stix_bundle(
-                    email_text=email_text_saved,
-                    results=results,
-                    osint_data=osint_data,
-                    vt_results=vt_results,
-                    attachment_result=_att_result,
-                    sender_anomaly=_sender_anom,
-                    perplexity_result=_perplex,
-                )
+                _att_result = st.session_state.get("att_scan_result"); _sender_anom = st.session_state.get("sender_anomaly"); _perplex = st.session_state.get("perplexity_result")
+                stix_bundle = build_enterprise_stix_bundle(email_text=email_text_saved, results=results, osint_data=osint_data, vt_results=vt_results, attachment_result=_att_result, sender_anomaly=_sender_anom, perplexity_result=_perplex)
                 stix_json = _json_stix.dumps(stix_bundle, indent=2)
-                st.download_button(
-                    label="📤 Export STIX 2.1 Threat Intel",
-                    data=stix_json,
-                    file_name=f"phishguard_stix_{sev_lower}.json",
-                    mime="application/json",
-                    use_container_width=True,
-                    type="secondary",
-                )
-
+                st.download_button(label="📤 STIX 2.1 Export", data=stix_json, file_name=f"phishguard_stix_{sev_lower}.json", mime="application/json", use_container_width=True, type="secondary")
             if "ai_report" in st.session_state:
-                st.markdown("<div class='section-title'>🤖 AI Security Analysis</div>",
-                            unsafe_allow_html=True)
-            st.markdown(st.session_state["ai_report"])
+                st.markdown(section_title("AI Security Analysis"), unsafe_allow_html=True)
+                st.markdown(st.session_state["ai_report"])
 
 
 # ═════════════════════════════════════════════════════════════════════════════
