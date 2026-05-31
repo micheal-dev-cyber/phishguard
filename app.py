@@ -40,8 +40,9 @@ if _sso_code:
             st.session_state["email"] = _info["email"]
             st.query_params.clear()
             st.rerun()
-    except Exception:
-        pass
+    except Exception as e:
+        import logging
+        logging.getLogger("phishguard").warning(f"SSO callback failed: {e}")
 
 # ── All src.* imports go AFTER set_page_config to avoid Streamlit init issues ──
 from src.detector import analyze_email
@@ -293,8 +294,9 @@ log_config_status()
 try:
     from src.task_queue import start_worker
     start_worker()
-except Exception:
-    pass
+except Exception as e:
+    import logging
+    logging.getLogger("phishguard").warning(f"Task queue worker failed: {e}")
 
 # ── Start real-time notification poller ─────────────────────────────────────
 if "notification_check" not in st.session_state:
@@ -370,7 +372,7 @@ with col_quota:
     if "sandbox_credits" not in st.session_state:
         st.session_state["sandbox_credits"] = 3
     credits = st.session_state["sandbox_credits"]
-    credit_pct = int(credits / 100 * 100)  # visual meter out of 100 max
+    credit_pct = min(100, credits)  # visual meter out of 100 max
     credit_color = "#22c55e" if credits > 20 else "#eab308" if credits > 5 else "#ef4444"
     st.markdown(
         "<div style='margin-top:8px;padding:10px 14px;background:#111827;"
@@ -628,7 +630,7 @@ if st.session_state.get("show_upgrade") and plan != "enterprise":
                 else:
                     if st.button("⬆ Subscribe — " + plabel, key="sub_" + pkey, use_container_width=True, type="primary"):
                         with st.spinner("Creating checkout session..."):
-                            base = st.context.headers.get("Origin", "https://phishguard.streamlit.app")
+                            base = getattr(getattr(st, 'context', None), 'headers', {}).get("Origin", "https://phishguard.streamlit.app")
                             success_url = base + "/?checkout=completed"
                             url = generate_checkout_url(username, pkey, success_url=success_url)
                         if url:
@@ -1363,7 +1365,7 @@ with tab1:
                 f" <span style='font-size:11px;color:#475569;font-weight:400'>(+{header_auth.get('risk_contribution',0)} risk)</span></div>",
                 unsafe_allow_html=True,
             )
-        cols = st.columns(len(upgrade_plans))
+        cols = st.columns(3)
         for col, (label, key, color_map) in zip(cols, [
                 ("SPF", "spf_status", {"pass":"#44aa44","fail":"#ff4444","softfail":"#ffaa00","neutral":"#ffaa00","missing":"#94a3b8"}),
                 ("DKIM", "dkim_status", {"pass":"#44aa44","fail":"#ff4444","signed":"#ffaa00","missing":"#94a3b8"}),

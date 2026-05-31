@@ -41,12 +41,13 @@ class EnvConfig:
     PADDLE_PRICE_ID_ENTERPRISE: str = ""
     PADDLE_ENVIRONMENT: str = "sandbox"
     LOG_LEVEL: str = "INFO"
-    ADMIN_PASSWORD: str = "phishguard2026"
+    ADMIN_PASSWORD: str = ""
     APP_URL: str = ""
     SMTP_HOST: str = "smtp.gmail.com"
     SMTP_PORT: int = 587
     SMTP_USER: str = ""
     SMTP_PASS: str = ""
+    SMTP_PASSWORD: str = ""  # alias for SMTP_PASS
     SMTP_FROM: str = ""
     paddle_configured: bool = False
     # Enterprise SSO
@@ -101,12 +102,13 @@ def load_env() -> EnvConfig:
         PADDLE_PRICE_ID_ENTERPRISE=_read_env("PADDLE_PRICE_ID_ENTERPRISE"),
         PADDLE_ENVIRONMENT=_read_env("PADDLE_ENVIRONMENT", "sandbox"),
         LOG_LEVEL=_read_env("LOG_LEVEL", "INFO"),
-        ADMIN_PASSWORD=_read_env("ADMIN_PASSWORD", "phishguard2026"),
+        ADMIN_PASSWORD=_read_env("ADMIN_PASSWORD", ""),
         APP_URL=_read_env("APP_URL", ""),
         SMTP_HOST=_read_env("SMTP_HOST", "smtp.gmail.com"),
         SMTP_PORT=int(_read_env("SMTP_PORT", "587")),
         SMTP_USER=_read_env("SMTP_USER"),
         SMTP_PASS=_read_env("SMTP_PASS"),
+        SMTP_PASSWORD=_read_env("SMTP_PASSWORD", _read_env("SMTP_PASS")),
         SMTP_FROM=_read_env("SMTP_FROM"),
         # Enterprise SSO
         OAUTH_CLIENT_ID=_read_env("OAUTH_CLIENT_ID"),

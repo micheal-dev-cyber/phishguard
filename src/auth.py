@@ -99,7 +99,8 @@ def _login_form():
             )
             try:
                 send_email(ENV.SMTP_HOST, ENV.SMTP_PORT, ENV.SMTP_USER,
-                           ENV.SMTP_PASSWORD, ENV.SMTP_FROM or ENV.SMTP_USER,
+                           getattr(ENV, "SMTP_PASSWORD", "") or ENV.SMTP_PASS,
+                           ENV.SMTP_FROM or ENV.SMTP_USER,
                            magic_email, "Your PhishGuard Magic Link", body)
                 st.success("✅ Magic link sent! Check your inbox.")
             except Exception as e:

@@ -92,7 +92,7 @@ class TestImports:
 
     def test_env_imports(self):
         from src.env import ENV, load_env, get_config_status
-        assert ENV.ADMIN_PASSWORD == "phishguard2026"
+        assert ENV.ADMIN_PASSWORD == ""
 
 
 # ── Detector → Database integration ──────────────────────────────────────
