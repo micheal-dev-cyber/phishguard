@@ -1,17 +1,14 @@
 import logging
 import streamlit as st
-import sqlite3
 import time
-from pathlib import Path
 from datetime import datetime, timedelta
+from src.db import get_connection
 
 logger = logging.getLogger(__name__)
 
-DB_PATH = Path(__file__).parent.parent / "data" / "phishguard.db"
-
 
 def init_metrics():
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute("""
         CREATE TABLE IF NOT EXISTS perf_metrics (
@@ -28,7 +25,7 @@ def init_metrics():
 
 def record_metric(name: str, value: float, unit: str = "ms"):
     init_metrics()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(
         "INSERT INTO perf_metrics (metric_name, value, unit) VALUES (?, ?, ?)",
@@ -48,8 +45,7 @@ def render_performance_tab():
         if st.button("🔄 Refresh", use_container_width=True):
             st.rerun()
 
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.row_factory = sqlite3.Row
+    conn = get_connection()
     c = conn.cursor()
 
     # Cache stats

@@ -6,13 +6,10 @@ Allows users to configure different webhook URLs for different event types
 """
 import json
 import logging
-import sqlite3
-from pathlib import Path
 from typing import Optional
+from src.db import get_connection
 
 logger = logging.getLogger("webhook_routing")
-
-DB_PATH = Path(__file__).parent.parent / "data" / "phishguard.db"
 ROUTES_TABLE = "webhook_routes"
 
 EVENT_TYPES = [
@@ -30,7 +27,7 @@ EVENT_TYPES = [
 
 
 def init_webhook_routes():
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(f"""
         CREATE TABLE IF NOT EXISTS {ROUTES_TABLE} (
@@ -49,7 +46,7 @@ def init_webhook_routes():
 
 def set_webhook_route(username: str, event_type: str, webhook_url: str) -> bool:
     init_webhook_routes()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     try:
         c.execute(
@@ -67,7 +64,7 @@ def set_webhook_route(username: str, event_type: str, webhook_url: str) -> bool:
 
 def delete_webhook_route(username: str, event_type: str) -> bool:
     init_webhook_routes()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(f"DELETE FROM {ROUTES_TABLE} WHERE username=? AND event_type=?", (username, event_type))
     affected = c.rowcount
@@ -78,7 +75,7 @@ def delete_webhook_route(username: str, event_type: str) -> bool:
 
 def get_webhook_routes(username: Optional[str] = None) -> list[dict]:
     init_webhook_routes()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     if username:
         c.execute(f"SELECT * FROM {ROUTES_TABLE} WHERE username=? ORDER BY event_type", (username,))
@@ -92,7 +89,7 @@ def get_webhook_routes(username: Optional[str] = None) -> list[dict]:
 
 def get_webhook_url(username: str, event_type: str) -> Optional[str]:
     init_webhook_routes()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(
         f"SELECT webhook_url FROM {ROUTES_TABLE} WHERE username=? AND event_type=? AND enabled=1",
@@ -116,7 +113,7 @@ def dispatch_event(username: str, event_type: str, payload: dict):
 
 def enable_route(route_id: int, enabled: bool) -> bool:
     init_webhook_routes()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(f"UPDATE {ROUTES_TABLE} SET enabled=? WHERE id=?", (1 if enabled else 0, route_id))
     affected = c.rowcount

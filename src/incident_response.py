@@ -3,6 +3,8 @@
 import logging
 from typing import Optional
 
+from src.db import DB_PATH, get_connection
+
 logger = logging.getLogger("incident_response")
 
 
@@ -66,10 +68,7 @@ class IncidentResponder:
 
     def _log_incident(self, sender: str, severity: str, action: str):
         try:
-            import sqlite3
-            from pathlib import Path
-            db = Path(__file__).parent.parent / "data" / "phishguard.db"
-            conn = sqlite3.connect(str(db))
+            conn = get_connection()
             c = conn.cursor()
             c.execute("""
                 CREATE TABLE IF NOT EXISTS incident_responses (

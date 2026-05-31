@@ -19,10 +19,9 @@ import json
 import sqlite3
 import hashlib
 import secrets
-from pathlib import Path
 from typing import Optional
 
-DB_PATH = Path(__file__).parent.parent / "data" / "phishguard.db"
+from src.db import DB_PATH, get_connection
 
 SCHEMA_USER = "urn:ietf:params:scim:schemas:core:2.0:User"
 SCHEMA_LIST = "urn:ietf:params:scim:api:messages:2.0:ListResponse"
@@ -32,9 +31,7 @@ BASE_LOCATION = "/api/v1/scim/Users"
 
 
 def _db():
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.row_factory = sqlite3.Row
-    return conn
+    return get_connection()
 
 
 def _scim_user(row) -> dict:

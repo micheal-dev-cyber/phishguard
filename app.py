@@ -115,6 +115,7 @@ from src.integrations import (
 from src.auto_responder import send_phishing_warning
 from src.i18n import t, SUPPORTED_LANGUAGES
 from src.ui_founder_analytics import render_founder_analytics
+from src.db import get_connection
 
 # ── RBAC permissions ────────────────────────────────────────────────────────
 from src.rbac import init_rbac, check_permission
@@ -1885,10 +1886,7 @@ if is_admin:
         # ── Risk Trend Chart (last 100 analyses) ────────────────────────────
         st.markdown("### 📈 Risk Score Trend")
         try:
-            import sqlite3
-            from pathlib import Path
-            _adb = Path(__file__).parent / "data" / "phishguard.db"
-            _aconn = sqlite3.connect(str(_adb))
+            _aconn = get_connection()
             _ac = _aconn.cursor()
             _ac.execute("SELECT risk_score, timestamp FROM analyses ORDER BY id DESC LIMIT 100")
             _trend_rows = list(reversed(_ac.fetchall()))
@@ -1923,7 +1921,7 @@ if is_admin:
         with col_th1:
             st.markdown("### 🔥 Top Threats This Month")
             try:
-                _aconn2 = sqlite3.connect(str(_adb))
+                _aconn2 = get_connection()
                 _ac2 = _aconn2.cursor()
                 _ac2.execute(
                     "SELECT email_preview, risk_score, COUNT(*) as cnt FROM analyses "
@@ -1951,7 +1949,7 @@ if is_admin:
         with col_th2:
             st.markdown("### 📊 Scan Volume by Severity (30d)")
             try:
-                _aconn3 = sqlite3.connect(str(_adb))
+                _aconn3 = get_connection()
                 _ac3 = _aconn3.cursor()
                 _ac3.execute(
                     "SELECT severity, COUNT(*) as cnt FROM analyses "
@@ -2176,11 +2174,8 @@ if is_admin:
         with st.expander("🔒 Login Lockout Management", expanded=False):
             st.caption("View locked accounts and manually unlock users.")
             from src.tenants import unlock_user
-            import sqlite3
-            from pathlib import Path
-            _db = Path(__file__).parent / "data" / "phishguard.db"
             try:
-                _conn = sqlite3.connect(str(_db))
+                _conn = get_connection()
                 _c = _conn.cursor()
                 _c.execute(
                     "SELECT la.username, COUNT(*), MAX(la.timestamp) "
@@ -2789,11 +2784,8 @@ with billing_tab:
     )
 
     from src.api_keys import generate_api_key, delete_api_key, init_api_keys_table
-    import sqlite3
-    from pathlib import Path
-    api_db = Path(__file__).parent / "data" / "phishguard.db"
     init_api_keys_table()
-    conn = sqlite3.connect(str(api_db))
+    conn = get_connection()
     c = conn.cursor()
     c.execute("SELECT id, key_prefix, tier, is_active, created_at, last_used FROM api_keys WHERE username = ? ORDER BY id DESC", (username,))
     user_keys = c.fetchall()
@@ -2812,7 +2804,7 @@ with billing_tab:
             col_k3.markdown(status)
             if col_k4.button("🗑 Revoke", key=f"revoke_{kid}"):
                 from src.audit_log import log_action
-                conn2 = sqlite3.connect(str(api_db))
+                conn2 = get_connection()
                 c2 = conn2.cursor()
                 c2.execute("SELECT key_hash FROM api_keys WHERE id = ?", (kid,))
                 row2 = c2.fetchone()
@@ -4635,10 +4627,7 @@ with tab_ocr:
     with col_o2:
         st.markdown("#### 📋 Recent Homograph Alerts")
         try:
-            import sqlite3
-            from pathlib import Path
-            db_path = Path(__file__).parent / "data" / "phishguard.db"
-            conn = sqlite3.connect(db_path)
+            conn = get_connection()
             c = conn.cursor()
             c.execute(
                 "SELECT original_domain, homograph_type, visual_lookalike_of, "

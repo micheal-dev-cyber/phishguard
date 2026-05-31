@@ -5,21 +5,19 @@ Unified interface for sending alerts to external collaboration platforms.
 """
 import json
 import logging
-import sqlite3
-from pathlib import Path
 from typing import Optional
 from urllib.request import Request, urlopen
 
-logger = logging.getLogger("notification_channels")
+from src.db import DB_PATH, get_connection
 
-DB_PATH = Path(__file__).parent.parent / "data" / "phishguard.db"
+logger = logging.getLogger("notification_channels")
 CHANNELS_TABLE = "notification_channels"
 
 SUPPORTED_CHANNELS = ["slack", "teams", "discord", "pagerduty"]
 
 
 def init_channels():
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(f"""
         CREATE TABLE IF NOT EXISTS {CHANNELS_TABLE} (
@@ -44,7 +42,7 @@ def set_channel(username: str, channel_type: str, webhook_url: str,
     if channel_type not in SUPPORTED_CHANNELS:
         logger.error("Unsupported channel type: %s", channel_type)
         return False
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     try:
         c.execute(
@@ -64,7 +62,7 @@ def set_channel(username: str, channel_type: str, webhook_url: str,
 
 def delete_channel(username: str, channel_type: str) -> bool:
     init_channels()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(f"DELETE FROM {CHANNELS_TABLE} WHERE username=? AND channel_type=?", (username, channel_type))
     affected = c.rowcount
@@ -75,7 +73,7 @@ def delete_channel(username: str, channel_type: str) -> bool:
 
 def get_channels(username: Optional[str] = None) -> list[dict]:
     init_channels()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     if username:
         c.execute(f"SELECT * FROM {CHANNELS_TABLE} WHERE username=? ORDER BY channel_type", (username,))
@@ -89,7 +87,7 @@ def get_channels(username: Optional[str] = None) -> list[dict]:
 
 def enable_channel(username: str, channel_type: str, enabled: bool) -> bool:
     init_channels()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(
         f"UPDATE {CHANNELS_TABLE} SET enabled=? WHERE username=? AND channel_type=?",

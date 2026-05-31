@@ -5,19 +5,17 @@ Uses the task queue to schedule periodic email analysis for connected mailboxes.
 """
 import json
 import logging
-import sqlite3
 from datetime import datetime, timezone, timedelta
-from pathlib import Path
 from typing import Optional
 
-logger = logging.getLogger("scheduler")
+from src.db import DB_PATH, get_connection
 
-DB_PATH = Path(__file__).parent.parent / "data" / "phishguard.db"
+logger = logging.getLogger("scheduler")
 SCHEDULE_TABLE = "scan_schedules"
 
 
 def init_scheduler():
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(f"""
         CREATE TABLE IF NOT EXISTS {SCHEDULE_TABLE} (
@@ -41,7 +39,7 @@ def create_schedule(username: str, mailbox: str = "inbox",
                     interval_minutes: int = 60, max_per_run: int = 10) -> int:
     init_scheduler()
     next_run = (datetime.now(timezone.utc) + timedelta(minutes=interval_minutes)).isoformat()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(
         f"INSERT OR REPLACE INTO {SCHEDULE_TABLE} "
@@ -58,7 +56,7 @@ def create_schedule(username: str, mailbox: str = "inbox",
 
 def delete_schedule(schedule_id: int) -> bool:
     init_scheduler()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(f"DELETE FROM {SCHEDULE_TABLE} WHERE id=?", (schedule_id,))
     affected = c.rowcount
@@ -69,7 +67,7 @@ def delete_schedule(schedule_id: int) -> bool:
 
 def list_schedules(username: Optional[str] = None) -> list[dict]:
     init_scheduler()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     if username:
         c.execute(f"SELECT * FROM {SCHEDULE_TABLE} WHERE username=? ORDER BY created_at DESC", (username,))
@@ -83,7 +81,7 @@ def list_schedules(username: Optional[str] = None) -> list[dict]:
 
 def toggle_schedule(schedule_id: int, enabled: bool) -> bool:
     init_scheduler()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(f"UPDATE {SCHEDULE_TABLE} SET enabled=? WHERE id=?", (1 if enabled else 0, schedule_id))
     affected = c.rowcount
@@ -95,7 +93,7 @@ def toggle_schedule(schedule_id: int, enabled: bool) -> bool:
 def get_due_schedules() -> list[dict]:
     init_scheduler()
     now = datetime.now(timezone.utc).isoformat()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(
         f"SELECT * FROM {SCHEDULE_TABLE} WHERE enabled=1 AND (next_run IS NULL OR next_run <= ?) ORDER BY next_run ASC",
@@ -110,7 +108,7 @@ def get_due_schedules() -> list[dict]:
 def mark_run(schedule_id: int, interval_minutes: int):
     now = datetime.now(timezone.utc)
     next_run = (now + timedelta(minutes=interval_minutes)).isoformat()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(
         f"UPDATE {SCHEDULE_TABLE} SET last_run=?, next_run=? WHERE id=?",

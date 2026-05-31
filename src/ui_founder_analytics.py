@@ -1,21 +1,16 @@
 import logging
-import sqlite3
-from pathlib import Path
 from datetime import datetime, timedelta
 import streamlit as st
 import plotly.graph_objects as go
 import plotly.express as px
+from src.db import get_connection
 from src.tenants import PLANS
 
 logger = logging.getLogger(__name__)
 
-DB_PATH = Path(__file__).parent.parent / "data" / "phishguard.db"
-
 
 def _db():
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.row_factory = sqlite3.Row
-    return conn
+    return get_connection()
 
 
 def get_founder_metrics():

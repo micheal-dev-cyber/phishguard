@@ -296,11 +296,9 @@ def update_subscription_plan(subscription_id: str, new_plan: str) -> bool:
 
 def _save_subscription(username: str, plan: str, sub_id: str, status: str):
     """Persist subscription record in the local DB."""
-    import sqlite3
-    from pathlib import Path
-    db = Path(__file__).parent.parent / "data" / "phishguard.db"
+    from src.db import get_connection
     try:
-        conn = sqlite3.connect(str(db))
+        conn = get_connection()
         c = conn.cursor()
         c.execute("""
             CREATE TABLE IF NOT EXISTS paddle_subscriptions (
@@ -435,11 +433,9 @@ def _handle_subscription_resumed(data: dict) -> dict:
 
 def get_local_subscription(username: str) -> Optional[dict]:
     """Get subscription record from local DB."""
-    import sqlite3
-    from pathlib import Path
-    db = Path(__file__).parent.parent / "data" / "phishguard.db"
+    from src.db import get_connection
     try:
-        conn = sqlite3.connect(str(db))
+        conn = get_connection()
         c = conn.cursor()
         c.execute("""
             CREATE TABLE IF NOT EXISTS paddle_subscriptions (

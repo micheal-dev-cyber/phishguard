@@ -3,16 +3,14 @@
 import logging
 import secrets
 import sqlite3
-from pathlib import Path
+from src.db import get_connection
 
 logger = logging.getLogger("workspace")
-
-DB_PATH = Path(__file__).parent.parent / "data" / "phishguard.db"
 ROLES = ["viewer", "analyst", "admin"]
 
 
 def init_workspace_tables():
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute("""
         CREATE TABLE IF NOT EXISTS workspaces (
@@ -49,7 +47,7 @@ def init_workspace_tables():
 
 def create_workspace(name: str, owner: str) -> dict:
     init_workspace_tables()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     try:
         c.execute("INSERT INTO workspaces (name, owner) VALUES (?, ?)", (name, owner))
@@ -70,7 +68,7 @@ def create_workspace(name: str, owner: str) -> dict:
 
 def invite_member(workspace_id: int, username: str, role: str = "viewer", invited_by: str = "") -> dict:
     init_workspace_tables()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     try:
         c.execute("SELECT username FROM tenants WHERE username = ?", (username,))
@@ -91,7 +89,7 @@ def invite_member(workspace_id: int, username: str, role: str = "viewer", invite
 
 
 def remove_member(workspace_id: int, username: str):
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute("DELETE FROM workspace_members WHERE workspace_id = ? AND username = ?",
               (workspace_id, username))
@@ -102,7 +100,7 @@ def remove_member(workspace_id: int, username: str):
 
 def get_workspace(workspace_id: int) -> dict:
     init_workspace_tables()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute("SELECT id, name, owner, created_at, is_active FROM workspaces WHERE id = ?", (workspace_id,))
     row = c.fetchone()
@@ -114,7 +112,7 @@ def get_workspace(workspace_id: int) -> dict:
 
 def list_workspaces(username: str) -> list:
     init_workspace_tables()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute("""
         SELECT w.id, w.name, w.owner, wm.role
@@ -129,7 +127,7 @@ def list_workspaces(username: str) -> list:
 
 def get_members(workspace_id: int) -> list:
     init_workspace_tables()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(
         "SELECT username, role, invited_by, joined_at FROM workspace_members WHERE workspace_id = ? ORDER BY joined_at",
@@ -141,7 +139,7 @@ def get_members(workspace_id: int) -> list:
 
 
 def user_role(username: str) -> str:
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute("SELECT role FROM tenants WHERE username = ?", (username,))
     row = c.fetchone()
@@ -150,7 +148,7 @@ def user_role(username: str) -> str:
 
 
 def user_workspace_id(username: str) -> str:
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute("SELECT workspace_id FROM tenants WHERE username = ?", (username,))
     row = c.fetchone()

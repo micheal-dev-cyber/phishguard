@@ -2,16 +2,14 @@
 
 import ipaddress
 import logging
-import sqlite3
-from pathlib import Path
+
+from src.db import DB_PATH, get_connection
 
 logger = logging.getLogger("ip-allowlist")
 
-DB_PATH = Path(__file__).parent.parent / "data" / "phishguard.db"
-
 
 def init_allowlist_table():
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute("""
         CREATE TABLE IF NOT EXISTS ip_allowlist (
@@ -31,7 +29,7 @@ def init_allowlist_table():
 def add_ip_rule(username: str, cidr: str, label: str = ""):
     init_allowlist_table()
     ipaddress.ip_network(cidr, strict=False)
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(
         "INSERT INTO ip_allowlist (username, cidr, label) VALUES (?, ?, ?)",
@@ -43,7 +41,7 @@ def add_ip_rule(username: str, cidr: str, label: str = ""):
 
 
 def remove_ip_rule(rule_id: int):
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute("DELETE FROM ip_allowlist WHERE id = ?", (rule_id,))
     conn.commit()
@@ -52,7 +50,7 @@ def remove_ip_rule(rule_id: int):
 
 def list_ip_rules(username: str) -> list:
     init_allowlist_table()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(
         "SELECT id, cidr, label, is_active, created_at FROM ip_allowlist WHERE username = ? ORDER BY id",

@@ -6,18 +6,16 @@ Verifies that sending domains have proper DKIM and SPF records.
 import hmac
 import logging
 import re
-import sqlite3
-from pathlib import Path
 from typing import Optional
 
-logger = logging.getLogger("domain_verify")
+from src.db import DB_PATH, get_connection
 
-DB_PATH = Path(__file__).parent.parent / "data" / "phishguard.db"
+logger = logging.getLogger("domain_verify")
 DOMAIN_TABLE = "verified_domains"
 
 
 def init_domain_verify():
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(f"""
         CREATE TABLE IF NOT EXISTS {DOMAIN_TABLE} (
@@ -41,7 +39,7 @@ def add_domain(username: str, domain: str) -> str:
     import secrets
     init_domain_verify()
     token = secrets.token_urlsafe(16)
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(
         f"INSERT OR REPLACE INTO {DOMAIN_TABLE} (username, domain, verified, verification_token) VALUES (?, ?, 0, ?)",
@@ -54,7 +52,7 @@ def add_domain(username: str, domain: str) -> str:
 
 def verify_domain(username: str, domain: str, token: str) -> bool:
     init_domain_verify()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(
         f"SELECT verification_token FROM {DOMAIN_TABLE} WHERE username=? AND domain=?",
@@ -111,7 +109,7 @@ def check_dns_records(domain: str) -> dict:
 
 def get_user_domains(username: str) -> list[dict]:
     init_domain_verify()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(f"SELECT id, domain, verified, created_at FROM {DOMAIN_TABLE} WHERE username=? ORDER BY created_at DESC", (username,))
     cols = [d[0] for d in c.description]
@@ -122,7 +120,7 @@ def get_user_domains(username: str) -> list[dict]:
 
 def delete_domain(username: str, domain: str) -> bool:
     init_domain_verify()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(f"DELETE FROM {DOMAIN_TABLE} WHERE username=? AND domain=?", (username, domain))
     affected = c.rowcount

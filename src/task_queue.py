@@ -1,15 +1,13 @@
-import sqlite3
 import threading
 import time
 import json
 import logging
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from typing import Callable, Optional
 
-logger = logging.getLogger("task-queue")
+from src.db import DB_PATH, get_connection
 
-DB_PATH = Path(__file__).parent.parent / "data" / "phishguard.db"
+logger = logging.getLogger("task-queue")
 
 _registry: dict[str, Callable] = {}
 
@@ -19,7 +17,7 @@ def register_task(name: str, func: Callable):
 
 
 def init_task_queue():
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute("""
         CREATE TABLE IF NOT EXISTS task_queue (
@@ -42,7 +40,7 @@ def init_task_queue():
 
 def enqueue(task_name: str, payload: Optional[dict] = None,
             delay_seconds: int = 0, max_retries: int = 3) -> int:
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     scheduled = (datetime.now(timezone.utc) + timedelta(seconds=delay_seconds)).strftime("%Y-%m-%d %H:%M:%S")
     c.execute(
@@ -59,7 +57,7 @@ def enqueue(task_name: str, payload: Optional[dict] = None,
 def _worker():
     while True:
         try:
-            conn = sqlite3.connect(str(DB_PATH))
+            conn = get_connection()
             c = conn.cursor()
             c.execute(
                 """UPDATE task_queue SET status='running', started_at=datetime('now')
@@ -100,7 +98,7 @@ def _worker():
 
 
 def _update_status(task_id: int, status: str):
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(
         "UPDATE task_queue SET status=?, completed_at=datetime('now') WHERE id=?",
@@ -111,7 +109,7 @@ def _update_status(task_id: int, status: str):
 
 
 def _set_error(task_id: int, error: str):
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute("UPDATE task_queue SET error=? WHERE id=?", (error, task_id))
     conn.commit()
@@ -119,7 +117,7 @@ def _set_error(task_id: int, error: str):
 
 
 def _handle_failure(task_id: int, error: str):
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(
         "SELECT retry_count, max_retries FROM task_queue WHERE id=?",
@@ -156,7 +154,7 @@ def start_worker():
 
 
 def get_pending_count() -> int:
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute("SELECT COUNT(*) FROM task_queue WHERE status='pending'")
     count = c.fetchone()[0]
@@ -165,7 +163,7 @@ def get_pending_count() -> int:
 
 
 def get_task_status(task_id: int) -> Optional[str]:
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute("SELECT status FROM task_queue WHERE id=?", (task_id,))
     row = c.fetchone()
@@ -184,7 +182,7 @@ def wait_for_completion(task_id: int, timeout: float = 10.0, poll_interval: floa
 
 
 def get_failed_tasks(limit: int = 20) -> list:
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(
         "SELECT id, task_name, error, created_at, retry_count FROM task_queue WHERE status='failed' ORDER BY id DESC LIMIT ?",

@@ -32,17 +32,13 @@ import json
 import re
 import hashlib
 import logging
-import sqlite3
 import statistics
 from datetime import datetime, timedelta
-from pathlib import Path
-from typing import Optional, List
+from typing import Optional
+
+from src.db import DB_PATH, get_connection
 
 logger = logging.getLogger("sender-profiler")
-
-PROJECT_ROOT = Path(__file__).parent.parent
-DATA_DIR = PROJECT_ROOT / "data"
-DB_PATH = DATA_DIR / "phishguard.db"
 
 # ── Pattern constants ──────────────────────────────────────────────────────
 
@@ -174,7 +170,7 @@ def compute_response_time_hours(
 def get_or_create_profile(sender_email: str, display_name: str = "") -> SenderProfile:
     """Get existing profile or create a skeleton."""
     domain = sender_email.split("@")[-1] if "@" in sender_email else "unknown"
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     try:
         c.execute("SELECT * FROM sender_profiles WHERE sender_email = ?", (sender_email,))
@@ -238,7 +234,7 @@ def update_profile_after_scan(
     body_hash = hashlib.sha384(body.encode("utf-8")).hexdigest()
     word_count = len(body.split())
 
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     try:
         # Insert communication log entry
@@ -414,7 +410,7 @@ def detect_behavioural_anomaly(
     has_finance = has_financial_request(body)
     if has_finance:
         # Check if this sender has EVER made financial requests
-        conn = sqlite3.connect(str(DB_PATH))
+        conn = get_connection()
         c = conn.cursor()
         try:
             c.execute("""
@@ -475,7 +471,7 @@ def detect_behavioural_anomaly(
 
 def get_sender_history(sender_email: str, limit: int = 20) -> list:
     """Return communication history for a sender."""
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     try:
         c.execute("""
@@ -492,7 +488,7 @@ def get_sender_history(sender_email: str, limit: int = 20) -> list:
 
 def get_all_profiles_summary(limit: int = 50) -> list:
     """Return all sender profiles with trust scores."""
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     try:
         c.execute("""

@@ -1,17 +1,15 @@
 """Notification Center — in-app notification history."""
 
 import logging
-import sqlite3
 from datetime import datetime
-from pathlib import Path
+
+from src.db import DB_PATH, get_connection
 
 logger = logging.getLogger("notifications")
 
-DB_PATH = Path(__file__).parent.parent / "data" / "phishguard.db"
-
 
 def init_notifications_table():
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute("""
         CREATE TABLE IF NOT EXISTS notifications (
@@ -33,7 +31,7 @@ def init_notifications_table():
 def push_notification(username: str, title: str, message: str, severity: str = "info", link: str = ""):
     init_notifications_table()
     try:
-        conn = sqlite3.connect(str(DB_PATH))
+        conn = get_connection()
         c = conn.cursor()
         c.execute(
             "INSERT INTO notifications (username, title, message, severity, link) VALUES (?, ?, ?, ?, ?)",
@@ -47,7 +45,7 @@ def push_notification(username: str, title: str, message: str, severity: str = "
 
 def get_notifications(username: str, limit: int = 50) -> list:
     init_notifications_table()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(
         "SELECT id, title, message, severity, is_read, link, created_at FROM notifications "
@@ -64,7 +62,7 @@ def get_notifications(username: str, limit: int = 50) -> list:
 
 
 def mark_read(notification_id: int):
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute("UPDATE notifications SET is_read = 1 WHERE id = ?", (notification_id,))
     conn.commit()
@@ -72,7 +70,7 @@ def mark_read(notification_id: int):
 
 
 def mark_all_read(username: str):
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute("UPDATE notifications SET is_read = 1 WHERE username = ?", (username,))
     conn.commit()
@@ -81,7 +79,7 @@ def mark_all_read(username: str):
 
 def unread_count(username: str) -> int:
     init_notifications_table()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute("SELECT COUNT(*) FROM notifications WHERE username = ? AND is_read = 0", (username,))
     count = c.fetchone()[0]

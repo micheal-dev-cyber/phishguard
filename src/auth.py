@@ -353,10 +353,8 @@ def _reset_form():
     if st.button("Send Reset Link", use_container_width=True, type="primary"):
         if reset_email:
             from src.password_reset import create_reset_token, send_reset_email
-            import sqlite3
-            from pathlib import Path
-            db = Path(__file__).parent.parent / "data" / "phishguard.db"
-            conn = sqlite3.connect(str(db))
+            from src.db import get_connection
+            conn = get_connection()
             c = conn.cursor()
             c.execute("SELECT username FROM tenants WHERE email = ?", (reset_email,))
             row = c.fetchone()
@@ -1179,8 +1177,8 @@ def check_password() -> bool:
                                      label_visibility="collapsed")
             if st.button("Update Password", use_container_width=True, type="primary"):
                 if new_pw and new_pw == new_pw2 and len(new_pw) >= 6:
-                    db = Path(__file__).parent.parent / "data" / "phishguard.db"
-                    conn = sqlite3.connect(str(db))
+                    from src.db import get_connection
+                    conn = get_connection()
                     c = conn.cursor()
                     import hashlib
                     pw_hash = hashlib.sha256(new_pw.encode()).hexdigest()
@@ -1214,10 +1212,8 @@ def check_password() -> bool:
         if verify_email_token(token):
             st.toast("✅ Email verified! You can now scan emails.")
             try:
-                import sqlite3
-                from pathlib import Path
-                _vdb = Path(__file__).parent.parent / "data" / "phishguard.db"
-                _vconn = sqlite3.connect(str(_vdb))
+                from src.db import get_connection
+                _vconn = get_connection()
                 _vc = _vconn.cursor()
                 _vc.execute("SELECT username, email FROM email_verifications WHERE token = ?", (token,))
                 _vrow = _vc.fetchone()

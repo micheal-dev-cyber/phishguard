@@ -12,17 +12,15 @@ Usage:
     results = test.get_results()
 """
 
-import sqlite3
 import json
 from datetime import datetime
-from pathlib import Path
 from typing import Optional
 
-DB_PATH = Path(__file__).parent.parent / "data" / "phishguard.db"
+from src.db import DB_PATH, get_connection
 
 
 def init_ab_tests():
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute("""
         CREATE TABLE IF NOT EXISTS ab_tests (
@@ -64,7 +62,7 @@ class ABTest:
         self.control_config = control_config or {}
         self.variant_config = variant_config or {}
 
-        conn = sqlite3.connect(str(DB_PATH))
+        conn = get_connection()
         c = conn.cursor()
         c.execute(
             "SELECT id FROM ab_tests WHERE test_name=? AND status='running'",
@@ -86,7 +84,7 @@ class ABTest:
 
     def record_scan(self, variant: str, risk_score: int, is_phishing: bool,
                     user_flagged: bool = False, matched_rules: Optional[list] = None):
-        conn = sqlite3.connect(str(DB_PATH))
+        conn = get_connection()
         c = conn.cursor()
         c.execute(
             "INSERT INTO ab_test_results (test_id, variant, risk_score, is_phishing, user_flagged, matched_rules) VALUES (?, ?, ?, ?, ?, ?)",
@@ -97,8 +95,7 @@ class ABTest:
         conn.close()
 
     def get_results(self) -> dict:
-        conn = sqlite3.connect(str(DB_PATH))
-        conn.row_factory = sqlite3.Row
+        conn = get_connection()
         c = conn.cursor()
         c.execute(
             "SELECT * FROM ab_test_results WHERE test_id=? ORDER BY id",
@@ -136,8 +133,7 @@ class ABTest:
 
 
 def list_active_tests() -> list:
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.row_factory = sqlite3.Row
+    conn = get_connection()
     c = conn.cursor()
     c.execute("SELECT * FROM ab_tests WHERE status='running' ORDER BY created_at DESC")
     rows = c.fetchall()
@@ -146,7 +142,7 @@ def list_active_tests() -> list:
 
 
 def stop_test(test_name: str):
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute("UPDATE ab_tests SET status='completed' WHERE test_name=?", (test_name,))
     conn.commit()
@@ -154,7 +150,7 @@ def stop_test(test_name: str):
 
 
 def promote_variant(test_name: str, variant: str):
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute("SELECT control_config, variant_config FROM ab_tests WHERE test_name=?", (test_name,))
     row = c.fetchone()

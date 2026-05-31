@@ -9,7 +9,10 @@ Usage:
 import json
 import logging
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
+
+from src.db import DB_PATH, get_connection
 
 logger = logging.getLogger("postgres")
 
@@ -90,17 +93,13 @@ pg = PostgreSQLPool()
 
 def migrate_sqlite_to_postgres():
     """One-shot migration: copy all SQLite tables to PostgreSQL."""
-    import sqlite3
-    from pathlib import Path
-    sqlite_path = Path(__file__).parent.parent / "data" / "phishguard.db"
-    if not sqlite_path.exists():
+    if not Path(DB_PATH).exists():
         logger.info("No SQLite DB found — nothing to migrate")
         return
     if not pg.enabled:
         logger.info("PostgreSQL not configured — skipping migration")
         return
-    sq = sqlite3.connect(str(sqlite_path))
-    sq.row_factory = sqlite3.Row
+    sq = get_connection()
     tables = [
         "analyses", "users", "leaderboard", "leaderboard_history",
         "threat_intel", "sender_profiles", "sender_communications",

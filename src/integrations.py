@@ -2,12 +2,10 @@
 
 import json
 import logging
-import sqlite3
-from pathlib import Path
+
+from src.db import DB_PATH, get_connection
 
 logger = logging.getLogger("integrations")
-
-DB_PATH = Path(__file__).parent.parent / "data" / "phishguard.db"
 
 REGISTRY = {
     "slack": {
@@ -57,7 +55,7 @@ REGISTRY = {
 
 
 def init_integrations_table():
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute("""
         CREATE TABLE IF NOT EXISTS integrations (
@@ -76,7 +74,7 @@ def init_integrations_table():
 
 def list_integrations(username: str) -> list:
     init_integrations_table()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute("SELECT provider, config, is_active, created_at FROM integrations WHERE username = ?", (username,))
     rows = c.fetchall()
@@ -93,7 +91,7 @@ def list_integrations(username: str) -> list:
 
 def save_integration(username: str, provider: str, config: dict):
     init_integrations_table()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(
         "INSERT OR REPLACE INTO integrations (username, provider, config, is_active) VALUES (?, ?, ?, 1)",
@@ -104,7 +102,7 @@ def save_integration(username: str, provider: str, config: dict):
 
 
 def remove_integration(username: str, provider: str):
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute("DELETE FROM integrations WHERE username = ? AND provider = ?", (username, provider))
     conn.commit()

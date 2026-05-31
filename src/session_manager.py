@@ -2,18 +2,16 @@
 
 import hashlib
 import logging
-import sqlite3
 import time
-from pathlib import Path
+
+from src.db import DB_PATH, get_connection
 
 logger = logging.getLogger("session-mgr")
-
-DB_PATH = Path(__file__).parent.parent / "data" / "phishguard.db"
 SESSION_TTL = 1800
 
 
 def init_sessions_table():
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute("""
         CREATE TABLE IF NOT EXISTS sessions (
@@ -37,7 +35,7 @@ def create_session(username: str, ip_address: str = "", user_agent: str = "") ->
     raw = f"{username}{time.time()}{ip_address}"
     session_id = hashlib.sha256(raw.encode()).hexdigest()[:24]
     now = time.time()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(
         "INSERT INTO sessions (session_id, username, ip_address, user_agent, created_at, last_seen) VALUES (?, ?, ?, ?, ?, ?)",
@@ -49,7 +47,7 @@ def create_session(username: str, ip_address: str = "", user_agent: str = "") ->
 
 
 def touch_session(session_id: str):
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute("UPDATE sessions SET last_seen = ? WHERE session_id = ? AND is_active = 1",
               (time.time(), session_id))
@@ -58,7 +56,7 @@ def touch_session(session_id: str):
 
 
 def revoke_session(session_id: str):
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute("UPDATE sessions SET is_active = 0 WHERE session_id = ?", (session_id,))
     conn.commit()
@@ -66,7 +64,7 @@ def revoke_session(session_id: str):
 
 
 def revoke_all_sessions(username: str):
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute("UPDATE sessions SET is_active = 0 WHERE username = ? AND is_active = 1", (username,))
     conn.commit()
@@ -75,7 +73,7 @@ def revoke_all_sessions(username: str):
 
 def list_sessions(username: str) -> list:
     init_sessions_table()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(
         "SELECT id, session_id, ip_address, user_agent, created_at, last_seen, is_active FROM sessions "
@@ -94,7 +92,7 @@ def list_sessions(username: str) -> list:
 def cleanup_expired():
     init_sessions_table()
     cutoff = time.time() - SESSION_TTL
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute("UPDATE sessions SET is_active = 0 WHERE last_seen < ? AND is_active = 1", (cutoff,))
     conn.commit()

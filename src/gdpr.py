@@ -2,17 +2,15 @@
 
 import json
 import logging
-import sqlite3
 from datetime import datetime
-from pathlib import Path
+
+from src.db import DB_PATH, get_connection
 
 logger = logging.getLogger("gdpr")
 
-DB_PATH = Path(__file__).parent.parent / "data" / "phishguard.db"
-
 
 def init_gdpr_table():
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute("""
         CREATE TABLE IF NOT EXISTS gdpr_consent (
@@ -41,7 +39,7 @@ def init_gdpr_table():
 
 def record_consent(username: str, consent_type: str = "data_processing", ip: str = ""):
     init_gdpr_table()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(
         "INSERT OR REPLACE INTO gdpr_consent (username, consent_type, granted, ip_address) VALUES (?, ?, 1, ?)",
@@ -52,7 +50,7 @@ def record_consent(username: str, consent_type: str = "data_processing", ip: str
 
 
 def revoke_consent(username: str, consent_type: str = "data_processing"):
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute("UPDATE gdpr_consent SET granted = 0 WHERE username = ? AND consent_type = ?",
               (username, consent_type))
@@ -62,7 +60,7 @@ def revoke_consent(username: str, consent_type: str = "data_processing"):
 
 def check_consent(username: str) -> bool:
     init_gdpr_table()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute("SELECT granted FROM gdpr_consent WHERE username = ? AND consent_type = 'data_processing'",
               (username,))
@@ -76,7 +74,7 @@ def check_consent(username: str) -> bool:
 def export_user_data(username: str) -> dict:
     init_gdpr_table()
     data = {"username": username, "exported_at": datetime.now().isoformat()}
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     try:
         c.execute("SELECT * FROM tenants WHERE username = ?", (username,))
@@ -107,7 +105,7 @@ def export_user_data(username: str) -> dict:
 
 def delete_user_data(username: str) -> dict:
     init_gdpr_table()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     deleted = {}
     for table in ["analyses", "login_attempts", "audit_log", "notifications",

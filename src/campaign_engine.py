@@ -13,22 +13,20 @@ Database tables:
 """
 
 import json
-import sqlite3
 import logging
 import random
 import re
 import time
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Optional
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
+from src.db import DB_PATH, get_connection
 from src.env import ENV
 from src.providers import get_chat_completion
 
 logger = logging.getLogger("campaign-engine")
-DB_PATH = Path(__file__).parent.parent / "data" / "phishguard.db"
 
 BUILTIN_TEMPLATES = {
     "fake_invoice": {
@@ -120,7 +118,7 @@ A re-delivery fee of ${fee}.00 may apply if not scheduled within 48 hours.
 
 
 def init_campaign_tables():
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute("""
         CREATE TABLE IF NOT EXISTS campaign_templates (
@@ -177,7 +175,7 @@ def init_campaign_tables():
 
 
 def _seed_builtin_templates():
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     existing = c.execute("SELECT COUNT(*) FROM campaign_templates WHERE is_builtin = 1").fetchone()[0]
     if existing >= len(BUILTIN_TEMPLATES):
@@ -195,7 +193,7 @@ def _seed_builtin_templates():
 
 def get_templates(category: Optional[str] = None) -> list:
     init_campaign_tables()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     if category:
         c.execute(
@@ -238,7 +236,7 @@ def generate_llm_template(topic: str = "phishing email") -> dict:
 
 def create_campaign(name: str, template_id: int, targets: list, created_by: str = "admin") -> dict:
     init_campaign_tables()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     try:
         c.execute("SELECT name, subject, body FROM campaign_templates WHERE id = ?", (template_id,))
@@ -272,7 +270,7 @@ def create_campaign(name: str, template_id: int, targets: list, created_by: str 
 
 def launch_campaign(campaign_id: int) -> dict:
     init_campaign_tables()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     try:
         c.execute("SELECT status, template_id FROM campaigns WHERE id = ?", (campaign_id,))
@@ -346,7 +344,7 @@ def launch_campaign(campaign_id: int) -> dict:
 
 def record_open(campaign_id: int, target_email: str) -> bool:
     init_campaign_tables()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     try:
         c.execute(
@@ -365,7 +363,7 @@ def record_open(campaign_id: int, target_email: str) -> bool:
 
 def record_click(campaign_id: int, target_email: str) -> bool:
     init_campaign_tables()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     try:
         c.execute(
@@ -384,7 +382,7 @@ def record_click(campaign_id: int, target_email: str) -> bool:
 
 def get_campaigns(status: Optional[str] = None) -> list:
     init_campaign_tables()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     if status:
         c.execute(
@@ -412,7 +410,7 @@ def get_campaigns(status: Optional[str] = None) -> list:
 
 def get_campaign_results(campaign_id: int) -> list:
     init_campaign_tables()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(
         "SELECT email, first_name, last_name, department, status, sent_at, opened_at, clicked_at, reported_at "

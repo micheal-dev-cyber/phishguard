@@ -1,12 +1,8 @@
 import streamlit as st
-import sqlite3
-from pathlib import Path
 from src.domain_verify import (
     init_domain_verify, add_domain, verify_domain,
     get_user_domains, delete_domain, check_dns_records,
 )
-
-DB_PATH = Path(__file__).parent.parent / "data" / "phishguard.db"
 
 
 def render_domain_verify_ui(username: str):

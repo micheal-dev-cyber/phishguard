@@ -31,18 +31,18 @@ import re
 import asyncio
 import hashlib
 import logging
-import sqlite3
+import os
 import time
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 from dataclasses import dataclass, field
+from src.db import get_connection
 
 logger = logging.getLogger("url-sandbox")
 
 PROJECT_ROOT = Path(__file__).parent.parent
 DATA_DIR = PROJECT_ROOT / "data"
-DB_PATH = DATA_DIR / "phishguard.db"
 SCREENSHOTS_DIR = DATA_DIR / "sandbox_screenshots"
 SCREENSHOTS_DIR.mkdir(exist_ok=True)
 
@@ -524,7 +524,7 @@ async def analyse_url_sandbox(
 
 def _persist_sandbox_result(result: SandboxResult):
     """Write sandbox results to the database."""
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     try:
         c.execute("""
@@ -615,7 +615,7 @@ def analyse_url_sandbox_sync(
 
 def get_sandbox_history(limit: int = 20) -> list:
     """Get recent sandbox analysis results."""
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     try:
         c.execute("""

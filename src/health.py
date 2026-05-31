@@ -7,21 +7,21 @@ import json
 import logging
 import os
 import shutil
-import sqlite3
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+from src.db import DB_PATH, get_connection
+
 logger = logging.getLogger("health")
 
-DB_PATH = Path(__file__).parent.parent / "data" / "phishguard.db"
 BACKUP_DIR = Path(__file__).parent.parent / "backups"
 HEALTH_TABLE = "health_checks"
 
 
 def init_health():
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(f"""
         CREATE TABLE IF NOT EXISTS {HEALTH_TABLE} (
@@ -39,7 +39,7 @@ def init_health():
 
 def check_database() -> dict:
     try:
-        conn = sqlite3.connect(str(DB_PATH))
+        conn = get_connection()
         c = conn.cursor()
         c.execute("SELECT COUNT(*) FROM sqlite_master")
         table_count = c.fetchone()[0]
@@ -73,7 +73,7 @@ def check_disk() -> dict:
 
 def check_task_queue() -> dict:
     try:
-        conn = sqlite3.connect(str(DB_PATH))
+        conn = get_connection()
         c = conn.cursor()
         c.execute("SELECT status, COUNT(*) FROM task_queue GROUP BY status")
         rows = c.fetchall()
@@ -107,7 +107,7 @@ def check_redis() -> dict:
 
 def run_all_checks() -> list[dict]:
     checks = [check_database(), check_disk(), check_task_queue(), check_redis()]
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     for chk in checks:
         c.execute(

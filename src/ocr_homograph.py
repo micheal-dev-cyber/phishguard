@@ -19,19 +19,15 @@ import json
 import re
 import asyncio
 import logging
-import sqlite3
 import hashlib
 import time
-from pathlib import Path
 from io import BytesIO
 from typing import Optional
 from concurrent.futures import ThreadPoolExecutor
 
-logger = logging.getLogger("ocr-homograph")
+from src.db import DB_PATH, get_connection
 
-PROJECT_ROOT = Path(__file__).parent.parent
-DATA_DIR = PROJECT_ROOT / "data"
-DB_PATH = DATA_DIR / "phishguard.db"
+logger = logging.getLogger("ocr-homograph")
 
 # ── Unicode confusable map (common Latin → Cyrillic/Greek lookalikes) ──────
 # These are the most dangerous homograph substitutions used in IDN spoofing.
@@ -400,7 +396,7 @@ def log_ocr_result(
     confidence: float,
     processing_time_ms: int,
 ):
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     try:
         c.execute("""
@@ -433,7 +429,7 @@ def log_homograph_alert(
     risk_score: int,
     found_in_email: str = "",
 ):
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     try:
         c.execute("""

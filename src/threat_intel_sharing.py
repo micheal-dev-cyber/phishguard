@@ -32,16 +32,12 @@ import hashlib
 import hmac
 import uuid
 import logging
-import sqlite3
 from datetime import datetime, timezone
 from typing import Optional
-from pathlib import Path
+
+from src.db import DB_PATH, get_connection
 
 logger = logging.getLogger("threat-intel")
-
-PROJECT_ROOT = Path(__file__).parent.parent
-DATA_DIR = PROJECT_ROOT / "data"
-DB_PATH = DATA_DIR / "phishguard.db"
 
 # ── STIX 2.1 Pattern constants ─────────────────────────────────────────────
 
@@ -225,7 +221,7 @@ def compute_linguistic_baseline(email_text: str) -> str:
 def check_collective_immunity(email_text: str) -> dict:
     """Check if email text matches any known STIX indicator by linguistic hash."""
     ling_hash = compute_linguistic_baseline(email_text)
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     try:
         c.execute(
@@ -250,7 +246,7 @@ def check_collective_immunity(email_text: str) -> dict:
 
 def get_all_active_indicators(limit: int = 100) -> list:
     """Retrieve all active STIX indicators for downstream immunisation."""
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     try:
         c.execute(
@@ -277,7 +273,7 @@ def broadcast_intel(
     Every connected enterprise node reads from the same threat_intel table,
     providing real-time immunisation coverage.
     """
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     bundle_id = stix_bundle["id"]
     payload = json.dumps(stix_bundle)

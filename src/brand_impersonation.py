@@ -7,13 +7,11 @@ impersonation patterns in email content.
 import difflib
 import logging
 import re
-import sqlite3
-from pathlib import Path
 from typing import Optional
 
-logger = logging.getLogger("brand_impersonation")
+from src.db import DB_PATH, get_connection
 
-DB_PATH = Path(__file__).parent.parent / "data" / "phishguard.db"
+logger = logging.getLogger("brand_impersonation")
 BRAND_TABLE = "brand_protection"
 
 # Built-in high-value brand domains
@@ -29,7 +27,7 @@ KNOWN_BRANDS = [
 
 
 def init_brand_protection():
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(f"""
         CREATE TABLE IF NOT EXISTS {BRAND_TABLE} (
@@ -51,7 +49,7 @@ def init_brand_protection():
 
 def add_custom_brand(domain: str, label: str = "") -> bool:
     init_brand_protection()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     try:
         c.execute(
@@ -69,7 +67,7 @@ def add_custom_brand(domain: str, label: str = "") -> bool:
 
 def remove_custom_brand(domain: str) -> bool:
     init_brand_protection()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(f"DELETE FROM {BRAND_TABLE} WHERE domain=?", (domain.lower().strip(),))
     affected = c.rowcount
@@ -80,7 +78,7 @@ def remove_custom_brand(domain: str) -> bool:
 
 def get_all_brands() -> list[dict]:
     init_brand_protection()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(f"SELECT * FROM {BRAND_TABLE} ORDER BY domain")
     cols = [d[0] for d in c.description]

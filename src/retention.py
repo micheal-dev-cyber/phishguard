@@ -1,18 +1,15 @@
 """Data Retention Policies — auto-purge old scans and logs."""
 
 import logging
-import sqlite3
-import time
 from datetime import datetime, timedelta
-from pathlib import Path
+
+from src.db import DB_PATH, get_connection
 
 logger = logging.getLogger("retention")
 
-DB_PATH = Path(__file__).parent.parent / "data" / "phishguard.db"
-
 
 def init_retention_table():
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute("""
         CREATE TABLE IF NOT EXISTS retention_policies (
@@ -30,7 +27,7 @@ def init_retention_table():
 
 def get_retention_policy(username: str) -> dict:
     init_retention_table()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(
         "SELECT analysis_days, audit_days, alert_days, enabled FROM retention_policies WHERE username = ?",
@@ -45,7 +42,7 @@ def get_retention_policy(username: str) -> dict:
 
 def set_retention_policy(username: str, analysis_days: int, audit_days: int, alert_days: int):
     init_retention_table()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(
         "INSERT OR REPLACE INTO retention_policies (username, analysis_days, audit_days, alert_days, enabled) VALUES (?, ?, ?, ?, 1)",
@@ -63,7 +60,7 @@ def purge_old_data(username: str) -> dict:
     cutoff_audit = (datetime.now() - timedelta(days=policy["audit_days"])).isoformat()
     cutoff_alerts = (datetime.now() - timedelta(days=policy["alert_days"])).isoformat()
 
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     counts = {}
     try:

@@ -2,16 +2,14 @@
 
 import logging
 import re
-import sqlite3
-from pathlib import Path
+
+from src.db import DB_PATH, get_connection
 
 logger = logging.getLogger("custom-rules")
 
-DB_PATH = Path(__file__).parent.parent / "data" / "phishguard.db"
-
 
 def init_rules_table():
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute("""
         CREATE TABLE IF NOT EXISTS custom_rules (
@@ -32,7 +30,7 @@ def init_rules_table():
 
 def add_rule(username: str, name: str, rule_type: str, pattern: str, risk_boost: int = 10):
     init_rules_table()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(
         "INSERT INTO custom_rules (username, name, rule_type, pattern, risk_boost) VALUES (?, ?, ?, ?, ?)",
@@ -44,7 +42,7 @@ def add_rule(username: str, name: str, rule_type: str, pattern: str, risk_boost:
 
 
 def remove_rule(rule_id: int):
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute("DELETE FROM custom_rules WHERE id = ?", (rule_id,))
     conn.commit()
@@ -53,7 +51,7 @@ def remove_rule(rule_id: int):
 
 def list_rules(username: str) -> list:
     init_rules_table()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(
         "SELECT id, name, rule_type, pattern, risk_boost, is_active, created_at FROM custom_rules WHERE username = ? ORDER BY id",
@@ -69,7 +67,7 @@ def list_rules(username: str) -> list:
 
 
 def toggle_rule(rule_id: int):
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute("UPDATE custom_rules SET is_active = CASE WHEN is_active THEN 0 ELSE 1 END WHERE id = ?", (rule_id,))
     conn.commit()

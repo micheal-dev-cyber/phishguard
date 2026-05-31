@@ -78,10 +78,8 @@ def _paddle_checkout(plan: str, username: str, email: str) -> dict:
 def activate_plan(username: str, plan: str, order_id: str = ""):
     """Activate a plan after successful payment."""
     try:
-        import sqlite3
-        from pathlib import Path
-        db = Path(__file__).parent.parent / "data" / "phishguard.db"
-        conn = sqlite3.connect(str(db))
+        from src.db import get_connection
+        conn = get_connection()
         c = conn.cursor()
 
         c.execute("""
@@ -124,10 +122,8 @@ def get_onboarding_steps(username: str) -> list:
         {"step": "weekly_report",      "label": "Enable weekly security reports",  "done": False},
     ]
     try:
-        import sqlite3
-        from pathlib import Path
-        db = Path(__file__).parent.parent / "data" / "phishguard.db"
-        conn = sqlite3.connect(str(db))
+        from src.db import get_connection
+        conn = get_connection()
         c = conn.cursor()
         c.execute("SELECT step FROM onboarding_progress WHERE username = ?", (username,))
         done_steps = {r[0] for r in c.fetchall()}
@@ -142,10 +138,8 @@ def get_onboarding_steps(username: str) -> list:
 
 def complete_onboarding_step(username: str, step: str):
     try:
-        import sqlite3
-        from pathlib import Path
-        db = Path(__file__).parent.parent / "data" / "phishguard.db"
-        conn = sqlite3.connect(str(db))
+        from src.db import get_connection
+        conn = get_connection()
         c = conn.cursor()
         c.execute("""
             CREATE TABLE IF NOT EXISTS onboarding_progress (

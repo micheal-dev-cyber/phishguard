@@ -3,19 +3,17 @@
 import logging
 import secrets
 import time
-import sqlite3
 import smtplib
 from email.mime.text import MIMEText
-from pathlib import Path
+
+from src.db import DB_PATH, get_connection
 
 logger = logging.getLogger("email-verify")
-
-DB_PATH = Path(__file__).parent.parent / "data" / "phishguard.db"
 VERIFY_TOKEN_TTL = 86400  # 24 hours
 
 
 def _init_table():
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute("""
         CREATE TABLE IF NOT EXISTS email_verifications (
@@ -36,7 +34,7 @@ def create_verification(username: str, email: str) -> dict:
     _init_table()
     token = secrets.token_urlsafe(32)
     expires_at = time.time() + VERIFY_TOKEN_TTL
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(
         "INSERT INTO email_verifications (username, email, token, expires_at) VALUES (?, ?, ?, ?)",
@@ -49,7 +47,7 @@ def create_verification(username: str, email: str) -> dict:
 
 def verify_email_token(token: str) -> bool:
     _init_table()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(
         "SELECT username, expires_at, verified FROM email_verifications WHERE token = ?",
@@ -73,7 +71,7 @@ def verify_email_token(token: str) -> bool:
 
 def is_email_verified(username: str) -> bool:
     try:
-        conn = sqlite3.connect(str(DB_PATH))
+        conn = get_connection()
         c = conn.cursor()
         c.execute("SELECT email_verified FROM tenants WHERE username = ?", (username,))
         row = c.fetchone()

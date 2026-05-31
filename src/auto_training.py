@@ -3,6 +3,8 @@
 import logging
 from datetime import datetime
 
+from src.db import DB_PATH, get_connection
+
 logger = logging.getLogger("auto_training")
 
 
@@ -19,10 +21,7 @@ def assign_training(username: str, risk_score: int, severity: str) -> dict:
 
 def _create_training_campaign(username: str, template_name: str, priority: str) -> dict:
     try:
-        import sqlite3
-        from pathlib import Path
-        db = Path(__file__).parent.parent / "data" / "phishguard.db"
-        conn = sqlite3.connect(str(db))
+        conn = get_connection()
         c = conn.cursor()
 
         c.execute("""
@@ -61,10 +60,7 @@ def _create_training_campaign(username: str, template_name: str, priority: str) 
 
 def get_training_status(username: str) -> list:
     try:
-        import sqlite3
-        from pathlib import Path
-        db = Path(__file__).parent.parent / "data" / "phishguard.db"
-        conn = sqlite3.connect(str(db))
+        conn = get_connection()
         c = conn.cursor()
         c.execute("""
             CREATE TABLE IF NOT EXISTS auto_training_assignments (

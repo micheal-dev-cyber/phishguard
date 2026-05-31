@@ -17,13 +17,12 @@ import hashlib
 import secrets
 import time
 import logging
-from pathlib import Path
 from datetime import datetime, timezone
 from typing import Optional
 
-logger = logging.getLogger("api-keys")
+from src.db import DB_PATH, get_connection
 
-DB_PATH = Path(__file__).parent.parent / "data" / "phishguard.db"
+logger = logging.getLogger("api-keys")
 
 TIERS = {
     "free": {
@@ -52,7 +51,7 @@ TIERS = {
 
 
 def init_api_keys_table():
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute("""
         CREATE TABLE IF NOT EXISTS api_keys (
@@ -89,7 +88,7 @@ def generate_api_key(username: str, tier: str = "free") -> dict:
     key_hash = _hash_key_bcrypt(raw_key)
     key_prefix = raw_key[:14]
 
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     try:
         c.execute(
@@ -115,7 +114,7 @@ def authenticate_request(headers: dict) -> dict:
     if not raw_key:
         return {"allowed": False, "status": 401, "error": "Missing X-PhishGuard-Key header"}
 
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     try:
         c.execute(
@@ -176,7 +175,7 @@ def authenticate_request(headers: dict) -> dict:
 
 def _check_and_record_usage(key_hash: str, tier: str, tier_config: dict) -> tuple:
     now = time.time()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     try:
         daily_limit = tier_config.get("daily_limit")
@@ -217,7 +216,7 @@ def _check_and_record_usage(key_hash: str, tier: str, tier_config: dict) -> tupl
 def get_usage_stats(key_hash: str) -> dict:
     init_api_keys_table()
     now = time.time()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     try:
         c.execute("SELECT username, tier FROM api_keys WHERE key_hash = ?", (key_hash,))
@@ -250,7 +249,7 @@ def get_usage_stats(key_hash: str) -> dict:
 
 def delete_api_key(key_hash: str) -> bool:
     init_api_keys_table()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute("DELETE FROM api_keys WHERE key_hash = ?", (key_hash,))
     deleted = c.rowcount > 0

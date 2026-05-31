@@ -10,14 +10,12 @@ Uses environment variables PGHOST, PGPORT, PGDATABASE, PGUSER, PGPASSWORD.
 
 import sys
 import os
-import sqlite3
 import logging
-from pathlib import Path
+
+from src.db import DB_PATH, get_connection
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger("migrate")
-
-DB_PATH = Path(__file__).parent.parent / "data" / "phishguard.db"
 
 TABLES_TO_MIGRATE = [
     "analyses", "users", "tenants", "api_keys", "audit_log",
@@ -49,7 +47,7 @@ def _get_pg_conn():
 
 
 def _get_sqlite_schema(table: str) -> str:
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(f"SELECT sql FROM sqlite_master WHERE type='table' AND name=? AND sql IS NOT NULL", (table,))
     row = c.fetchone()
@@ -84,8 +82,7 @@ def migrate_to_postgres(drop_first: bool = False):
     pg_conn = _get_pg_conn()
     pg_c = pg_conn.cursor()
 
-    sqlite_conn = sqlite3.connect(str(DB_PATH))
-    sqlite_conn.row_factory = sqlite3.Row
+    sqlite_conn = get_connection()
     sqlite_c = sqlite_conn.cursor()
 
     for table in TABLES_TO_MIGRATE:

@@ -8,14 +8,13 @@ import importlib
 import inspect
 import logging
 import os
-import sqlite3
 import sys
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-logger = logging.getLogger("plugin_manager")
+from src.db import DB_PATH, get_connection
 
-DB_PATH = Path(__file__).parent.parent / "data" / "phishguard.db"
+logger = logging.getLogger("plugin_manager")
 
 PLUGIN_DIR = Path(__file__).parent.parent / "plugins"
 PLUGIN_TABLE = "analysis_plugins"
@@ -28,7 +27,7 @@ def init_plugins():
     init_file = PLUGIN_DIR / "__init__.py"
     if not init_file.exists():
         init_file.write_text("# PhishGuard plugins\n")
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(f"""
         CREATE TABLE IF NOT EXISTS {PLUGIN_TABLE} (
@@ -56,7 +55,7 @@ def register_plugin(
     version: str = "1.0.0",
 ) -> bool:
     init_plugins()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     try:
         c.execute(
@@ -74,7 +73,7 @@ def register_plugin(
 
 def unregister_plugin(name: str) -> bool:
     init_plugins()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(f"DELETE FROM {PLUGIN_TABLE} WHERE name=?", (name,))
     affected = c.rowcount
@@ -86,7 +85,7 @@ def unregister_plugin(name: str) -> bool:
 
 def list_plugins(enabled_only: bool = False) -> list[dict]:
     init_plugins()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     if enabled_only:
         c.execute(f"SELECT * FROM {PLUGIN_TABLE} WHERE enabled=1 ORDER BY name")
@@ -100,7 +99,7 @@ def list_plugins(enabled_only: bool = False) -> list[dict]:
 
 def enable_plugin(name: str) -> bool:
     init_plugins()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(f"UPDATE {PLUGIN_TABLE} SET enabled=1 WHERE name=?", (name,))
     affected = c.rowcount
@@ -111,7 +110,7 @@ def enable_plugin(name: str) -> bool:
 
 def disable_plugin(name: str) -> bool:
     init_plugins()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(f"UPDATE {PLUGIN_TABLE} SET enabled=0 WHERE name=?", (name,))
     affected = c.rowcount

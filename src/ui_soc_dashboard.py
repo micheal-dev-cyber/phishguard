@@ -1,18 +1,13 @@
 import streamlit as st
 import plotly.graph_objects as go
-import sqlite3
 import re
 import time
-from pathlib import Path
 from datetime import datetime, timedelta
-
-DB_PATH = Path(__file__).parent.parent / "data" / "phishguard.db"
+from src.db import get_connection
 
 
 def _get_db():
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.row_factory = sqlite3.Row
-    return conn
+    return get_connection()
 
 
 @st.cache_data(ttl=15)

@@ -1,16 +1,12 @@
 # src/admin.py
-import sqlite3
-from pathlib import Path
 from datetime import datetime, timedelta
 
-DB_PATH = Path(__file__).parent.parent / "data" / "phishguard.db"
+from src.db import DB_PATH, get_connection
 
 
 def _connect():
     """Open connection with row_factory for safety."""
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.row_factory = sqlite3.Row
-    return conn
+    return get_connection()
 
 
 def get_all_analyses(limit: int = 100) -> list:

@@ -2,19 +2,17 @@
 User activity timeline — per-user audit trail for compliance and monitoring.
 """
 import logging
-import sqlite3
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Optional
 
-logger = logging.getLogger("activity_timeline")
+from src.db import DB_PATH, get_connection
 
-DB_PATH = Path(__file__).parent.parent / "data" / "phishguard.db"
+logger = logging.getLogger("activity_timeline")
 ACTIVITY_TABLE = "activity_timeline"
 
 
 def init_activity_timeline():
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(f"""
         CREATE TABLE IF NOT EXISTS {ACTIVITY_TABLE} (
@@ -38,7 +36,7 @@ def record_activity(username: str, action: str, detail: str = "",
                     ip_address: str = "", user_agent: str = "",
                     severity: str = "info"):
     init_activity_timeline()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(
         f"INSERT INTO {ACTIVITY_TABLE} (username, action, detail, ip_address, user_agent, severity) VALUES (?, ?, ?, ?, ?, ?)",
@@ -51,7 +49,7 @@ def record_activity(username: str, action: str, detail: str = "",
 def get_activity(username: str, limit: int = 50, offset: int = 0,
                  action_filter: Optional[str] = None) -> list[dict]:
     init_activity_timeline()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     if action_filter:
         c.execute(
@@ -72,7 +70,7 @@ def get_activity(username: str, limit: int = 50, offset: int = 0,
 def get_all_activity(limit: int = 100, offset: int = 0,
                      severity: Optional[str] = None) -> list[dict]:
     init_activity_timeline()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     if severity:
         c.execute(
@@ -93,7 +91,7 @@ def get_all_activity(limit: int = 100, offset: int = 0,
 def get_activity_summary(username: str, days: int = 30) -> dict:
     init_activity_timeline()
     cutoff = datetime.now(timezone.utc).isoformat()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(
         f"SELECT action, COUNT(*) as cnt FROM {ACTIVITY_TABLE} "

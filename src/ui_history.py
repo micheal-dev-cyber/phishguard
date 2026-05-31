@@ -1,9 +1,6 @@
 import streamlit as st
 import plotly.graph_objects as go
-import sqlite3
-from pathlib import Path
-
-DB_PATH = Path(__file__).parent.parent / "data" / "phishguard.db"
+from src.db import get_connection
 
 
 def render_history_tab():
@@ -32,7 +29,7 @@ def render_history_tab():
     with col_f4:
         hist_limit = st.number_input("Max results", 10, 500, 100, step=10, key="hist_limit_ui")
 
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     params = []
     where_clauses = []

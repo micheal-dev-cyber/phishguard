@@ -5,20 +5,17 @@ Usage:
     mark_feedback(analysis_id, user_label, user_notes)
     get_feedback_stats()
 """
-import sqlite3
 import json
 import logging
 from datetime import datetime
-from pathlib import Path
+
+from src.db import DB_PATH, get_connection
 
 logger = logging.getLogger("feedback")
 
-PROJECT_ROOT = Path(__file__).parent.parent
-DB_PATH = PROJECT_ROOT / "data" / "phishguard.db"
-
 
 def _ensure_table():
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute("""
         CREATE TABLE IF NOT EXISTS feedback_loop (
@@ -54,7 +51,7 @@ def mark_feedback(analysis_id: int, user_label: str, user_notes: str = "",
                   email_preview: str = "", risk_score: int = 0,
                   model_severity: str = "", reported_severity: str = "") -> dict:
     _ensure_table()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     try:
         c.execute(
@@ -75,7 +72,7 @@ def mark_feedback(analysis_id: int, user_label: str, user_notes: str = "",
 
 def get_feedback_stats() -> dict:
     _ensure_table()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     total = c.execute("SELECT COUNT(*) FROM feedback_loop").fetchone()[0]
     fps = c.execute("SELECT COUNT(*) FROM feedback_loop WHERE user_label='fp'").fetchone()[0]
@@ -96,7 +93,7 @@ def get_feedback_stats() -> dict:
 
 def get_feedback_history(limit: int = 100) -> list:
     _ensure_table()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(
         "SELECT id, analysis_id, email_preview, user_label, risk_score, "

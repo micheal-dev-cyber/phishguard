@@ -1,17 +1,15 @@
 """Audit Log — track admin actions for compliance and forensics."""
 
 import logging
-import sqlite3
 from datetime import datetime
-from pathlib import Path
+
+from src.db import DB_PATH, get_connection
 
 logger = logging.getLogger("audit")
 
-DB_PATH = Path(__file__).parent.parent / "data" / "phishguard.db"
-
 
 def init_audit_table():
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute("""
         CREATE TABLE IF NOT EXISTS audit_log (
@@ -34,7 +32,7 @@ def init_audit_table():
 def log_action(actor: str, action: str, target: str = "", detail: str = "", ip_address: str = ""):
     init_audit_table()
     try:
-        conn = sqlite3.connect(str(DB_PATH))
+        conn = get_connection()
         c = conn.cursor()
         c.execute(
             "INSERT INTO audit_log (timestamp, actor, action, target, detail, ip_address) VALUES (?, ?, ?, ?, ?, ?)",
@@ -48,7 +46,7 @@ def log_action(actor: str, action: str, target: str = "", detail: str = "", ip_a
 
 def get_audit_log(limit: int = 100, actor: str = "") -> list:
     init_audit_table()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     if actor:
         c.execute(

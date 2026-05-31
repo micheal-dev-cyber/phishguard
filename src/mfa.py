@@ -5,20 +5,18 @@ import hmac
 import hashlib
 import logging
 import secrets
-import sqlite3
 import struct
 import time
-from pathlib import Path
 from typing import Optional
 
-logger = logging.getLogger("mfa")
+from src.db import DB_PATH, get_connection
 
-DB_PATH = Path(__file__).parent.parent / "data" / "phishguard.db"
+logger = logging.getLogger("mfa")
 TOTP_INTERVAL = 30
 
 
 def _init_table():
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute("""
         CREATE TABLE IF NOT EXISTS mfa_secrets (
@@ -39,7 +37,7 @@ def _generate_secret() -> str:
 
 def is_mfa_enabled(username: str) -> bool:
     _init_table()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute("SELECT enabled FROM mfa_secrets WHERE username = ?", (username,))
     row = c.fetchone()
@@ -50,7 +48,7 @@ def is_mfa_enabled(username: str) -> bool:
 def setup_mfa(username: str) -> dict:
     _init_table()
     secret = _generate_secret()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(
         "INSERT OR REPLACE INTO mfa_secrets (username, secret, enabled) VALUES (?, ?, 0)",
@@ -67,7 +65,7 @@ def setup_mfa(username: str) -> dict:
 def enable_mfa(username: str, code: str) -> bool:
     if not verify_totp(username, code):
         return False
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute("UPDATE mfa_secrets SET enabled = 1 WHERE username = ?", (username,))
     conn.commit()
@@ -77,7 +75,7 @@ def enable_mfa(username: str, code: str) -> bool:
 
 
 def disable_mfa(username: str):
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute("DELETE FROM mfa_secrets WHERE username = ?", (username,))
     conn.commit()
@@ -86,7 +84,7 @@ def disable_mfa(username: str):
 
 
 def verify_totp(username: str, code: str) -> bool:
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute("SELECT secret FROM mfa_secrets WHERE username = ?", (username,))
     row = c.fetchone()

@@ -6,14 +6,10 @@ Usage:
     pdf_bytes = report.generate()
 """
 import io
-import os
 import json
-import sqlite3
 from datetime import datetime, timedelta
-from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).parent.parent
-DB_PATH = PROJECT_ROOT / "data" / "phishguard.db"
+from src.db import DB_PATH, get_connection
 
 try:
     from reportlab.lib.pagesizes import letter
@@ -52,7 +48,7 @@ STANDARDS = {
 
 
 def _query_db(query: str, params: tuple = ()) -> list:
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(query, params)
     rows = c.fetchall()

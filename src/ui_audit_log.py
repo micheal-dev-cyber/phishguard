@@ -1,8 +1,6 @@
 import streamlit as st
-import sqlite3
-from pathlib import Path
 
-DB_PATH = Path(__file__).parent.parent / "data" / "phishguard.db"
+from src.db import DB_PATH, get_connection
 
 
 def render_audit_log_tab():
@@ -19,8 +17,7 @@ def render_audit_log_tab():
         if st.button("🔄 Refresh", use_container_width=True):
             st.rerun()
 
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.row_factory = sqlite3.Row
+    conn = get_connection()
     c = conn.cursor()
     c.execute("SELECT * FROM audit_log ORDER BY id DESC LIMIT ?", (limit,))
     rows = c.fetchall()
@@ -62,7 +59,7 @@ def render_audit_log_tab():
                                "text/csv", use_container_width=True)
     with cols[1]:
         if st.button("🗑 Clear Log", use_container_width=True):
-            conn = sqlite3.connect(str(DB_PATH))
+            conn = get_connection()
             conn.execute("DELETE FROM audit_log")
             conn.commit()
             conn.close()

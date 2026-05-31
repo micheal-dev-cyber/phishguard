@@ -1,18 +1,16 @@
 import secrets
 import hashlib
-import sqlite3
 import logging
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from typing import Optional
+
+from src.db import DB_PATH, get_connection
 
 logger = logging.getLogger("magic-link")
 
-DB_PATH = Path(__file__).parent.parent / "data" / "phishguard.db"
-
 
 def init_magic_links():
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute("""
         CREATE TABLE IF NOT EXISTS magic_links (
@@ -35,7 +33,7 @@ def generate_magic_link(email: str, expiry_minutes: int = 15) -> str:
     token_hash = hashlib.sha256(token.encode()).hexdigest()
     expires_at = (datetime.now(timezone.utc) + timedelta(minutes=expiry_minutes)).isoformat()
 
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(
         "INSERT INTO magic_links (email, token_hash, expires_at) VALUES (?, ?, ?)",
@@ -49,7 +47,7 @@ def generate_magic_link(email: str, expiry_minutes: int = 15) -> str:
 
 def verify_magic_link(email: str, token: str, ip_address: Optional[str] = None) -> bool:
     token_hash = hashlib.sha256(token.encode()).hexdigest()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(
         "SELECT id, expires_at, used_at FROM magic_links WHERE email=? AND token_hash=? ORDER BY created_at DESC LIMIT 1",
@@ -80,7 +78,7 @@ def verify_magic_link(email: str, token: str, ip_address: Optional[str] = None) 
 
 
 def cleanup_expired_links():
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute("DELETE FROM magic_links WHERE expires_at < datetime('now') AND used_at IS NULL")
     deleted = c.rowcount

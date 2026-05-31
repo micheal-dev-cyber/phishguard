@@ -1,13 +1,11 @@
 # src/alerts.py
 import smtplib
-import sqlite3
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
-from pathlib import Path
-from src.env import ENV
 
-DB_PATH = Path(__file__).parent.parent / "data" / "phishguard.db"
+from src.db import DB_PATH, get_connection
+from src.env import ENV
 
 
 def _get_smtp_config():
@@ -21,7 +19,7 @@ def _get_smtp_config():
 
 
 def _init_alerts_table():
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_connection()
     c = conn.cursor()
     c.execute("""
         CREATE TABLE IF NOT EXISTS alert_log (
@@ -41,7 +39,7 @@ def _init_alerts_table():
 
 def _log_alert(username, email, subject, severity, risk_score, success=True):
     _init_alerts_table()
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_connection()
     c = conn.cursor()
     c.execute(
         """
@@ -246,7 +244,7 @@ def send_threat_alert(username: str, email: str, results: dict) -> bool:
 def get_alert_log(username: str = None, limit: int = 50) -> list:
     """Get recent alert history. Pass username=None for all (admin view)."""
     _init_alerts_table()
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_connection()
     c = conn.cursor()
     if username:
         c.execute(

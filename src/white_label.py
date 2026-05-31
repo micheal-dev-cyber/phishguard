@@ -5,18 +5,15 @@ Stores branding preferences per user/tenant for multi-tenant white-labeling.
 """
 import json
 import logging
-import sqlite3
-from pathlib import Path
 from typing import Optional
+from src.db import get_connection
 
 logger = logging.getLogger("white_label")
-
-DB_PATH = Path(__file__).parent.parent / "data" / "phishguard.db"
 BRANDING_TABLE = "white_label_branding"
 
 
 def init_white_label():
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(f"""
         CREATE TABLE IF NOT EXISTS {BRANDING_TABLE} (
@@ -40,7 +37,7 @@ def set_branding(username: str, company_name: str = "", logo_url: str = "",
                  primary_color: str = "#2563eb", secondary_color: str = "#1e3a5f",
                  accent_color: str = "#60a5fa", custom_css: str = "") -> bool:
     init_white_label()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     try:
         c.execute(
@@ -60,7 +57,7 @@ def set_branding(username: str, company_name: str = "", logo_url: str = "",
 
 def get_branding(username: str) -> dict:
     init_white_label()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(f"SELECT * FROM {BRANDING_TABLE} WHERE username=?", (username,))
     cols = [d[0] for d in c.description]
@@ -73,7 +70,7 @@ def get_branding(username: str) -> dict:
 
 def enable_branding(username: str, enabled: bool) -> bool:
     init_white_label()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(f"UPDATE {BRANDING_TABLE} SET enabled=? WHERE username=?", (1 if enabled else 0, username))
     affected = c.rowcount

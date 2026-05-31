@@ -1,9 +1,6 @@
 import streamlit as st
-import sqlite3
 import json
-from pathlib import Path
-
-DB_PATH = Path(__file__).parent.parent / "data" / "phishguard.db"
+from src.db import get_connection
 
 DEFAULT_TEMPLATES = {
     "alert_high": {
@@ -38,7 +35,7 @@ DEFAULT_TEMPLATES = {
 
 
 def init_email_templates():
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute("""
         CREATE TABLE IF NOT EXISTS email_templates (
@@ -60,7 +57,7 @@ def init_email_templates():
 
 def get_template(key: str) -> dict:
     init_email_templates()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(
         "SELECT subject, body_html FROM email_templates WHERE template_key=?",
@@ -75,7 +72,7 @@ def get_template(key: str) -> dict:
 
 def update_template(key: str, subject: str, body_html: str):
     init_email_templates()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(
         "INSERT OR REPLACE INTO email_templates (template_key, subject, body_html, updated_at) VALUES (?, ?, ?, datetime('now'))",

@@ -4,19 +4,17 @@ import hashlib
 import logging
 import secrets
 import time
-import sqlite3
 import smtplib
 from email.mime.text import MIMEText
-from pathlib import Path
+
+from src.db import DB_PATH, get_connection
 
 logger = logging.getLogger("password-reset")
-
-DB_PATH = Path(__file__).parent.parent / "data" / "phishguard.db"
 RESET_TOKEN_TTL = 3600  # 1 hour
 
 
 def _init_table():
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute("""
         CREATE TABLE IF NOT EXISTS password_reset_tokens (
@@ -42,7 +40,7 @@ def create_reset_token(username: str, email: str) -> dict:
     token = secrets.token_urlsafe(32)
     token_hash = _hash_token(token)
     expires_at = time.time() + RESET_TOKEN_TTL
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(
         "INSERT INTO password_reset_tokens (username, email, token, expires_at) VALUES (?, ?, ?, ?)",
@@ -56,7 +54,7 @@ def create_reset_token(username: str, email: str) -> dict:
 def verify_reset_token(token: str) -> dict:
     _init_table()
     token_hash = _hash_token(token)
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(
         "SELECT username, email, expires_at, used FROM password_reset_tokens WHERE token = ?",
@@ -76,7 +74,7 @@ def verify_reset_token(token: str) -> dict:
 
 def mark_token_used(token: str):
     _init_table()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute("UPDATE password_reset_tokens SET used = 1 WHERE token = ?", (token,))
     conn.commit()

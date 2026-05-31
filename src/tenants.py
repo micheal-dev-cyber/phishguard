@@ -1,13 +1,11 @@
 import logging
-import sqlite3
 import bcrypt
 import time
 from datetime import datetime
-from pathlib import Path
+
+from src.db import DB_PATH, get_connection
 
 logger = logging.getLogger(__name__)
-
-DB_PATH = Path(__file__).parent.parent / "data" / "phishguard.db"
 
 PLANS = {
     "free":       {"analyses_per_month": 5,     "label": "Free",       "price": "Free",
@@ -55,7 +53,7 @@ def _verify(password: str, password_hash: str) -> bool:
 
 def _migrate_sha256():
     """One-time migration: re-hash any SHA-256 passwords to bcrypt."""
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_connection()
     c = conn.cursor()
     c.execute("SELECT username, password_hash FROM tenants")
     for username, pw_hash in c.fetchall():
@@ -75,7 +73,7 @@ def _migrate_sha256():
 
 
 def init_tenants():
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_connection()
     c = conn.cursor()
     c.execute("""
         CREATE TABLE IF NOT EXISTS tenants (
@@ -121,7 +119,7 @@ def init_tenants():
 
 
 def is_locked_out(username: str) -> bool:
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_connection()
     c = conn.cursor()
     cutoff = time.time() - LOCKOUT_WINDOW
     c.execute(
@@ -134,7 +132,7 @@ def is_locked_out(username: str) -> bool:
 
 
 def record_login_attempt(username: str, success: bool, ip_address: str = ""):
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_connection()
     c = conn.cursor()
     c.execute(
         "INSERT INTO login_attempts (username, success, ip_address, timestamp) VALUES (?, ?, ?, ?)",
@@ -154,7 +152,7 @@ def seed_admin_from_env():
 def create_tenant(username: str, password: str, email: str = "",
                   plan: str = "trial", is_admin: int = 0, notes: str = "") -> bool:
     init_tenants()
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_connection()
     c = conn.cursor()
     try:
         c.execute(
@@ -179,7 +177,7 @@ def verify_tenant(username: str, password: str, ip_address: str = ""):
         remaining = _lockout_remaining(username)
         return {"error": "locked_out", "remaining": remaining}
 
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_connection()
     c = conn.cursor()
     c.execute(
         "SELECT username, password_hash, plan, is_active, is_admin, email, notes "
@@ -213,7 +211,7 @@ def verify_tenant(username: str, password: str, ip_address: str = ""):
 
 
 def _lockout_remaining(username: str) -> int:
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_connection()
     c = conn.cursor()
     cutoff = time.time() - LOCKOUT_WINDOW
     c.execute(
@@ -229,7 +227,7 @@ def _lockout_remaining(username: str) -> int:
 
 
 def unlock_user(username: str):
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_connection()
     c = conn.cursor()
     c.execute("DELETE FROM login_attempts WHERE username = ?", (username,))
     conn.commit()
@@ -238,7 +236,7 @@ def unlock_user(username: str):
 
 def get_all_tenants() -> list:
     init_tenants()
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_connection()
     c = conn.cursor()
     c.execute(
         "SELECT id, username, email, plan, is_active, is_admin, created_at, notes "
@@ -255,7 +253,7 @@ def update_tenant(username: str, **kwargs):
     updates = {k: v for k, v in kwargs.items() if k in allowed}
     if not updates:
         return
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_connection()
     c = conn.cursor()
     sets = ", ".join(f"{k} = ?" for k in updates)
     c.execute(
@@ -268,7 +266,7 @@ def update_tenant(username: str, **kwargs):
 
 def set_password(username: str, new_password: str):
     init_tenants()
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_connection()
     c = conn.cursor()
     c.execute(
         "UPDATE tenants SET password_hash = ? WHERE username = ?",
@@ -279,7 +277,7 @@ def set_password(username: str, new_password: str):
 
 
 def delete_tenant(username: str):
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_connection()
     c = conn.cursor()
     c.execute("DELETE FROM tenants WHERE username = ?", (username,))
     conn.commit()
@@ -288,7 +286,7 @@ def delete_tenant(username: str):
 
 def log_usage(username: str, action: str, risk_score: int = 0):
     init_tenants()
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_connection()
     c = conn.cursor()
     c.execute(
         "INSERT INTO usage_log (username, action, timestamp, risk_score) VALUES (?, ?, ?, ?)",
@@ -302,7 +300,7 @@ def get_usage(username: str, month: str = None) -> dict:
     init_tenants()
     if not month:
         month = datetime.now().strftime("%Y-%m")
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_connection()
     c = conn.cursor()
     c.execute(
         """SELECT COUNT(*) FROM usage_log
@@ -331,7 +329,7 @@ def check_quota(username: str, plan: str) -> dict:
 def get_usage_all_tenants() -> list:
     init_tenants()
     month = datetime.now().strftime("%Y-%m")
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_connection()
     c = conn.cursor()
     c.execute(
         """SELECT t.username, t.plan, t.email, t.is_active,

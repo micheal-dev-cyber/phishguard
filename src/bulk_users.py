@@ -4,17 +4,15 @@ Bulk user CSV import/export for admin user management.
 import csv
 import io
 import logging
-import sqlite3
-from pathlib import Path
 from typing import Optional
+
+from src.db import DB_PATH, get_connection
 
 logger = logging.getLogger("bulk_users")
 
-DB_PATH = Path(__file__).parent.parent / "data" / "phishguard.db"
-
 
 def export_users_csv() -> str:
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute("SELECT username, email, role, status, plan, is_active, created_at FROM users ORDER BY username")
     rows = c.fetchall()
@@ -29,7 +27,7 @@ def export_users_csv() -> str:
 
 def import_users_csv(csv_content: str, default_plan: str = "free") -> dict:
     results = {"imported": 0, "skipped": 0, "errors": []}
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     reader = csv.DictReader(io.StringIO(csv_content))
     for row in reader:

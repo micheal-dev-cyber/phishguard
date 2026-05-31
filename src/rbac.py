@@ -11,11 +11,7 @@ Usage:
         st.error("Permission denied")
 """
 
-import sqlite3
-from pathlib import Path
-from typing import Optional
-
-DB_PATH = Path(__file__).parent.parent / "data" / "phishguard.db"
+from src.db import DB_PATH, get_connection
 
 ROLE_PERMISSIONS = {
     "viewer": {
@@ -39,7 +35,7 @@ PERMISSION_OVERRIDES_TABLE = "user_permissions"
 
 
 def init_rbac():
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(f"""
         CREATE TABLE IF NOT EXISTS {PERMISSION_OVERRIDES_TABLE} (
@@ -55,7 +51,7 @@ def init_rbac():
 
 
 def get_user_role(username: str) -> str:
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute("SELECT role FROM users WHERE username=?", (username,))
     row = c.fetchone()
@@ -77,7 +73,7 @@ def get_base_permissions(username: str) -> set:
 
 def get_overrides(username: str) -> dict:
     init_rbac()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(
         f"SELECT permission, granted FROM {PERMISSION_OVERRIDES_TABLE} WHERE username=?",
@@ -105,7 +101,7 @@ def check_permission(username: str, permission: str) -> bool:
 
 def grant_permission(username: str, permission: str):
     init_rbac()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(
         f"INSERT OR REPLACE INTO {PERMISSION_OVERRIDES_TABLE} (username, permission, granted) VALUES (?, ?, 1)",
@@ -117,7 +113,7 @@ def grant_permission(username: str, permission: str):
 
 def revoke_permission(username: str, permission: str):
     init_rbac()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = get_connection()
     c = conn.cursor()
     c.execute(
         f"INSERT OR REPLACE INTO {PERMISSION_OVERRIDES_TABLE} (username, permission, granted) VALUES (?, ?, 0)",
