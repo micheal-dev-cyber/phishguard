@@ -6,64 +6,6 @@ import plotly.graph_objects as go
 from datetime import datetime
 from pathlib import Path
 
-# ── Paddle Webhook handler (inline, no Flask needed) ───────────────────────
-try:
-    from src.paddle_billing import verify_webhook_signature, handle_webhook_event
-    _PADDLE_READY = True
-except Exception:
-    _PADDLE_READY = False
-
-def _handle_webhook(body: bytes, headers: dict) -> dict:
-    """Process a Paddle webhook request inline."""
-    if not _PADDLE_READY:
-        return {"error": "Paddle module not available"}, 500
-    signature = headers.get("Paddle-Signature", "")
-    if not signature:
-        return {"error": "Missing signature"}, 401
-    if not verify_webhook_signature(body, signature):
-        return {"error": "Invalid signature"}, 401
-    try:
-        payload = json.loads(body)
-    except Exception:
-        return {"error": "Invalid JSON"}, 400
-    event_type = payload.get("event_type", "unknown")
-    try:
-        result = handle_webhook_event(payload)
-        print(f"[paddle-webhook] {event_type}: {result}")
-        return result, 200
-    except Exception as e:
-        print(f"[paddle-webhook] Error: {e}")
-        return {"error": str(e)}, 500
-
-# Monkey-patch Streamlit's Tornado to add /webhook route
-try:
-    import tornado.web
-    import tornado.routing
-    from streamlit.web.server import Server
-
-    class PaddleWebhookHandler(tornado.web.RequestHandler):
-        def prepare(self):
-            if self.request.method != "POST":
-                self.set_status(405)
-                self.finish({"error": "Method not allowed"})
-                return
-            body = self.request.body
-            result, status = _handle_webhook(body, self.request.headers)
-            self.set_status(status)
-            self.write(result)
-            self.finish()
-
-    # Patch Server to add our route
-    _orig_start = Server.start
-
-    def _patched_start(self, *args, **kwargs):
-        self._tornado.add_handlers(r".*", [(r"/webhook", PaddleWebhookHandler)])
-        return _orig_start(self, *args, **kwargs)
-
-    Server.start = _patched_start
-except Exception:
-    pass  # Tornado patching failed — webhook won't be available
-
 st.set_page_config(page_title="PhishGuard AI", page_icon="🛡",
                    layout="wide", initial_sidebar_state="collapsed")
 
@@ -125,20 +67,31 @@ from src.tenants import (
     log_usage, check_quota, get_all_tenants, get_usage_all_tenants,
     create_tenant, update_tenant, delete_tenant, set_password, PLANS
 )
-from src.paddle_billing import (
-    is_configured as paddle_configured,
-    generate_checkout_url,
-    verify_transaction,
-    get_local_subscription,
-    get_subscription,
-    get_price_id,
-    get_customer_portal_url,
-    get_invoices,
-    pause_subscription,
-    cancel_subscription,
-    resume_subscription,
-    update_subscription_plan,
-)
+try:
+    from src.paddle_billing import (
+        is_configured as paddle_configured,
+        generate_checkout_url,
+        verify_transaction,
+        get_local_subscription,
+        get_subscription,
+        get_price_id,
+        get_customer_portal_url,
+        get_invoices,
+        pause_subscription,
+        cancel_subscription,
+        resume_subscription,
+        update_subscription_plan,
+    )
+except Exception:
+    paddle_configured = lambda: False
+    generate_checkout_url = lambda *a, **kw: None
+    verify_transaction = lambda *a, **kw: None
+    get_local_subscription = lambda *a, **kw: None
+    get_subscription = lambda *a, **kw: None
+    get_price_id = lambda *a, **kw: None
+    get_customer_portal_url = lambda *a, **kw: None
+    get_invoices = lambda *a, **kw: []
+    pause_subscription = cancel_subscription = resume_subscription = update_subscription_plan = lambda *a, **kw: False
 from src.ratelimit import check_rate_limit, get_rate_limit_remaining
 from src.leaderboard import render_leaderboard, record_scan as lb_record_scan
 from src.env import ENV, get_config_status, log_config_status
@@ -207,6 +160,51 @@ try:
     _HAS_URL_SANDBOX = True
 except Exception:
     _HAS_URL_SANDBOX = False
+
+# ── Paddle Webhook endpoint (mounted on Streamlit's Tornado server) ───────
+try:
+    from src.paddle_billing import verify_webhook_signature, handle_webhook_event
+    import tornado.web
+    from streamlit.web.server import Server
+
+    class _PaddleWebhookHandler(tornado.web.RequestHandler):
+        def prepare(self):
+            if self.request.method != "POST":
+                self.set_status(405)
+                self.finish({"error": "Method not allowed"})
+                return
+            body = self.request.body
+            sig = self.request.headers.get("Paddle-Signature", "")
+            if not sig:
+                self.set_status(401)
+                self.finish({"error": "Missing signature"})
+                return
+            if not verify_webhook_signature(body, sig):
+                self.set_status(401)
+                self.finish({"error": "Invalid signature"})
+                return
+            try:
+                payload = json.loads(body)
+            except Exception:
+                self.set_status(400)
+                self.finish({"error": "Invalid JSON"})
+                return
+            try:
+                result = handle_webhook_event(payload)
+                print(f"[paddle-webhook] {payload.get('event_type','?')}: {result}")
+                self.write(result)
+            except Exception as e:
+                print(f"[paddle-webhook] Error: {e}")
+                self.set_status(500)
+                self.finish({"error": str(e)})
+
+    _orig_start = Server.start
+    def _patched_start(self, *args, **kwargs):
+        self._tornado.add_handlers(r".*", [(r"/webhook", _PaddleWebhookHandler)])
+        return _orig_start(self, *args, **kwargs)
+    Server.start = _patched_start
+except Exception:
+    pass  # Webhook unavailable (missing deps or paddle not installed)
 
 if not check_password():
     st.stop()
