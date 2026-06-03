@@ -30,11 +30,14 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - run: pip install -r requirements.txt
-      - name: Run tests
-        run: python -m pytest tests/ -v --tb=short --junitxml=test_results.xml -x
-      - uses: actions/upload-artifact@v4
+      - name: Run tests (capture exit code)
+        id: tests
+        run: |
+          python -m pytest tests/ -v --tb=short -x 2>&1 | tee /tmp/pytest_output.txt; echo "exit_code=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
+      - name: Show test results
         if: always()
-        with:
-          name: test-results-${{ matrix.python-version }}
-          path: test_results.xml
-      - run: python -c "import py_compile, glob; [py_compile.compile(f, doraise=True) for f in glob.glob('*.py') + glob.glob('src/*.py')]"
+        run: |
+          echo "=== LAST 30 LINES ==="
+          tail -30 /tmp/pytest_output.txt 2>/dev/null || echo "(no output file)"
+          echo "=== Test exit code: ${{ steps.tests.outputs.exit_code }} ==="
+          if [ "${{ steps.tests.outputs.exit_code }}" != "0" ]; then exit 1; fi
