@@ -30,14 +30,21 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - run: pip install -r requirements.txt
-      - name: Run tests (capture exit code)
+      - name: Run tests (always succeeds)
         id: tests
         run: |
           python -m pytest tests/ -v --tb=short -x 2>&1 | tee /tmp/pytest_output.txt; echo "exit_code=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
-      - name: Show test results
+      - name: Show error details
         if: always()
         run: |
-          echo "=== LAST 30 LINES ==="
-          tail -30 /tmp/pytest_output.txt 2>/dev/null || echo "(no output file)"
-          echo "=== Test exit code: ${{ steps.tests.outputs.exit_code }} ==="
+          echo "=== FIRST 15 LINES ==="
+          head -15 /tmp/pytest_output.txt 2>/dev/null || echo "(no output file)"
+          echo "=== FAILURES ==="
+          grep -E 'FAILED|ERROR|Error|assert|raise' /tmp/pytest_output.txt 2>/dev/null || echo "(no failures found in output)"
+          echo "=== LAST 20 LINES ==="
+          tail -20 /tmp/pytest_output.txt 2>/dev/null
+      - name: Fail if tests failed
+        if: always()
+        run: |
+          echo "Test exit code: ${{ steps.tests.outputs.exit_code }}"
           if [ "${{ steps.tests.outputs.exit_code }}" != "0" ]; then exit 1; fi
