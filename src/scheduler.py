@@ -2,8 +2,11 @@
 Scheduled / recurring scan system.
 
 Uses the task queue to schedule periodic email analysis for connected mailboxes.
+Starts a background daemon timer that checks for due scans every 60 seconds.
 """
 import logging
+import threading
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -11,6 +14,7 @@ from src.db import get_connection
 
 logger = logging.getLogger("scheduler")
 SCHEDULE_TABLE = "scan_schedules"
+_scheduler_thread = None
 
 
 def init_scheduler():
@@ -131,3 +135,22 @@ def run_due_scans():
             logger.info("Scheduled scan for %s (%s)", s["username"], s["mailbox"])
         except Exception as e:
             logger.error("Failed to schedule scan for %s: %s", s["username"], e)
+
+
+def _scheduler_loop():
+    while True:
+        try:
+            run_due_scans()
+        except Exception as e:
+            logger.error("Scheduler loop error: %s", e)
+        time.sleep(60)
+
+
+def start_scheduler():
+    global _scheduler_thread
+    if _scheduler_thread and _scheduler_thread.is_alive():
+        return
+    init_scheduler()
+    _scheduler_thread = threading.Thread(target=_scheduler_loop, daemon=True, name="scheduler-worker")
+    _scheduler_thread.start()
+    logger.info("Scheduler worker started (checking every 60s)")

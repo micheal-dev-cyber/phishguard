@@ -17,6 +17,8 @@ try:
 except ImportError:
     HAS_REQUESTS = False
 
+from src.http_client import post
+
 
 def send_slack(webhook_url: str, message: str, title: str = "PhishGuard Alert") -> dict:
     if not HAS_REQUESTS:
@@ -41,7 +43,7 @@ def send_slack(webhook_url: str, message: str, title: str = "PhishGuard Alert") 
                 },
             ]
         }
-        resp = requests.post(webhook_url, json=payload, timeout=10)
+        resp = post(webhook_url, json=payload, timeout=10)
         return {"status": "ok" if resp.ok else "error", "code": resp.status_code}
     except Exception as e:
         return {"status": "error", "error": str(e)}
@@ -68,7 +70,7 @@ def send_webhook(url: str, payload: dict) -> dict:
     if not HAS_REQUESTS:
         return {"status": "error", "error": "requests not installed"}
     try:
-        resp = requests.post(url, json=payload, timeout=10,
+        resp = post(url, json=payload, timeout=10,
                              headers={"Content-Type": "application/json"})
         return {"status": "ok" if resp.ok else "error", "code": resp.status_code}
     except Exception as e:

@@ -3,7 +3,7 @@ import re
 import socket
 from datetime import datetime
 
-import requests
+from src.http_client import get
 
 from src.env import ENV
 
@@ -86,7 +86,7 @@ def investigate_domain(domain: str) -> dict:
 
     # ── 2. IP Geolocation (free API) ──────────────────────────────────────────
     try:
-        geo = requests.get(
+        geo = get(
             f"http://ip-api.com/json/{ip}?fields=country,org,isp,hosting",
             timeout=8
         ).json()
@@ -106,7 +106,7 @@ def investigate_domain(domain: str) -> dict:
 
     # ── 3. WHOIS domain age check (free API) ──────────────────────────────────
     try:
-        whois_data = requests.get(
+        whois_data = get(
             f"https://api.whoisfreaks.com/v1.0/whois?apiKey=free&whois=live&domainName={domain}",
             timeout=10
         ).json()
@@ -139,7 +139,7 @@ def investigate_domain(domain: str) -> dict:
     if VT_API_KEY:
         try:
             headers = {"x-apikey": VT_API_KEY}
-            vt_resp = requests.get(
+            vt_resp = get(
                 f"https://www.virustotal.com/api/v3/domains/{domain}",
                 headers=headers,
                 timeout=10
@@ -208,7 +208,7 @@ def investigate_ip(ip: str) -> dict:
     }
 
     try:
-        geo = requests.get(
+        geo = get(
             f"http://ip-api.com/json/{ip}?fields=country,org,isp,hosting,proxy,tor",
             timeout=8
         ).json()

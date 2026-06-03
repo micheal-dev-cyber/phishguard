@@ -3,7 +3,7 @@ import hmac
 import logging
 from typing import Optional
 
-import requests
+from src.http_client import get, post, patch
 
 from src.env import ENV
 
@@ -62,7 +62,7 @@ def generate_checkout_url(username: str, plan: str, success_url: str = "") -> Op
         body["urls"] = {"success": success_url}
 
     try:
-        resp = requests.post(
+        resp = post(
             f"{_api_base()}/transactions",
             headers=_headers(),
             json=body,
@@ -99,7 +99,7 @@ def verify_transaction(transaction_id: str) -> Optional[dict]:
     if not cfg["api_key"]:
         return None
     try:
-        resp = requests.get(
+        resp = get(
             f"{_api_base()}/transactions/{transaction_id}",
             headers=_headers(),
             timeout=10,
@@ -125,7 +125,7 @@ def get_subscription(subscription_id: str) -> Optional[dict]:
     if not cfg["api_key"]:
         return None
     try:
-        resp = requests.get(
+        resp = get(
             f"{_api_base()}/subscriptions/{subscription_id}",
             headers=_headers(),
             timeout=10,
@@ -169,7 +169,7 @@ def get_customer_portal_url(customer_id: str) -> Optional[str]:
     if not cfg["api_key"] or not customer_id:
         return None
     try:
-        resp = requests.post(
+        resp = post(
             f"{_api_base()}/customers/{customer_id}/portal-sessions",
             headers=_headers(),
             json={},
@@ -188,7 +188,7 @@ def get_invoices(customer_id: str, limit: int = 10) -> list:
     if not cfg["api_key"]:
         return []
     try:
-        resp = requests.get(
+        resp = get(
             f"{_api_base()}/invoices",
             params={"customer_id": customer_id, "status": "paid", "per_page": limit},
             headers=_headers(),
@@ -219,7 +219,7 @@ def pause_subscription(subscription_id: str) -> bool:
     if not cfg["api_key"]:
         return False
     try:
-        resp = requests.post(
+        resp = post(
             f"{_api_base()}/subscriptions/{subscription_id}/pause",
             headers=_headers(),
             json={},
@@ -240,7 +240,7 @@ def cancel_subscription(subscription_id: str, reason: str = "") -> bool:
         body = {"effective_from": "next_billing_period"}
         if reason:
             body["reason"] = reason
-        resp = requests.post(
+        resp = post(
             f"{_api_base()}/subscriptions/{subscription_id}/cancel",
             headers=_headers(),
             json=body,
@@ -258,7 +258,7 @@ def resume_subscription(subscription_id: str) -> bool:
     if not cfg["api_key"]:
         return False
     try:
-        resp = requests.post(
+        resp = post(
             f"{_api_base()}/subscriptions/{subscription_id}/resume",
             headers=_headers(),
             json={},
@@ -277,7 +277,7 @@ def update_subscription_plan(subscription_id: str, new_plan: str) -> bool:
     if not cfg["api_key"] or not price_id:
         return False
     try:
-        resp = requests.patch(
+        resp = patch(
             f"{_api_base()}/subscriptions/{subscription_id}",
             headers=_headers(),
             json={

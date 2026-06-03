@@ -4,6 +4,7 @@ import time
 import requests
 
 from src.env import ENV
+from src.http_client import get, post
 
 
 def get_url_reputation(url):
@@ -14,7 +15,7 @@ def get_url_reputation(url):
     headers = {"x-apikey": api_key}
     url_id = base64.urlsafe_b64encode(url.encode()).decode().strip("=")
 
-    response = requests.get(f"https://www.virustotal.com/api/v3/urls/{url_id}", headers=headers, timeout=30)
+    response = get(f"https://www.virustotal.com/api/v3/urls/{url_id}", headers=headers, timeout=30)
 
     if response.status_code == 200:
         data = response.json()
@@ -57,15 +58,14 @@ def check_url_virustotal(url: str) -> dict:
         url_id = encode_url(url)
 
         # Check if URL already analyzed
-        response = requests.get(
+        response = get(
             f"{VT_BASE_URL}/urls/{url_id}",
             headers=headers,
             timeout=15
         )
 
         if response.status_code == 404:
-            # URL not in database — submit for analysis
-            submit = requests.post(
+            submit = post(
                 f"{VT_BASE_URL}/urls",
                 headers=headers,
                 data={"url": url},
@@ -90,7 +90,7 @@ def check_url_virustotal(url: str) -> dict:
             # Get analysis ID and fetch results
             analysis_id = submit.json().get("data", {}).get("id", "")
             if analysis_id:
-                result = requests.get(
+                result = get(
                     f"{VT_BASE_URL}/analyses/{analysis_id}",
                     headers=headers,
                     timeout=15

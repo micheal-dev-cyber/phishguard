@@ -1,5 +1,6 @@
 """Email Verification — token-based email confirmation for new signups."""
 
+import hashlib
 import logging
 import secrets
 import time
@@ -18,7 +19,7 @@ def _init_table():
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
             username    TEXT NOT NULL,
             email       TEXT NOT NULL,
-            token       TEXT UNIQUE NOT NULL,
+            token_hash  TEXT UNIQUE NOT NULL,
             expires_at  REAL NOT NULL,
             verified    INTEGER DEFAULT 0,
             created_at  TEXT DEFAULT (datetime('now'))
@@ -31,12 +32,13 @@ def _init_table():
 def create_verification(username: str, email: str) -> dict:
     _init_table()
     token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
     expires_at = time.time() + VERIFY_TOKEN_TTL
     conn = get_connection()
     c = conn.cursor()
     c.execute(
-        "INSERT INTO email_verifications (username, email, token, expires_at) VALUES (?, ?, ?, ?)",
-        (username, email, token, expires_at),
+        "INSERT INTO email_verifications (username, email, token_hash, expires_at) VALUES (?, ?, ?, ?)",
+        (username, email, token_hash, expires_at),
     )
     conn.commit()
     conn.close()
@@ -45,11 +47,12 @@ def create_verification(username: str, email: str) -> dict:
 
 def verify_email_token(token: str) -> bool:
     _init_table()
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
     conn = get_connection()
     c = conn.cursor()
     c.execute(
-        "SELECT username, expires_at, verified FROM email_verifications WHERE token = ?",
-        (token,),
+        "SELECT username, expires_at, verified FROM email_verifications WHERE token_hash = ?",
+        (token_hash,),
     )
     row = c.fetchone()
     if not row:
@@ -59,7 +62,7 @@ def verify_email_token(token: str) -> bool:
     if verified or time.time() > expires_at:
         conn.close()
         return False
-    c.execute("UPDATE email_verifications SET verified = 1 WHERE token = ?", (token,))
+    c.execute("UPDATE email_verifications SET verified = 1 WHERE token_hash = ?", (token_hash,))
     c.execute("UPDATE tenants SET email_verified = 1 WHERE username = ?", (username,))
     conn.commit()
     conn.close()

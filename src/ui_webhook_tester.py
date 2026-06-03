@@ -5,6 +5,7 @@ import json
 import time
 from urllib.parse import urlparse
 
+import requests
 import streamlit as st
 
 from src.env import ENV
@@ -127,7 +128,7 @@ def render_webhook_tester_tab():
         if not payload:
             st.error("No valid payload to send.")
             st.stop()
-        import requests
+        from src.http_client import post
         headers = {"Content-Type": "application/json"}
         if include_signature:
             secret = ENV.PADDLE_WEBHOOK_SECRET or "test_secret"
@@ -141,7 +142,7 @@ def render_webhook_tester_tab():
             st.stop()
 
         try:
-            resp = requests.post(target_endpoint, json=payload, headers=headers, timeout=10)
+            resp = post(target_endpoint, json=payload, headers=headers, timeout=10)
             st.markdown(f"**Status:** {resp.status_code}")
             st.markdown("**Response:**")
             try:

@@ -15,7 +15,7 @@ Usage from webhook.py or any Flask/FastAPI handler:
     response = handle_scim_request(method, path, body)
 """
 
-import hashlib
+import bcrypt
 import secrets
 import sqlite3
 from typing import Optional
@@ -111,7 +111,7 @@ def _create_user(body: dict) -> dict:
         return _error(400, "userName is required")
 
     password = secrets.token_urlsafe(16)
-    password_hash = hashlib.sha256(password.encode()).hexdigest()
+    password_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
     conn = _db()
     c = conn.cursor()

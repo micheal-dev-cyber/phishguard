@@ -1177,15 +1177,8 @@ def check_password() -> bool:
                                      label_visibility="collapsed")
             if st.button("Update Password", use_container_width=True, type="primary"):
                 if new_pw and new_pw == new_pw2 and len(new_pw) >= 6:
-                    from src.db import get_connection
-                    conn = get_connection()
-                    c = conn.cursor()
-                    import hashlib
-                    pw_hash = hashlib.sha256(new_pw.encode()).hexdigest()
-                    c.execute("UPDATE tenants SET password_hash = ? WHERE username = ?",
-                              (pw_hash, result["username"]))
-                    conn.commit()
-                    conn.close()
+                    from src.tenants import set_password
+                    set_password(result["username"], new_pw)
                     mark_token_used(token)
                     st.success("Password updated! You can now log in.")
                     if st.button("← Go to login", use_container_width=True):

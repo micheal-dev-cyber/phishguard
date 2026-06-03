@@ -191,3 +191,61 @@ def get_failed_tasks(limit: int = 20) -> list:
     rows = c.fetchall()
     conn.close()
     return rows
+
+
+def get_tasks(limit: int = 50, status: Optional[str] = None) -> list:
+    conn = get_connection()
+    c = conn.cursor()
+    if status:
+        c.execute(
+            "SELECT id, task_name, status, error, created_at, started_at, completed_at, retry_count FROM task_queue WHERE status=? ORDER BY id DESC LIMIT ?",
+            (status, limit),
+        )
+    else:
+        c.execute(
+            "SELECT id, task_name, status, error, created_at, started_at, completed_at, retry_count FROM task_queue ORDER BY id DESC LIMIT ?",
+            (limit,),
+        )
+    cols = [d[0] for d in c.description]
+    rows = [dict(zip(cols, r)) for r in c.fetchall()]
+    conn.close()
+    return rows
+
+
+_RESULTS_TABLE = "task_results"
+
+
+def _init_results():
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(f"""
+        CREATE TABLE IF NOT EXISTS {_RESULTS_TABLE} (
+            task_id INTEGER PRIMARY KEY,
+            result TEXT,
+            created_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+
+def store_result(task_id: int, result: dict):
+    _init_results()
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        f"INSERT OR REPLACE INTO {_RESULTS_TABLE} (task_id, result) VALUES (?, ?)",
+        (task_id, json.dumps(result)),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_task_result(task_id: int) -> Optional[dict]:
+    _init_results()
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(f"SELECT result FROM {_RESULTS_TABLE} WHERE task_id=?", (task_id,))
+    row = c.fetchone()
+    conn.close()
+    return json.loads(row[0]) if row else None

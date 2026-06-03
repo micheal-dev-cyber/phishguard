@@ -1,3 +1,4 @@
+import bcrypt
 import hashlib
 import os
 import sqlite3
@@ -301,7 +302,7 @@ def init_db():
     if not c.fetchone():
         import os
         admin_pass = os.environ.get("PHISHGUARD_ADMIN_PASSWORD", os.urandom(16).hex())
-        hashed = hashlib.sha256(admin_pass.encode()).hexdigest()
+        hashed = bcrypt.hashpw(admin_pass.encode(), bcrypt.gensalt()).decode()
         c.execute("""
             INSERT INTO users (username, password_hash, email, paddle_order_id, status, role, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?)

@@ -5,6 +5,7 @@ from typing import Any, Dict, Optional
 from urllib.parse import urlparse
 
 import requests
+from src.http_client import post
 
 logger = logging.getLogger(__name__)
 
@@ -159,7 +160,7 @@ def send_slack_alert(
     payload = _render_slack_payload(score, severity, triggers or [], snippet, action)
 
     try:
-        resp = requests.post(
+        resp = post(
             webhook_url,
             json=payload,
             timeout=15,
@@ -193,7 +194,7 @@ def send_teams_alert(
     payload = _render_teams_payload(score, severity, triggers or [], snippet, action, dashboard_url)
 
     try:
-        resp = requests.post(
+        resp = post(
             webhook_url,
             json=payload,
             timeout=15,
