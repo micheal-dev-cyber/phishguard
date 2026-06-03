@@ -15,10 +15,11 @@ Usage from webhook.py or any Flask/FastAPI handler:
     response = handle_scim_request(method, path, body)
 """
 
-import bcrypt
 import secrets
 import sqlite3
 from typing import Optional
+
+import bcrypt
 
 from src.db import get_connection
 

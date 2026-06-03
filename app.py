@@ -54,9 +54,17 @@ from src.db import get_connection  # noqa: E402
 from src.detector import analyze_email  # noqa: E402
 from src.env import ENV, get_config_status, log_config_status  # noqa: E402
 from src.tenants import (  # noqa: E402
-    PLANS, check_quota, create_tenant, delete_tenant,
-    get_all_tenants, get_usage_all_tenants, log_usage, set_password, update_tenant,
+    PLANS,
+    check_quota,
+    create_tenant,
+    delete_tenant,
+    get_all_tenants,
+    get_usage_all_tenants,
+    log_usage,
+    set_password,
+    update_tenant,
 )
+
 
 # Secondary imports (wrapped — may fail on minimal installs)
 def _safe_import(mod, names, fallback=None):
@@ -129,9 +137,17 @@ format_xai_report = _xai['format_xai_report']
 # Paddle billing (wrapped with sensible fallbacks)
 try:
     from src.paddle_billing import (
-        cancel_subscription, generate_checkout_url, get_customer_portal_url,
-        get_invoices, get_local_subscription, get_price_id, get_subscription,
-        pause_subscription, resume_subscription, update_subscription_plan, verify_transaction,
+        cancel_subscription,
+        generate_checkout_url,
+        get_customer_portal_url,
+        get_invoices,
+        get_local_subscription,
+        get_price_id,
+        get_subscription,
+        pause_subscription,
+        resume_subscription,
+        update_subscription_plan,
+        verify_transaction,
     )
     from src.paddle_billing import is_configured as paddle_configured
 except Exception:
@@ -348,16 +364,13 @@ log_config_status()
 
 # ── Start background task queue worker ──────────────────────────────────────
 try:
-    from src.task_queue import register_task, start_worker, store_result
-    from src.enterprise_api import handle_scan_request
     from src.database import save_analysis
+    from src.enterprise_api import handle_scan_request
+    from src.task_queue import register_task, start_worker, store_result
 
     def _handle_scan_mailbox(payload):
-        username = payload.get("username", "system")
-        mailbox = payload.get("mailbox", "inbox")
         max_per_run = payload.get("max_per_run", 10)
-        from src.inbox_scanner import scan_unseen
-        from src.inbox_scanner import scan_inbox
+        from src.inbox_scanner import scan_inbox, scan_unseen
         emails = scan_unseen(None, None, None, None, max_emails=max_per_run)
         results = []
         for e in emails[:max_per_run]:
@@ -365,8 +378,9 @@ try:
             result = handle_scan_request({"text": body[:10000], "sender": e.get("sender", "")})
             v = result.get("verdict", {})
             results.append({"subject": e.get("subject", ""), "score": v.get("risk_score", 0), "severity": v.get("severity", "UNKNOWN")})
-        from src.task_queue import get_connection as tq_conn
         import json
+
+        from src.task_queue import get_connection as tq_conn
         conn = tq_conn()
         c = conn.cursor()
         c.execute("CREATE TABLE IF NOT EXISTS task_results (task_id INTEGER PRIMARY KEY, result TEXT)")

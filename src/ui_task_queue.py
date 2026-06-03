@@ -1,6 +1,7 @@
-import streamlit as st
 import logging
 import time
+
+import streamlit as st
 
 logger = logging.getLogger("ui-task-queue")
 
@@ -14,7 +15,7 @@ def render_task_queue_ui():
     )
 
     try:
-        from src.task_queue import get_tasks, get_pending_count, _update_status
+        from src.task_queue import _update_status, get_pending_count, get_tasks
 
         pending = get_pending_count()
 

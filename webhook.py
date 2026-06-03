@@ -14,10 +14,10 @@ Usage:
 Or via environment variables / .env file.
 """
 
-import os
-import sys
 import json
 import logging
+import os
+import sys
 from pathlib import Path
 
 # Ensure the project root is on sys.path so we can import src.*
@@ -27,13 +27,13 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger("paddle-webhook")
 
 try:
-    from flask import Flask, request, jsonify
+    from flask import Flask, jsonify, request
 except ImportError:
     print("Flask is required. Install with: pip install flask")
     sys.exit(1)
 
 try:
-    from src.paddle_billing import verify_webhook_signature, handle_webhook_event
+    from src.paddle_billing import handle_webhook_event, verify_webhook_signature
 except ImportError as e:
     print(f"Could not import Paddle billing module: {e}")
     sys.exit(1)
@@ -171,8 +171,8 @@ def scan_webhook():
         return jsonify({"error": "Missing 'email_text' or 'text' field"}), 400
 
     try:
-        from src.detector import analyze_email
         from src.alerting import send_email
+        from src.detector import analyze_email
         from src.env import ENV
 
         results = analyze_email(email_text[:20000])

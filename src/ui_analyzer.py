@@ -6,20 +6,27 @@ from datetime import datetime
 import plotly.graph_objects as go
 import streamlit as st
 
+from src.ai_analyzer import generate_ai_report
 from src.aitm_detector import detect_aitm_harvester
 from src.alerts import send_threat_alert
 from src.attachment_scanner import scan_attachment
 from src.audit_log import log_action
 from src.auto_training import assign_training
 from src.brand_impersonation import run_brand_impersonation_check as _run_brand_check
-from src.database import consume_scan, get_spending_cap as _gsc, record_valuation_metric, save_analysis
+from src.database import consume_scan, record_valuation_metric, save_analysis
+from src.database import get_spending_cap as _gsc
 from src.database import record_scan as lb_record_scan
 from src.detector import analyze_email
 from src.email_parser import parse_email_file
 from src.email_verify import is_email_verified
+from src.header_auth import analyze_auth_headers
 from src.honeypot_generator import generate_honeypot
 from src.incident_response import IncidentResponder
-from src.jury_engine import compute_ensemble_score, evaluate_corporate_jury, evaluate_linguistic_jury
+from src.jury_engine import (
+    compute_ensemble_score,
+    evaluate_corporate_jury,
+    evaluate_linguistic_jury,
+)
 from src.notification_channels import dispatch_to_channels
 from src.notifications import push_notification
 from src.osint import run_osint
@@ -482,7 +489,9 @@ def render_analyzer_tab(username: str, plan: str):
                 sev_lower = results["severity"].lower()
                 st.download_button(label="📥 Download PDF Report", data=pdf_bytes, file_name=f"phishguard_report_{sev_lower}.pdf", mime="application/pdf", use_container_width=True, type="primary", key="pdf_simple")
             with col_stix:
-                _att_result = st.session_state.get("att_scan_result"); _sender_anom = st.session_state.get("sender_anomaly"); _perplex_s = st.session_state.get("perplexity_result")
+                _att_result = st.session_state.get("att_scan_result")
+                _sender_anom = st.session_state.get("sender_anomaly")
+                _perplex_s = st.session_state.get("perplexity_result")
                 stix_bundle = build_enterprise_stix_bundle(email_text=email_text_saved, results=results, osint_data=osint_data, vt_results=vt_results, attachment_result=_att_result, sender_anomaly=_sender_anom, perplexity_result=_perplex_s)
                 stix_json = json.dumps(stix_bundle, indent=2)
                 st.download_button(label="📤 STIX 2.1 Export", data=stix_json, file_name=f"phishguard_stix_{sev_lower}.json", mime="application/json", use_container_width=True, type="secondary", key="stix_simple")
@@ -659,14 +668,18 @@ def render_analyzer_tab(username: str, plan: str):
             st.markdown(section_title("Threat Intelligence"), unsafe_allow_html=True)
             if combined_score and combined_score.get("has_vt_data"):
                 col_cs1, col_cs2, col_cs3 = st.columns(3)
-                with col_cs1: st.metric("Composite Score", f"{combined_score['composite_score']}/100", delta=f"VT: +{combined_score['vt_contribution']:.0f}")
-                with col_cs2: st.metric("Malicious", combined_score["vt_malicious_count"])
-                with col_cs3: st.metric("Suspicious", combined_score["vt_suspicious_count"])
+                with col_cs1:
+                    st.metric("Composite Score", f"{combined_score['composite_score']}/100", delta=f"VT: +{combined_score['vt_contribution']:.0f}")
+                with col_cs2:
+                    st.metric("Malicious", combined_score["vt_malicious_count"])
+                with col_cs3:
+                    st.metric("Suspicious", combined_score["vt_suspicious_count"])
             for vt in (vt_results or []):
                 status = vt.get("status", "error")
                 url = vt.get("url", "")
-                mal = vt.get("malicious", 0); total = vt.get("total_vendors", 0)
-                threats = vt.get("threat_names", []); vt_link = vt.get("vt_link", "")
+                mal = vt.get("malicious", 0)
+                total = vt.get("total_vendors", 0)
+                vt_link = vt.get("vt_link", "")
                 if status == "malicious":
                     st.markdown(url_box(f"🔴 MALICIOUS — {url[:70]} ({mal}/{total} vendors)", True), unsafe_allow_html=True)
                 elif status == "suspicious":
@@ -737,9 +750,12 @@ def render_analyzer_tab(username: str, plan: str):
             st.markdown(section_title("Multi-LLM Jury Consensus"), unsafe_allow_html=True)
             jr = jury_result
             col_j1, col_j2, col_j3 = st.columns(3)
-            with col_j1: st.metric("Ensemble Score", f"{jr['final_score']:.0f}/100", delta=f"{jr.get('final_score',0)-score:+.0f} vs heuristic")
-            with col_j2: st.metric("Linguistic Jury", f"{jr.get('linguistic_score',0):.0f}/100")
-            with col_j3: st.metric("Corporate Jury", f"{jr.get('corporate_score',0):.0f}/100")
+            with col_j1:
+                st.metric("Ensemble Score", f"{jr['final_score']:.0f}/100", delta=f"{jr.get('final_score',0)-score:+.0f} vs heuristic")
+            with col_j2:
+                st.metric("Linguistic Jury", f"{jr.get('linguistic_score',0):.0f}/100")
+            with col_j3:
+                st.metric("Corporate Jury", f"{jr.get('corporate_score',0):.0f}/100")
             if jr.get("final_score",0) > score + 15:
                 st.warning("⚠️ Jury rates this **significantly higher** than heuristic — priority threat.")
             elif jr.get("final_score",0) < score - 15:
@@ -761,7 +777,8 @@ def render_analyzer_tab(username: str, plan: str):
             if _hp:
                 st.markdown(f"<div class='pg-card-success' style='margin:8px 0'><div style='color:#22c55e;font-weight:700'>{_hp.get('subject','')}</div><div style='color:#94a3b8;font-size:12px'>From: {_hp.get('sender_name','')} — {_hp.get('payload_type','')}</div></div>", unsafe_allow_html=True)
                 if st.button("✕ Clear", key="clear_hp"):
-                    st.session_state.pop("honeypot", None); st.rerun()
+                    st.session_state.pop("honeypot", None)
+                    st.rerun()
 
             if _restricted_blur:
                 st.divider()
@@ -806,7 +823,9 @@ def render_analyzer_tab(username: str, plan: str):
                     sev_lower = results["severity"].lower()
                     st.download_button(label="📥 Download PDF Report", data=pdf_bytes, file_name=f"phishguard_report_{sev_lower}.pdf", mime="application/pdf", use_container_width=True, type="primary")
                 with col_stix:
-                    _att_result = st.session_state.get("att_scan_result"); _sender_anom = st.session_state.get("sender_anomaly"); _perplex_t = st.session_state.get("perplexity_result")
+                    _att_result = st.session_state.get("att_scan_result")
+                    _sender_anom = st.session_state.get("sender_anomaly")
+                    _perplex_t = st.session_state.get("perplexity_result")
                     stix_bundle = build_enterprise_stix_bundle(email_text=email_text_saved, results=results, osint_data=osint_data, vt_results=vt_results, attachment_result=_att_result, sender_anomaly=_sender_anom, perplexity_result=_perplex_t)
                     stix_json = json.dumps(stix_bundle, indent=2)
                     st.download_button(label="📤 STIX 2.1 Export", data=stix_json, file_name=f"phishguard_stix_{sev_lower}.json", mime="application/json", use_container_width=True, type="secondary")

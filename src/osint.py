@@ -3,9 +3,8 @@ import re
 import socket
 from datetime import datetime
 
-from src.http_client import get
-
 from src.env import ENV
+from src.http_client import get
 
 logger = logging.getLogger(__name__)
 

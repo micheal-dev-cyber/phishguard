@@ -1,9 +1,10 @@
-import bcrypt
 import hashlib
 import os
 import sqlite3
 from datetime import datetime
 from pathlib import Path
+
+import bcrypt
 
 # Create a 'data' folder in your project root to store the DB safely
 # __file__ gets the current path (src/database.py), so we go up one level to the root
