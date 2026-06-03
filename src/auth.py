@@ -468,8 +468,8 @@ def _demo_scan_page():
                     if demo_text.strip():
                         with st.spinner("Running multi-engine analysis..."):
                             try:
-                                from src.phishing_analysis import rate_email_threat
-                                result = rate_email_threat(demo_text)
+                                from src.detector import analyze_email
+                                result = analyze_email(demo_text)
                                 st.session_state["demo_results"] = result
                                 st.session_state["demo_email_text"] = demo_text
                                 st.rerun()
