@@ -457,10 +457,9 @@ def _demo_scan_page():
         with col_demo1:
             demo_text = st.text_area(
                 "Paste an email to scan",
-                value="",
+                value=st.session_state.get("demo_text", ""),
                 height=280,
                 placeholder="Paste a suspicious email here — PhishGuard will analyze headers, URLs, content, and more...",
-                key="demo_text_input",
                 label_visibility="collapsed",
             )
             col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 1])
@@ -480,7 +479,7 @@ def _demo_scan_page():
                         st.warning("Paste an email to scan.")
             with col_btn2:
                 if st.button("📋 Load Example", use_container_width=True, type="secondary", key="load_example"):
-                    st.session_state["demo_text_input"] = DEMO_EMAIL
+                    st.session_state["demo_text"] = DEMO_EMAIL
                     st.rerun()
             with col_btn3:
                 if st.button("← Back", use_container_width=True, key="demo_back_main"):
