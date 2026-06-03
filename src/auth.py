@@ -158,7 +158,7 @@ def _signup_form():
             if not success:
                 st.error("That username is already taken. Try a different one.")
             else:
-                st.success("🎉 Account created! Let's get started.")
+                st.success("🎉 Account created! Check your email to verify your account before logging in.")
                 try:
                     v = create_verification(new_username.strip(), new_email.strip())
                     base_url = getattr(ENV, "APP_URL", "http://localhost:8501")
@@ -167,13 +167,8 @@ def _signup_form():
                     st.info("📧 We sent a verification email. Check your inbox (and spam folder).")
                 except Exception as e:
                     logger.warning("auth: Failed to send verification email for %s: %s", new_email.strip(), e)
-                st.session_state["authenticated"] = True
-                st.session_state["username"] = new_username.strip()
-                st.session_state["plan"] = "trial"
-                st.session_state["is_admin"] = False
-                st.session_state["email"] = new_email.strip()
-                st.session_state["show_onboarding"] = True
-                st.session_state["onboarding_step"] = 1
+                st.session_state["pending_verification_user"] = new_username.strip()
+                st.session_state["show_login"] = True
                 st.session_state.pop("show_signup", None)
                 st.rerun()
 
@@ -195,6 +190,11 @@ def _signup_form():
 def _login_form():
     st.markdown("<div style='padding:80px 0'>", unsafe_allow_html=True)
     st.markdown("<div class='auth-card'>", unsafe_allow_html=True)
+
+    # Show pending verification banner from a fresh signup
+    _pending_user = st.session_state.pop("pending_verification_user", None)
+    if _pending_user:
+        st.info("📧 Account created! Check your inbox (and spam folder) for the verification link, then log in below.")
     st.markdown("<h2 style='font-size:1.8rem;font-weight:800;color:#f0f6ff;"
                 "text-align:center;margin-bottom:4px'>🛡 PhishGuard</h2>")
     st.markdown("<p style='color:#475569;text-align:center;margin-bottom:32px;"
@@ -282,32 +282,36 @@ def _login_form():
                 if not tenant.get("is_active"):
                     st.error("Your account has been suspended. Please contact support to regain access.")
                 else:
-                    st.session_state["authenticated"] = True
-                    st.session_state["username"] = tenant["username"]
-                    st.session_state["plan"] = tenant["plan"]
-                    st.session_state["is_admin"] = bool(tenant["is_admin"])
-                    st.session_state["email"] = tenant["email"]
-                    st.session_state.pop("show_login", None)
+                    from src.email_verify import is_email_verified
+                    if not is_email_verified(tenant["username"]):
+                        st.warning("Please verify your email before logging in. Check your inbox (and spam folder) for the verification link.")
+                    else:
+                        st.session_state["authenticated"] = True
+                        st.session_state["username"] = tenant["username"]
+                        st.session_state["plan"] = tenant["plan"]
+                        st.session_state["is_admin"] = bool(tenant["is_admin"])
+                        st.session_state["email"] = tenant["email"]
+                        st.session_state.pop("show_login", None)
 
-                    # Track session
-                    try:
-                        from src.session_manager import create_session
-                        create_session(tenant["username"], ip_address="", user_agent="streamlit")
-                    except Exception as e:
-                        logger.warning("auth: Session creation failed for %s: %s", tenant["username"], e)
+                        # Track session
+                        try:
+                            from src.session_manager import create_session
+                            create_session(tenant["username"], ip_address="", user_agent="streamlit")
+                        except Exception as e:
+                            logger.warning("auth: Session creation failed for %s: %s", tenant["username"], e)
 
-                    # Check MFA enforcement
-                    try:
-                        from src.mfa import is_mfa_enabled
-                        if is_mfa_enabled(tenant["username"]):
-                            st.session_state["mfa_passed"] = False
-                            st.session_state["show_mfa"] = True
-                            st.session_state["mfa_username"] = tenant["username"]
-                            st.session_state.pop("authenticated", None)
-                            st.rerun()
-                    except Exception as e:
-                        logger.warning("auth: MFA check failed for %s: %s", tenant["username"], e)
-                    st.rerun()
+                        # Check MFA enforcement
+                        try:
+                            from src.mfa import is_mfa_enabled
+                            if is_mfa_enabled(tenant["username"]):
+                                st.session_state["mfa_passed"] = False
+                                st.session_state["show_mfa"] = True
+                                st.session_state["mfa_username"] = tenant["username"]
+                                st.session_state.pop("authenticated", None)
+                                st.rerun()
+                        except Exception as e:
+                            logger.warning("auth: MFA check failed for %s: %s", tenant["username"], e)
+                        st.rerun()
 
     # ── SSO Login Button ──────────────────────────────────────────────
     try:
@@ -1202,7 +1206,7 @@ def check_password() -> bool:
         token = params["verify"]
         from src.email_verify import verify_email_token
         if verify_email_token(token):
-            st.toast("✅ Email verified! You can now scan emails.")
+            st.toast("✅ Email verified! You can now log in.")
             try:
                 from src.db import get_connection
                 _vconn = get_connection()
@@ -1218,6 +1222,7 @@ def check_password() -> bool:
                     send_welcome_email(_vemail, _vuname, _vquota, "https://phishguard.ai")
             except Exception as _ve:
                 logger.warning("auth: Welcome email failed for %s: %s", _vuname, _ve)
+            st.session_state["show_login"] = True
         else:
             st.toast("Verification link expired or invalid.")
         st.query_params.clear()
