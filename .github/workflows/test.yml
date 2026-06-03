@@ -30,5 +30,9 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - run: pip install -r requirements.txt
-      - run: python -m pytest tests/ -v --tb=short -x
+      - name: Run tests with diagnostics
+        run: |
+          python -m pytest tests/ -v --tb=short -x 2>&1 | tee /tmp/pytest_output.txt; rc=${PIPESTATUS[0]}
+          grep -E 'FAILED|ERRORS|error:|PASSED|test session|short test summary' /tmp/pytest_output.txt | head -20 | while IFS= read -r line; do echo "::error file=test.yml::$line"; done
+          exit $rc
       - run: python -c "import py_compile, glob; [py_compile.compile(f, doraise=True) for f in glob.glob('*.py') + glob.glob('src/*.py')]"
