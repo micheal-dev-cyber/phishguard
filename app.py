@@ -743,23 +743,23 @@ if st.session_state.get("scan_mode", "Email Text") == "Inbox Scanner":
         with st.expander("🔌 Connection Settings", expanded=True):
             col_imap1, col_imap2, col_imap3 = st.columns([2, 1, 1])
             with col_imap1:
-                imap_host = st.text_input("IMAP Server", "imap.gmail.com", key="imap_host")
+                imap_host = st.text_input("IMAP Server", "imap.gmail.com", key="scan_imap_host")
             with col_imap2:
-                imap_port = st.number_input("Port", 993, key="imap_port")
+                imap_port = st.number_input("Port", 993, key="scan_imap_port")
             with col_imap3:
-                imap_ssl = st.checkbox("SSL/TLS", True, key="imap_ssl")
+                imap_ssl = st.checkbox("SSL/TLS", True, key="scan_imap_ssl")
             col_imap4, col_imap5, col_imap6 = st.columns(3)
             with col_imap4:
-                imap_user = st.text_input("Email Address", key="imap_user")
+                imap_user = st.text_input("Email Address", key="scan_imap_user")
             with col_imap5:
-                imap_pass = st.text_input("Password / App Password", type="password", key="imap_pass")
+                imap_pass = st.text_input("Password / App Password", type="password", key="scan_imap_pass")
             with col_imap6:
-                imap_folder = st.text_input("Folder", "INBOX", key="imap_folder")
+                imap_folder = st.text_input("Folder", "INBOX", key="scan_imap_folder")
             col_imap7, col_imap8 = st.columns(2)
             with col_imap7:
-                imap_hours = st.slider("Look back (hours)", 1, 168, 24, key="imap_hours")
+                imap_hours = st.slider("Look back (hours)", 1, 168, 24, key="scan_imap_hours")
             with col_imap8:
-                imap_max = st.slider("Max emails", 1, 100, 20, key="imap_max")
+                imap_max = st.slider("Max emails", 1, 100, 20, key="scan_imap_max")
 
         col_scan1, col_scan2 = st.columns(2)
         with col_scan1:
