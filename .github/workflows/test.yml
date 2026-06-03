@@ -40,9 +40,9 @@ jobs:
           echo "=== FIRST 15 LINES ==="
           head -15 /tmp/pytest_output.txt 2>/dev/null || echo "(no output file)"
           echo "=== FAILURES ==="
-          grep -E 'FAILED|ERROR|Error|assert|raise' /tmp/pytest_output.txt 2>/dev/null || echo "(no failures found in output)"
-          echo "=== LAST 20 LINES ==="
-          tail -20 /tmp/pytest_output.txt 2>/dev/null
+          grep -nE 'FAILED|ERROR|Error|assert|raise|short test summary|===' /tmp/pytest_output.txt 2>/dev/null || echo "(no failures found in output)"
+          echo "=== LAST 30 LINES ==="
+          tail -30 /tmp/pytest_output.txt 2>/dev/null
       - name: Fail if tests failed
         if: always()
         run: |
