@@ -563,8 +563,8 @@ if st.session_state.get("show_upgrade") and plan != "enterprise":
 
 # ── Onboarding Wizard (first-time users) ───────────────────────────────────
 try:
-    from src.ui_onboarding import render_onboarding_wizard
-    render_onboarding_wizard(username)
+    from src.ui_onboarding import render_onboarding
+    render_onboarding(username)
 except Exception as e:
     logger.warning("Onboarding wizard failed: %s", e)
 
