@@ -136,7 +136,7 @@ from src.integrations import (  # noqa: E402
     save_integration,
 )
 from src.ip_allowlist import add_ip_rule, list_ip_rules, remove_ip_rule  # noqa: E402
-from src.leaderboard import record_scan as lb_record_scan  # noqa: E402
+from src.database import record_scan as lb_record_scan  # noqa: E402
 from src.leaderboard import render_leaderboard  # noqa: E402
 from src.notifications import (  # noqa: E402
     push_notification,
