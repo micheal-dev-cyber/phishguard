@@ -18,7 +18,7 @@ import sqlite3
 from pathlib import Path
 from datetime import datetime
 
-DB_PATH = os.getenv("DATABASE_URL", "phishguard.db")
+DB_PATH = os.getenv("DATABASE_URL", "data/phishguard.db")
 
 
 def check_database() -> tuple[bool, str]:

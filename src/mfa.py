@@ -82,7 +82,18 @@ def disable_mfa(username: str):
     logger.info("MFA disabled for %s", username)
 
 
+_mfa_attempts: dict = {}
+
+
 def verify_totp(username: str, code: str) -> bool:
+    now = time.time()
+    attempts = _mfa_attempts.get(username, [])
+    attempts = [t for t in attempts if t > now - 30]
+    if len(attempts) >= 5:
+        return False
+    attempts.append(now)
+    _mfa_attempts[username] = attempts
+
     conn = get_connection()
     c = conn.cursor()
     c.execute("SELECT secret FROM mfa_secrets WHERE username = ?", (username,))
@@ -92,7 +103,7 @@ def verify_totp(username: str, code: str) -> bool:
         return False
     secret = row[0]
     expected = _compute_totp(secret)
-    return code == expected
+    return hmac.compare_digest(code, expected)
 
 
 def _compute_totp(secret: str) -> str:

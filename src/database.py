@@ -742,34 +742,8 @@ def get_history(limit=20):
     conn.close()
     return rows
 
-def verify_user_login(username, password):
-    """Authenticates users via standard database records using SHA-256 validation."""
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    hashed = hashlib.sha256(password.encode()).hexdigest()
-    c.execute("SELECT role, status FROM users WHERE username = ? AND password_hash = ?", (username, hashed))
-    user = c.fetchone()
-    conn.close()
-    if user and user[1] == 'active':
-        return {"authenticated": True, "role": user[0]}
-    return {"authenticated": False, "role": None}
-
-def register_premium_user(username, password, email, order_id):
-    """Inserts verified premium buyers into the local relational data ledger."""
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    try:
-        hashed = hashlib.sha256(password.encode()).hexdigest()
-        c.execute("""
-            INSERT INTO users (username, password_hash, email, paddle_order_id, status, role, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (username, hashed, email, order_id, 'active', 'client', datetime.now().isoformat()))
-        conn.commit()
-        return True, "Account successfully activated! Please proceed to login."
-    except sqlite3.IntegrityError:
-        return False, "Registration failed: Username or Paddle Order ID already activated."
-    finally:
-        conn.close()
+# NOTE: verify_user_login and register_premium_user were removed in a security audit
+# (they used unsalted SHA-256 for passwords and were dead code)
 
 # ── Leaderboard functions ──────────────────────────────────────────────────
 

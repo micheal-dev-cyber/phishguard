@@ -275,6 +275,8 @@ def set_password(username: str, new_password: str):
     )
     conn.commit()
     conn.close()
+    from src.session_manager import revoke_all_sessions
+    revoke_all_sessions(username)
 
 
 def delete_tenant(username: str):

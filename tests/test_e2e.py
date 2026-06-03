@@ -250,15 +250,14 @@ class TestAPIProxy:
 
 class TestHealthCheck:
     def test_health_check_database(self):
-        """health_check.py must handle database failure gracefully."""
-        import health_check
         # Point to non-existent DB — should report failure, not crash
-        import src.database as db
-        orig = db.DB_PATH
+        import tempfile, os
+        import health_check
+        orig = health_check.DB_PATH
         try:
-            import tempfile, os; db.DB_PATH = os.path.join(tempfile.gettempdir(), "nonexistent_phishguard.db")
+            health_check.DB_PATH = os.path.join(tempfile.gettempdir(), "nonexistent_phishguard.db")
             ok, msg = health_check.check_database()
             assert not ok
             assert "error" in msg.lower() or "not found" in msg.lower()
         finally:
-            db.DB_PATH = orig
+            health_check.DB_PATH = orig

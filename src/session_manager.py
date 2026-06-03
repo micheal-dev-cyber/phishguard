@@ -1,7 +1,7 @@
 """Session Management — track and revoke active sessions."""
 
-import hashlib
 import logging
+import secrets
 import time
 
 from src.db import get_connection
@@ -32,8 +32,7 @@ def init_sessions_table():
 
 def create_session(username: str, ip_address: str = "", user_agent: str = "") -> str:
     init_sessions_table()
-    raw = f"{username}{time.time()}{ip_address}"
-    session_id = hashlib.sha256(raw.encode()).hexdigest()[:24]
+    session_id = secrets.token_urlsafe(32)
     now = time.time()
     conn = get_connection()
     c = conn.cursor()
@@ -46,11 +45,15 @@ def create_session(username: str, ip_address: str = "", user_agent: str = "") ->
     return session_id
 
 
-def touch_session(session_id: str):
+def touch_session(session_id: str, ip_address: str = ""):
     conn = get_connection()
     c = conn.cursor()
-    c.execute("UPDATE sessions SET last_seen = ? WHERE session_id = ? AND is_active = 1",
-              (time.time(), session_id))
+    if ip_address:
+        c.execute("UPDATE sessions SET last_seen = ?, ip_address = ? WHERE session_id = ? AND is_active = 1",
+                  (time.time(), ip_address, session_id))
+    else:
+        c.execute("UPDATE sessions SET last_seen = ? WHERE session_id = ? AND is_active = 1",
+                  (time.time(), session_id))
     conn.commit()
     conn.close()
 
@@ -66,9 +69,13 @@ def revoke_session(session_id: str):
 def revoke_all_sessions(username: str):
     conn = get_connection()
     c = conn.cursor()
-    c.execute("UPDATE sessions SET is_active = 0 WHERE username = ? AND is_active = 1", (username,))
-    conn.commit()
-    conn.close()
+    try:
+        c.execute("UPDATE sessions SET is_active = 0 WHERE username = ? AND is_active = 1", (username,))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+    finally:
+        conn.close()
 
 
 def list_sessions(username: str) -> list:
