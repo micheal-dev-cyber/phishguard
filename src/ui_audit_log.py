@@ -1,5 +1,6 @@
 import streamlit as st
 
+from src.audit_log import log_action
 from src.db import get_connection
 
 
@@ -60,6 +61,8 @@ def render_audit_log_tab():
                                "text/csv", use_container_width=True)
     with cols[1]:
         if st.button("🗑 Clear Log", use_container_width=True):
+            log_action(st.session_state.get("username", "unknown"), "clear_audit_log",
+                       detail="Audit log cleared by admin")
             conn = get_connection()
             conn.execute("DELETE FROM audit_log")
             conn.commit()

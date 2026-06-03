@@ -179,6 +179,16 @@ def _check_and_record_usage(key_hash: str, tier: str, tier_config: dict) -> tupl
     try:
         daily_limit = tier_config.get("daily_limit")
         monthly_limit = tier_config.get("monthly_limit")
+        rpm = tier_config.get("rate_per_minute", 999999)
+
+        # Per-minute burst check
+        minute_ago = now - 60
+        c.execute(
+            "SELECT COUNT(*) FROM api_usage WHERE key_hash = ? AND timestamp > ?",
+            (key_hash, minute_ago),
+        )
+        if c.fetchone()[0] >= rpm:
+            return 0, True
 
         if daily_limit:
             day_start = now - 86400
