@@ -1,5 +1,6 @@
-import streamlit as st
 import plotly.graph_objects as go
+import streamlit as st
+
 from src.db import get_connection
 
 
@@ -81,7 +82,8 @@ def render_history_tab():
     col_exp1, col_exp2 = st.columns([1, 3])
     with col_exp1:
         if st.button("📥 Export All as CSV", use_container_width=True):
-            import csv, io
+            import csv
+            import io
             out = io.StringIO()
             w = csv.writer(out)
             w.writerow(["ID", "Timestamp", "Risk Score", "Severity",

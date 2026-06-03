@@ -1,9 +1,8 @@
 """Notification Center — in-app notification history."""
 
 import logging
-from datetime import datetime
 
-from src.db import DB_PATH, get_connection
+from src.db import get_connection
 
 logger = logging.getLogger("notifications")
 

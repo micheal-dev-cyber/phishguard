@@ -5,12 +5,9 @@ Usage:
     send_alert(alert)
     # or configure via app.py UI
 """
-import os
-import json
-import smtplib
 import logging
+import smtplib
 from email.message import EmailMessage
-from typing import Optional
 
 logger = logging.getLogger("alerting")
 

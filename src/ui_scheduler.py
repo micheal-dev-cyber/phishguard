@@ -1,7 +1,11 @@
 import streamlit as st
+
 from src.scheduler import (
-    init_scheduler, create_schedule, list_schedules,
-    delete_schedule, toggle_schedule,
+    create_schedule,
+    delete_schedule,
+    init_scheduler,
+    list_schedules,
+    toggle_schedule,
 )
 
 

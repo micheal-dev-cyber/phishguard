@@ -23,7 +23,9 @@ class TestOnboarding:
             return self._real_connect(self._db_path, *a, **kw)
         monkeypatch.setattr(sqlite3, "connect", _fake_connect)
         from src import tenants
-        monkeypatch.setattr(tenants, "DB_PATH", self._db_path)
+        import src.db; monkeypatch.setattr(src.db, "DB_PATH", self._db_path)
+        # Note: sqlite3.connect is also monkeypatched globally, so
+        # get_connection() from src.db will redirect to the temp DB.
         tenants.init_tenants()
 
     def test_get_onboarding_steps_all_incomplete(self):

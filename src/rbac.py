@@ -11,7 +11,7 @@ Usage:
         st.error("Permission denied")
 """
 
-from src.db import DB_PATH, get_connection
+from src.db import get_connection
 
 ROLE_PERMISSIONS = {
     "viewer": {

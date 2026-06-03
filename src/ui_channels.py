@@ -1,7 +1,12 @@
 import streamlit as st
+
 from src.notification_channels import (
-    init_channels, set_channel, delete_channel, get_channels,
-    enable_channel, SUPPORTED_CHANNELS,
+    SUPPORTED_CHANNELS,
+    delete_channel,
+    enable_channel,
+    get_channels,
+    init_channels,
+    set_channel,
 )
 
 

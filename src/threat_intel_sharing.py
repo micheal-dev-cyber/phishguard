@@ -27,15 +27,15 @@ Architecture:
                                           └──────────────────┘
 """
 
-import json
 import hashlib
 import hmac
-import uuid
+import json
 import logging
+import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from src.db import DB_PATH, get_connection
+from src.db import get_connection
 
 logger = logging.getLogger("threat-intel")
 

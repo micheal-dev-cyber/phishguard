@@ -1,5 +1,4 @@
 # src/copilot.py
-from datetime import datetime
 
 
 SYSTEM_PROMPT = """You are PhishGuard Copilot — an expert AI security analyst embedded inside the PhishGuard threat detection platform.
@@ -46,7 +45,7 @@ def build_context_message(results: dict = None) -> str:
         kw_list.append(f"{cat}: {', '.join(words[:5])}")
 
     lines = [
-        f"[Current Analysis Context]",
+        "[Current Analysis Context]",
         f"Risk Score: {score}/100 ({severity})",
         f"Keyword Hits: {kw}",
         f"Suspicious URLs: {urls}",

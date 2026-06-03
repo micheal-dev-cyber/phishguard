@@ -13,10 +13,9 @@ Usage:
 """
 
 import json
-from datetime import datetime
 from typing import Optional
 
-from src.db import DB_PATH, get_connection
+from src.db import get_connection
 
 
 def init_ab_tests():

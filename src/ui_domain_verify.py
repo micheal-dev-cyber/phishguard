@@ -1,7 +1,12 @@
 import streamlit as st
+
 from src.domain_verify import (
-    init_domain_verify, add_domain, verify_domain,
-    get_user_domains, delete_domain, check_dns_records,
+    add_domain,
+    check_dns_records,
+    delete_domain,
+    get_user_domains,
+    init_domain_verify,
+    verify_domain,
 )
 
 

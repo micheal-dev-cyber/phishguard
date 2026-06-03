@@ -1,8 +1,10 @@
+import logging
 import re
 import socket
-import requests
-import logging
 from datetime import datetime
+
+import requests
+
 from src.env import ENV
 
 logger = logging.getLogger(__name__)
@@ -95,7 +97,7 @@ def investigate_domain(domain: str) -> dict:
         # Hosting providers are suspicious for phishing
         if geo.get("hosting"):
             result["risk_indicators"].append(
-                f"Hosted on a data center/VPS — common for phishing sites"
+                "Hosted on a data center/VPS — common for phishing sites"
             )
             result["risk_score"] += 10
 

@@ -1,7 +1,12 @@
 import streamlit as st
+
 from src.webhook_routing import (
-    init_webhook_routes, set_webhook_route, delete_webhook_route,
-    get_webhook_routes, enable_route, EVENT_TYPES,
+    EVENT_TYPES,
+    delete_webhook_route,
+    enable_route,
+    get_webhook_routes,
+    init_webhook_routes,
+    set_webhook_route,
 )
 
 

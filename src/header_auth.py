@@ -6,11 +6,12 @@ spoofing and impersonation attempts.
 
 Usage:
     from src.header_auth import analyze_auth_headers
-    result = analyze_auth_headers(email_text)
 """
-
-import re
+import re  # noqa: I001
+import logging
 from typing import Optional
+
+logger = logging.getLogger("header-auth")
 
 
 def _extract_header(text: str, header_name: str) -> str:
@@ -71,8 +72,8 @@ def _parse_auth_results(header_value: str) -> dict:
         dmarc_f = re.search(r"dmarc\.from[^;]+", header_value, re.IGNORECASE)
         if dmarc_f:
             result["dmarc_from"] = dmarc_f.group(0).strip()
-    except Exception:
-        pass
+    except Exception as _exc:
+        logger.debug("Failed to parse auth results header: %s", _exc)
 
     return result
 
@@ -158,9 +159,6 @@ def analyze_auth_headers(text: str) -> dict:
 
     # Determine overall
     any_fail = spf == "fail" or dkim == "fail" or dmarc == "fail"
-    any_missing = spf is None and received_spf is None
-    dkim_missing = dkim is None
-    dmarc_missing = dmarc is None
     spf_ok = spf == "pass" or received_spf == "pass"
     dkim_ok = dkim == "pass"
     dmarc_ok = dmarc in ("pass", "bestguesspass")

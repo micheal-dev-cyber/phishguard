@@ -1,7 +1,9 @@
 # src/auth.py
 import logging
+
 import streamlit as st
-from src.tenants import verify_tenant, seed_admin_from_env, init_tenants
+
+from src.tenants import init_tenants, seed_admin_from_env, verify_tenant
 
 logger = logging.getLogger(__name__)
 
@@ -149,9 +151,9 @@ def _signup_form():
             for e in errors:
                 st.error(e)
         else:
-            from src.tenants import create_tenant
             from src.email_verify import create_verification, send_verification_email
             from src.env import ENV
+            from src.tenants import create_tenant
             success = create_tenant(new_username.strip(), new_password, email=new_email.strip(), plan="trial")
             if not success:
                 st.error("That username is already taken. Try a different one.")
@@ -214,9 +216,9 @@ def _login_form():
                                 label_visibility="collapsed", key="magic_email_input")
     if st.button("📧 Send Magic Link", use_container_width=True):
         if magic_email:
-            from src.magic_link import generate_magic_link
             from src.alerting import send_email
             from src.env import ENV
+            from src.magic_link import generate_magic_link
             token = generate_magic_link(magic_email)
             link = f"{ENV.APP_URL}/?magic_token={token}&email={magic_email}"
             body = (
@@ -236,7 +238,6 @@ def _login_form():
 
     # ── Magic Link Verification (via URL param) ─────────────────────────
     try:
-        from urllib.parse import parse_qs
         from src.magic_link import verify_magic_link
         from src.tenants import get_tenant_by_email
         query_params = st.query_params
@@ -352,8 +353,8 @@ def _reset_form():
                                 label_visibility="collapsed")
     if st.button("Send Reset Link", use_container_width=True, type="primary"):
         if reset_email:
-            from src.password_reset import create_reset_token, send_reset_email
             from src.db import get_connection
+            from src.password_reset import create_reset_token, send_reset_email
             conn = get_connection()
             c = conn.cursor()
             c.execute("SELECT username FROM tenants WHERE email = ?", (reset_email,))
@@ -549,7 +550,7 @@ def _show_demo_results(results):
         kw_hits = results.get("total_keyword_hits", 0)
         st.markdown(f"<div class='stat-box'><div style='font-size:1.5rem;font-weight:800;color:#f0f6ff'>{kw_hits}</div><div style='color:#475569;font-size:11px;text-transform:uppercase;letter-spacing:.08em'>Keyword Hits</div></div>", unsafe_allow_html=True)
     with col_d4:
-        st.markdown(f"<div class='stat-box'><div style='font-size:1.5rem;font-weight:800;color:#f0f6ff'>Limited</div><div style='color:#475569;font-size:11px;text-transform:uppercase;letter-spacing:.08em'>Full Report</div></div>", unsafe_allow_html=True)
+        st.markdown("<div class='stat-box'><div style='font-size:1.5rem;font-weight:800;color:#f0f6ff'>Limited</div><div style='color:#475569;font-size:11px;text-transform:uppercase;letter-spacing:.08em'>Full Report</div></div>", unsafe_allow_html=True)
 
     if score >= 50:
         st.divider()
@@ -692,7 +693,7 @@ def _hero_page():
                 "Results in under 3 seconds.</p>",
                 unsafe_allow_html=True)
 
-    demo_preview = st.text_area(
+    st.text_area(
         "Paste email to scan",
         value=DEMO_EMAIL[:200] + "...",
         height=120,
@@ -1031,19 +1032,19 @@ def _privacy_page():
     st.markdown("<h1>🛡️ Privacy Policy</h1>")
     st.markdown("<p class='trust-meta'>Last updated: January 2026</p>", unsafe_allow_html=True)
 
-    st.markdown("""**1. Information We Collect**  
+    st.markdown("""**1. Information We Collect**
 We collect email content you submit for analysis, your username, and basic usage data to improve the service.""")
-    st.markdown("""**2. How We Use Your Information**  
+    st.markdown("""**2. How We Use Your Information**
 Email content is used solely to perform phishing analysis. We do not sell, share, or permanently store your email content.""")
-    st.markdown("""**3. Data Storage**  
+    st.markdown("""**3. Data Storage**
 Analysis results are stored locally in our database to provide history features. Email previews are truncated to 200 characters.""")
-    st.markdown("""**4. Third Party Services**  
+    st.markdown("""**4. Third Party Services**
 We use Groq AI API to generate security reports. Email content may be sent to Groq for processing. Groq's privacy policy applies.""")
-    st.markdown("""**5. Cookies**  
+    st.markdown("""**5. Cookies**
 We use session cookies for authentication only. We do not use tracking or advertising cookies.""")
-    st.markdown("""**6. Your Rights**  
+    st.markdown("""**6. Your Rights**
 You may request deletion of your data at any time by contacting us.""")
-    st.markdown("""**7. Contact**  
+    st.markdown("""**7. Contact**
 For privacy questions: [contact@phishguard.ai](mailto:contact@phishguard.ai)""")
     if st.button("← Back to home", use_container_width=True, key="privacy_back"):
         st.query_params.clear()
@@ -1056,21 +1057,21 @@ def _terms_page():
     st.markdown("<h1>🛡️ Terms of Service</h1>")
     st.markdown("<p class='trust-meta'>Last updated: January 2026</p>", unsafe_allow_html=True)
 
-    st.markdown("""**1. Acceptance of Terms**  
+    st.markdown("""**1. Acceptance of Terms**
 By accessing PhishGuard AI, you agree to these terms. If you disagree, do not use the service.""")
-    st.markdown("""**2. Service Description**  
+    st.markdown("""**2. Service Description**
 PhishGuard AI provides AI-powered phishing email detection and security analysis tools delivered via web application and Chrome extension.""")
-    st.markdown("""**3. Subscription & Billing**  
+    st.markdown("""**3. Subscription & Billing**
 Subscriptions are billed monthly. You can cancel at any time. Cancellation takes effect at the end of the current billing period.""")
-    st.markdown("""**4. Acceptable Use**  
+    st.markdown("""**4. Acceptable Use**
 You may not use PhishGuard AI for illegal purposes, to harm others, or to attempt to reverse engineer the service.""")
-    st.markdown("""**5. Limitation of Liability**  
+    st.markdown("""**5. Limitation of Liability**
 PhishGuard AI is provided as-is. We are not liable for any damages resulting from use or inability to use the service. Always consult a qualified cybersecurity professional for critical security decisions.""")
-    st.markdown("""**6. Data & Privacy**  
+    st.markdown("""**6. Data & Privacy**
 Email content submitted for analysis is processed to provide the service and is not stored permanently or shared with third parties.""")
-    st.markdown("""**7. Changes to Terms**  
+    st.markdown("""**7. Changes to Terms**
 We may update these terms at any time. Continued use of the service constitutes acceptance of updated terms.""")
-    st.markdown("""**8. Contact**  
+    st.markdown("""**8. Contact**
 For questions contact: [contact@phishguard.ai](mailto:contact@phishguard.ai)""")
     if st.button("← Back to home", use_container_width=True, key="terms_back"):
         st.query_params.clear()
@@ -1083,21 +1084,21 @@ def _security_page():
     st.markdown("<h1>🛡️ Security Policy</h1>")
     st.markdown("<p class='trust-meta'>Last updated: January 2026</p>", unsafe_allow_html=True)
 
-    st.markdown("""**1. Encryption**  
+    st.markdown("""**1. Encryption**
 All data in transit is encrypted using TLS 1.3. Data at rest is encrypted using AES-256. We enforce HTTPS across all endpoints including our API and webhook endpoints.""")
-    st.markdown("""**2. Vulnerability Management**  
+    st.markdown("""**2. Vulnerability Management**
 We conduct quarterly penetration tests via third-party security firms. Critical vulnerabilities are patched within 24 hours of confirmation. We maintain a responsible disclosure program for security researchers.""")
-    st.markdown("""**3. Access Control**  
+    st.markdown("""**3. Access Control**
 Production access is restricted to authorized personnel with multi-factor authentication. All access is logged and audited monthly. We follow the principle of least privilege across all systems.""")
-    st.markdown("""**4. Data Processing**  
+    st.markdown("""**4. Data Processing**
 Email content submitted for analysis is processed in-memory only. Analysis results and truncated previews (200 characters) are stored in an encrypted database. Raw email content is not persisted after analysis completes.""")
-    st.markdown("""**5. Third-Party Subprocessors**  
+    st.markdown("""**5. Third-Party Subprocessors**
 We use Groq AI API for generating security narrative reports. All subprocessors are vetted and contractually bound to our data handling standards. No email content is shared with advertising or analytics providers.""")
-    st.markdown("""**6. Incident Response**  
+    st.markdown("""**6. Incident Response**
 We have a documented incident response plan covering detection, containment, eradication, recovery, and post-mortem. Security incidents are disclosed to affected users within 72 hours of confirmation.""")
-    st.markdown("""**7. Compliance**  
+    st.markdown("""**7. Compliance**
 PhishGuard AI follows SOC 2 Type II control objectives and GDPR requirements. For compliance inquiries: [security@phishguard.ai](mailto:security@phishguard.ai)""")
-    st.markdown("""**8. Bug Bounty**  
+    st.markdown("""**8. Bug Bounty**
 We welcome responsible disclosure of security vulnerabilities. Report findings to [security@phishguard.ai](mailto:security@phishguard.ai). We commit to prompt validation and remediation.""")
     if st.button("← Back to home", use_container_width=True, key="security_back"):
         st.query_params.clear()
@@ -1110,15 +1111,15 @@ def _refund_page():
     st.markdown("<h1>🛡️ Refund Policy</h1>")
     st.markdown("<p class='trust-meta'>Last updated: January 2026</p>", unsafe_allow_html=True)
 
-    st.markdown("""**1. Free Trial**  
+    st.markdown("""**1. Free Trial**
 We offer a free demo at no cost so you can evaluate PhishGuard AI before subscribing.""")
-    st.markdown("""**2. Refund Eligibility**  
+    st.markdown("""**2. Refund Eligibility**
 You may request a full refund within 7 days of your first payment if you are not satisfied with the service.""")
-    st.markdown("""**3. How to Request a Refund**  
+    st.markdown("""**3. How to Request a Refund**
 Email us at [contact@phishguard.ai](mailto:contact@phishguard.ai) with your order details. We process refunds within 5 business days.""")
-    st.markdown("""**4. Cancellation**  
+    st.markdown("""**4. Cancellation**
 You can cancel your subscription at any time. You will retain access until the end of your current billing period. No partial refunds for unused time after 7 days.""")
-    st.markdown("""**5. Contact**  
+    st.markdown("""**5. Contact**
 For refund requests: [contact@phishguard.ai](mailto:contact@phishguard.ai)""")
     if st.button("← Back to home", use_container_width=True, key="refund_back"):
         st.query_params.clear()
@@ -1131,13 +1132,13 @@ def _contact_page():
     st.markdown("<h1>📬 Contact Us</h1>")
     st.markdown("<p class='trust-meta'>We'd love to hear from you.</p>", unsafe_allow_html=True)
 
-    st.markdown("""**General Inquiries**  
+    st.markdown("""**General Inquiries**
 [contact@phishguard.ai](mailto:contact@phishguard.ai)""")
-    st.markdown("""**Security & Bug Bounty**  
+    st.markdown("""**Security & Bug Bounty**
 [security@phishguard.ai](mailto:security@phishguard.ai)""")
-    st.markdown("""**Privacy & Data Requests**  
+    st.markdown("""**Privacy & Data Requests**
 [privacy@phishguard.ai](mailto:privacy@phishguard.ai)""")
-    st.markdown("""**Sales & Partnerships**  
+    st.markdown("""**Sales & Partnerships**
 [sales@phishguard.ai](mailto:sales@phishguard.ai)""")
 
     st.markdown("<div style='margin-top:32px'>", unsafe_allow_html=True)
@@ -1159,9 +1160,8 @@ def check_password() -> bool:
     params = st.query_params
     if "reset" in params:
         token = params["reset"]
-        from src.password_reset import verify_reset_token, mark_token_used
-        import sqlite3
-        from pathlib import Path
+
+        from src.password_reset import mark_token_used, verify_reset_token
         result = verify_reset_token(token)
         if result["valid"]:
             st.markdown("<div style='padding:60px 0'>", unsafe_allow_html=True)

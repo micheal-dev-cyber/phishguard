@@ -4,9 +4,9 @@ Granular webhook routing — per-event-type webhook URLs.
 Allows users to configure different webhook URLs for different event types
 (e.g., critical_alerts, daily_digest, new_threat_intel, scan_complete).
 """
-import json
 import logging
 from typing import Optional
+
 from src.db import get_connection
 
 logger = logging.getLogger("webhook_routing")

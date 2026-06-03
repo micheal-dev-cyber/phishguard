@@ -4,9 +4,8 @@ Bulk user CSV import/export for admin user management.
 import csv
 import io
 import logging
-from typing import Optional
 
-from src.db import DB_PATH, get_connection
+from src.db import get_connection
 
 logger = logging.getLogger("bulk_users")
 

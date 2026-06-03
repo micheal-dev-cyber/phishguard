@@ -1,15 +1,14 @@
 """Multi-Factor Authentication — TOTP-based 2FA for admin accounts."""
 
 import base64
-import hmac
 import hashlib
+import hmac
 import logging
 import secrets
 import struct
 import time
-from typing import Optional
 
-from src.db import DB_PATH, get_connection
+from src.db import get_connection
 
 logger = logging.getLogger("mfa")
 TOTP_INTERVAL = 30

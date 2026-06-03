@@ -6,21 +6,25 @@ Usage:
     pdf_bytes = report.generate()
 """
 import io
-import json
-from datetime import datetime, timedelta
+from datetime import datetime
 
-from src.db import DB_PATH, get_connection
+from src.db import get_connection
 
 try:
-    from reportlab.lib.pagesizes import letter
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.units import inch
-    from reportlab.lib.colors import HexColor
-    from reportlab.platypus import (
-        SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
-        PageBreak, HRFlowable,
-    )
     from reportlab.lib import colors
+    from reportlab.lib.colors import HexColor
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.lib.units import inch
+    from reportlab.platypus import (
+        HRFlowable,
+        PageBreak,  # noqa: F401
+        Paragraph,
+        SimpleDocTemplate,
+        Spacer,
+        Table,
+        TableStyle,
+    )
     HAS_REPORTLAB = True
 except ImportError:
     HAS_REPORTLAB = False
@@ -153,8 +157,8 @@ class ComplianceReport:
                 elements.append(t)
             else:
                 elements.append(Paragraph(
-                    f"Controls and measures are actively monitored by PhishGuard AI. "
-                    f"Refer to the app dashboard for detailed per-control breakdowns.", normal
+                    "Controls and measures are actively monitored by PhishGuard AI. "
+                    "Refer to the app dashboard for detailed per-control breakdowns.", normal
                 ))
             elements.append(Spacer(1, 8))
         doc.build(elements)

@@ -7,12 +7,11 @@ Usage:
     # or
     emails = scanner.scan_via_oauth(provider="gmail", token=oauth_token)
 """
-import imaplib
 import email
-import re
+import imaplib
 import logging
-from email import policy
 from datetime import datetime, timedelta
+from email import policy
 from typing import Optional
 
 logger = logging.getLogger("inbox-scanner")
@@ -36,7 +35,7 @@ class InboxScanner:
             try:
                 self.connection.logout()
             except Exception:
-                pass
+                logger.debug("IMAP logout failed (connection may be closed)")
             self.connection = None
 
     def fetch_recent(self, folder: str = "INBOX", hours: int = 24, max_emails: int = 50) -> list:
@@ -124,16 +123,16 @@ class InboxScanner:
                         body_text = decoded
                     elif ct == "text/html":
                         html_text = decoded
-                except Exception:
-                    pass
+                except Exception as _exc:
+                    logger.debug("Failed to decode MIME part: %s", _exc)
         else:
             try:
                 payload = msg.get_payload(decode=True)
                 if payload:
                     charset = msg.get_content_charset() or "utf-8"
                     body_text = payload.decode(charset, errors="replace")
-            except Exception:
-                pass
+            except Exception as _exc:
+                logger.debug("Failed to decode non-multipart body: %s", _exc)
         if body_text.strip():
             return body_text.strip()
         if html_text:

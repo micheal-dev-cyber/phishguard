@@ -1,8 +1,8 @@
 """Workspaces & RBAC — orgs, teams, roles, and membership management."""
 
 import logging
-import secrets
 import sqlite3
+
 from src.db import get_connection
 
 logger = logging.getLogger("workspace")

@@ -2,11 +2,11 @@
 
 import logging
 import smtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.base import MIMEBase
-from email.mime.text import MIMEText
+from datetime import datetime
 from email import encoders
-from datetime import datetime, timedelta
+from email.mime.base import MIMEBase
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 
 logger = logging.getLogger("weekly_report")
 

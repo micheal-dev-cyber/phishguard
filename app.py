@@ -1,10 +1,11 @@
+import json
 import os
 import time
-import json
-import streamlit as st
-import plotly.graph_objects as go
 from datetime import datetime
 from pathlib import Path
+
+import plotly.graph_objects as go
+import streamlit as st
 
 st.set_page_config(page_title="PhishGuard AI", page_icon="🛡",
                    layout="wide", initial_sidebar_state="collapsed")
@@ -26,7 +27,7 @@ if _sso_code:
         _sso = SSOManager()
         _info = _sso.handle_callback(_sso_code, state=_sso_state)
         if _info and _info.get("email"):
-            from src.tenants import verify_tenant, create_tenant
+            from src.tenants import create_tenant, verify_tenant
             _username = _info["email"].split("@")[0].replace(".", "_")
             _existing = verify_tenant(_username, _info["email"])
             if not _existing:
@@ -43,93 +44,132 @@ if _sso_code:
         logging.getLogger("phishguard").warning(f"SSO callback failed: {e}")
 
 # ── All src.* imports go AFTER set_page_config to avoid Streamlit init issues ──
-from src.detector import analyze_email
-from src.database import init_db, save_analysis, get_history, check_scan_quota
-from src.report_generator import generate_pdf_report
-from src.auth import check_password, logout
-from src.session_manager import create_session, list_sessions, revoke_session, revoke_all_sessions, cleanup_expired
-from src.threat_intel import check_multiple_urls, get_threat_summary
-from src.osint import run_osint
-from src.admin import get_stats, get_all_analyses, get_recent_threats, get_daily_counts
-from src.alerts import send_threat_alert, get_alert_log
-from src.header_auth import analyze_auth_headers
-from src.copilot import get_copilot_response, SUGGESTED_PROMPTS
-from src.ai_analyzer import simulate_phishing, analyze_screenshot, generate_ai_report
-from src.xai_analyzer import analyze_psychological_triggers, format_xai_report
-from src.email_parser import parse_email_file
-from src.brand_impersonation import run_brand_impersonation_check as _run_brand_check
-from src.jury_engine import evaluate_linguistic_jury, evaluate_corporate_jury, compute_ensemble_score
-from src.b2b_gateway import get_tier_config, check_feature_access, MockAPIGateway
-from src.webhook_gateway import send_alert as send_webhook_alert
-from src.threat_scorer import compute_combined_threat_score, format_combined_report
-from src.tenants import (
-    log_usage, check_quota, get_all_tenants, get_usage_all_tenants,
-    create_tenant, update_tenant, delete_tenant, set_password, PLANS
+from src.ai_analyzer import analyze_screenshot, generate_ai_report, simulate_phishing  # noqa: E402
+from src.alerts import get_alert_log, send_threat_alert  # noqa: E402
+from src.auth import check_password, logout  # noqa: E402
+from src.b2b_gateway import MockAPIGateway, get_tier_config  # noqa: E402
+from src.brand_impersonation import run_brand_impersonation_check as _run_brand_check  # noqa: E402
+from src.copilot import SUGGESTED_PROMPTS, get_copilot_response  # noqa: E402
+from src.database import check_scan_quota, get_history, init_db, save_analysis  # noqa: E402
+from src.detector import analyze_email  # noqa: E402
+from src.email_parser import parse_email_file  # noqa: E402
+from src.header_auth import analyze_auth_headers  # noqa: E402
+from src.jury_engine import (  # noqa: E402
+    compute_ensemble_score,
+    evaluate_corporate_jury,
+    evaluate_linguistic_jury,
 )
+from src.osint import run_osint  # noqa: E402
+from src.report_generator import generate_pdf_report  # noqa: E402
+from src.session_manager import (  # noqa: E402
+    list_sessions,
+    revoke_all_sessions,
+    revoke_session,
+)
+from src.tenants import (  # noqa: E402
+    PLANS,
+    check_quota,
+    create_tenant,
+    delete_tenant,
+    get_all_tenants,
+    get_usage_all_tenants,
+    log_usage,
+    set_password,
+    update_tenant,
+)
+from src.threat_intel import check_multiple_urls, get_threat_summary  # noqa: E402
+from src.threat_scorer import compute_combined_threat_score  # noqa: E402
+from src.xai_analyzer import analyze_psychological_triggers, format_xai_report  # noqa: E402
+
 try:
     from src.paddle_billing import (
-        is_configured as paddle_configured,
+        cancel_subscription,
         generate_checkout_url,
-        verify_transaction,
-        get_local_subscription,
-        get_subscription,
-        get_price_id,
         get_customer_portal_url,
         get_invoices,
+        get_local_subscription,
+        get_price_id,
+        get_subscription,
         pause_subscription,
-        cancel_subscription,
         resume_subscription,
         update_subscription_plan,
+        verify_transaction,
+    )
+    from src.paddle_billing import (
+        is_configured as paddle_configured,
     )
 except Exception:
-    paddle_configured = lambda: False
-    generate_checkout_url = lambda *a, **kw: None
-    verify_transaction = lambda *a, **kw: None
-    get_local_subscription = lambda *a, **kw: None
-    get_subscription = lambda *a, **kw: None
-    get_price_id = lambda *a, **kw: None
-    get_customer_portal_url = lambda *a, **kw: None
-    get_invoices = lambda *a, **kw: []
+    def paddle_configured():
+        return False
+    def generate_checkout_url(*a, **kw):
+        return None
+    def verify_transaction(*a, **kw):
+        return None
+    def get_local_subscription(*a, **kw):
+        return None
+    def get_subscription(*a, **kw):
+        return None
+    def get_price_id(*a, **kw):
+        return None
+    def get_customer_portal_url(*a, **kw):
+        return None
+    def get_invoices(*a, **kw):
+        return []
     pause_subscription = cancel_subscription = resume_subscription = update_subscription_plan = lambda *a, **kw: False
-from src.ratelimit import check_rate_limit, get_rate_limit_remaining
-from src.leaderboard import render_leaderboard, record_scan as lb_record_scan
-from src.env import ENV, get_config_status, log_config_status
-from src.campaign_engine import (
-    get_templates, create_campaign, launch_campaign, get_campaigns,
-    get_campaign_results, generate_llm_template
+from src.campaign_engine import (  # noqa: E402, I001
+    create_campaign,
+    generate_llm_template,
+    get_campaign_results,
+    get_campaigns,
+    get_templates,
+    launch_campaign,
 )
-from src.weekly_report import generate_weekly_report
-from src.notifications import push_notification, get_notifications, mark_read, mark_all_read, unread_count
-from src.session_manager import create_session, list_sessions, revoke_session, revoke_all_sessions
-from src.retention import get_retention_policy, set_retention_policy, purge_old_data
-from src.ip_allowlist import add_ip_rule, remove_ip_rule, list_ip_rules
-from src.custom_rules import add_rule, remove_rule, list_rules, toggle_rule
-from src.workspace import (
-    create_workspace, invite_member, remove_member, list_workspaces,
-    get_members, get_workspace, user_role, user_workspace_id
+from src.custom_rules import add_rule, list_rules, remove_rule, toggle_rule  # noqa: E402
+from src.db import get_connection  # noqa: E402
+from src.env import ENV, get_config_status, log_config_status  # noqa: E402
+from src.gdpr import check_consent, delete_user_data, export_user_data, record_consent, revoke_consent  # noqa: E402
+from src.i18n import SUPPORTED_LANGUAGES, t  # noqa: E402
+from src.integrations import (  # noqa: E402
+    get_available_providers,
+    list_integrations,
+    remove_integration,
+    save_integration,
 )
-from src.gdpr import export_user_data, delete_user_data, record_consent, check_consent
-from src.integrations import (
-    list_integrations, save_integration, remove_integration, get_available_providers, REGISTRY
+from src.ip_allowlist import add_ip_rule, list_ip_rules, remove_ip_rule  # noqa: E402
+from src.leaderboard import record_scan as lb_record_scan  # noqa: E402
+from src.leaderboard import render_leaderboard  # noqa: E402
+from src.notifications import (  # noqa: E402
+    push_notification,
+    unread_count,
 )
-from src.auto_responder import send_phishing_warning
-from src.i18n import t, SUPPORTED_LANGUAGES
-from src.ui_founder_analytics import render_founder_analytics
-from src.db import get_connection
+from src.ratelimit import check_rate_limit, get_rate_limit_remaining  # noqa: E402
 
 # ── RBAC permissions ────────────────────────────────────────────────────────
-from src.rbac import init_rbac, check_permission
+from src.rbac import init_rbac  # noqa: E402
+from src.retention import get_retention_policy, purge_old_data, set_retention_policy  # noqa: E402
+from src.ui_founder_analytics import render_founder_analytics  # noqa: E402
+from src.weekly_report import generate_weekly_report  # noqa: E402
+from src.workspace import (  # noqa: E402
+    create_workspace,
+    get_members,
+    invite_member,
+    list_workspaces,
+    remove_member,
+)
+
 init_rbac()
 
 # ── Structured JSON logging (opt-in via JSON_LOG=true) ──────────────────────
-from src.json_logger import setup_json_logging
+from src.json_logger import setup_json_logging  # noqa: E402
+
 setup_json_logging()
 
 # ── Enterprise component imports (with guards for optional deps) ──
 try:
     from src.threat_intel_sharing import (
-        check_collective_immunity, get_all_active_indicators,
-        broadcast_intel, immunise_from_analysis,
+        check_collective_immunity,
+        get_all_active_indicators,
+        immunise_from_analysis,
     )
     _HAS_STIX = True
 except Exception:
@@ -137,8 +177,7 @@ except Exception:
 
 try:
     from src.sender_profiler import (
-        get_or_create_profile, update_profile_after_scan,
-        detect_behavioural_anomaly, get_sender_history,
+        detect_behavioural_anomaly,
         get_all_profiles_summary,
     )
     _HAS_SENDER_PROFILER = True
@@ -147,8 +186,7 @@ except Exception:
 
 try:
     from src.ocr_homograph import (
-        check_url_for_homograph, decode_punycode,
-        scan_ocr_text_for_threats,
+        check_url_for_homograph,
     )
     _HAS_OCR = True
 except Exception:
@@ -156,7 +194,8 @@ except Exception:
 
 try:
     from src.url_sandbox import (
-        analyse_url_sandbox_sync, get_sandbox_history,
+        analyse_url_sandbox_sync,
+        get_sandbox_history,
     )
     _HAS_URL_SANDBOX = True
 except Exception:
@@ -164,9 +203,10 @@ except Exception:
 
 # ── Paddle Webhook endpoint (mounted on Streamlit's Tornado server) ───────
 try:
-    from src.paddle_billing import verify_webhook_signature, handle_webhook_event
     import tornado.web
     from streamlit.web.server import Server
+
+    from src.paddle_billing import handle_webhook_event, verify_webhook_signature
 
     class _PaddleWebhookHandler(tornado.web.RequestHandler):
         def prepare(self):
@@ -226,9 +266,17 @@ def _cached_all_analyses(limit: int = 100):
     return _ga(limit)
 
 theme = st.session_state.get("theme", "dark")
-from src.ui_theme import apply_theme
+from src.ui_theme import apply_theme  # noqa: E402
+
 apply_theme(theme)
-from src.ui_design_system import inject_design_system, card, stat_card, badge, section_title, url_box, empty_state
+from src.ui_design_system import (  # noqa: E402
+    empty_state,
+    inject_design_system,
+    section_title,
+    stat_card,
+    url_box,
+)
+
 inject_design_system(theme)
 
 init_db()
@@ -287,12 +335,12 @@ col_title, col_quota, col_user = st.columns([2, 2, 1])
 
 with col_title:
     st.markdown(
-        f"<div style='display:flex;align-items:center;gap:10px;margin-top:6px'>"
-        f"<span style='font-size:1.8rem'>🛡</span>"
-        f"<div><div style='font-size:1.4rem;font-weight:800;color:var(--text-primary,#f1f5f9);"
-        f"letter-spacing:-0.03em'>PhishGuard AI</div>"
-        f"<div style='font-size:0.75rem;color:var(--text-secondary,#94a3b8);margin-top:-2px'>"
-        f"AI-Powered Phishing & Threat Detection</div></div></div>",
+        "<div style='display:flex;align-items:center;gap:10px;margin-top:6px'>"
+        "<span style='font-size:1.8rem'>🛡</span>"
+        "<div><div style='font-size:1.4rem;font-weight:800;color:var(--text-primary,#f1f5f9);"
+        "letter-spacing:-0.03em'>PhishGuard AI</div>"
+        "<div style='font-size:0.75rem;color:var(--text-secondary,#94a3b8);margin-top:-2px'>"
+        "AI-Powered Phishing & Threat Detection</div></div></div>",
         unsafe_allow_html=True
     )
 
@@ -328,7 +376,7 @@ with col_user:
             f"padding:1px 7px;font-size:0.65rem;font-weight:700'>{n_count}</span>"
             if n_count else ""
         ) +
-        f"</div>",
+        "</div>",
         unsafe_allow_html=True
     )
 
@@ -731,8 +779,9 @@ with tab1:
         )
         if batch_file:
             try:
-                import pandas as pd
                 import json as _json
+
+                import pandas as pd
                 if batch_file.name.endswith(".json"):
                     batch_data = _json.load(batch_file)
                 else:
@@ -756,7 +805,7 @@ with tab1:
             label_visibility="collapsed",
         )
         if att_file and "att_scan_result" not in st.session_state:
-            from src.attachment_scanner import scan_attachment, is_allowed_attachment
+            from src.attachment_scanner import scan_attachment
             with st.spinner(f"Hashing {att_file.name}..."):
                 att_result = scan_attachment(att_file.getvalue(), att_file.name)
             st.session_state["att_scan_result"] = att_result
@@ -850,7 +899,8 @@ with tab1:
                 st.stop()
             with st.spinner("Scanning for threats..."):
                 # Consumption metering check
-                from src.database import consume_scan, get_spending_cap as _gsc
+                from src.database import consume_scan
+                from src.database import get_spending_cap as _gsc
                 _scan_ok = consume_scan(username)
                 _cap = _gsc(username)
                 if not _scan_ok["allowed"]:
@@ -863,7 +913,7 @@ with tab1:
                 if _cap["paused"]:
                     st.error("⛔ **Hard spending cap reached.** Increase your cap in settings to continue.")
                     st.stop()
-                import time as _tmod; _start_time = _tmod.time()
+                import time as _tmod; _start_time = _tmod.time()  # noqa: E702, I001
                 results = analyze_email(email_text)
                 save_analysis(results, email_text)
                 st.session_state["checklist_first_scan"] = True
@@ -1098,8 +1148,8 @@ with tab1:
             f"<div style='font-size:0.8rem;color:#64748b;margin-top:2px'>Risk Score</div></div></div>"
             f"<div style='text-align:right'>"
             f"<div style='font-size:2.5rem;font-weight:800;color:{color};letter-spacing:-0.03em'>{score}<span style='font-size:1rem;color:#64748b'>/100</span></div>"
-            + (f"<span class='pg-badge pg-badge-critical' style='margin-top:4px'>🛡 Quarantined</span>" if is_quarantined else "") +
-            f"</div></div>",
+            + ("<span class='pg-badge pg-badge-critical' style='margin-top:4px'>🛡 Quarantined</span>" if is_quarantined else "") +
+            "</div></div>",
             unsafe_allow_html=True
         )
 
@@ -1155,8 +1205,9 @@ with tab1:
                 st.download_button(label="📥 Download PDF Report", data=pdf_bytes, file_name=f"phishguard_report_{sev_lower}.pdf", mime="application/pdf", use_container_width=True, type="primary", key="pdf_simple")
             with col_stix:
                 import json as _json_stix
+
                 from src.stix_exporter import build_enterprise_stix_bundle
-                _att_result = st.session_state.get("att_scan_result"); _sender_anom = st.session_state.get("sender_anomaly"); _perplex_s = st.session_state.get("perplexity_result")
+                _att_result = st.session_state.get("att_scan_result"); _sender_anom = st.session_state.get("sender_anomaly"); _perplex_s = st.session_state.get("perplexity_result")  # noqa: E702
                 stix_bundle = build_enterprise_stix_bundle(email_text=email_text_saved, results=results, osint_data=osint_data, vt_results=vt_results, attachment_result=_att_result, sender_anomaly=_sender_anom, perplexity_result=_perplex_s)
                 stix_json = _json_stix.dumps(stix_bundle, indent=2)
                 st.download_button(label="📤 STIX 2.1 Export", data=stix_json, file_name=f"phishguard_stix_{sev_lower}.json", mime="application/json", use_container_width=True, type="secondary", key="stix_simple")
@@ -1345,14 +1396,14 @@ with tab1:
             st.markdown(section_title("Threat Intelligence"), unsafe_allow_html=True)
             if combined_score and combined_score.get("has_vt_data"):
                 col_cs1, col_cs2, col_cs3 = st.columns(3)
-                with col_cs1: st.metric("Composite Score", f"{combined_score['composite_score']}/100", delta=f"VT: +{combined_score['vt_contribution']:.0f}")
-                with col_cs2: st.metric("Malicious", combined_score["vt_malicious_count"])
-                with col_cs3: st.metric("Suspicious", combined_score["vt_suspicious_count"])
+                with col_cs1: st.metric("Composite Score", f"{combined_score['composite_score']}/100", delta=f"VT: +{combined_score['vt_contribution']:.0f}")  # noqa: E701
+                with col_cs2: st.metric("Malicious", combined_score["vt_malicious_count"])  # noqa: E701
+                with col_cs3: st.metric("Suspicious", combined_score["vt_suspicious_count"])  # noqa: E701
             for vt in (vt_results or []):
                 status = vt.get("status", "error")
                 url = vt.get("url", "")
-                mal = vt.get("malicious", 0); total = vt.get("total_vendors", 0)
-                threats = vt.get("threat_names", []); vt_link = vt.get("vt_link", "")
+                mal = vt.get("malicious", 0); total = vt.get("total_vendors", 0)  # noqa: E702
+                threats = vt.get("threat_names", []); vt_link = vt.get("vt_link", "")  # noqa: E702
                 if status == "malicious":
                     st.markdown(url_box(f"🔴 MALICIOUS — {url[:70]} ({mal}/{total} vendors)", True), unsafe_allow_html=True)
                 elif status == "suspicious":
@@ -1366,10 +1417,10 @@ with tab1:
         if osint_data and osint_data.get("domain_results"):
             st.markdown(section_title("OSINT Investigation"), unsafe_allow_html=True)
             osint_risk = osint_data.get("osint_risk_score", 0)
-            if osint_risk >= 75:        st.error(f"🔴 OSINT Risk: {osint_risk}/100 — High confidence threat infrastructure")
-            elif osint_risk >= 50:      st.warning(f"🟠 OSINT Risk: {osint_risk}/100 — Suspicious infrastructure")
-            elif osint_risk >= 25:      st.warning(f"🟡 OSINT Risk: {osint_risk}/100 — Some indicators")
-            else:                       st.success(f"🟢 OSINT Risk: {osint_risk}/100 — No concerns")
+            if osint_risk >= 75:        st.error(f"🔴 OSINT Risk: {osint_risk}/100 — High confidence threat infrastructure")  # noqa: E701
+            elif osint_risk >= 50:      st.warning(f"🟠 OSINT Risk: {osint_risk}/100 — Suspicious infrastructure")  # noqa: E701
+            elif osint_risk >= 25:      st.warning(f"🟡 OSINT Risk: {osint_risk}/100 — Some indicators")  # noqa: E701
+            else:                       st.success(f"🟢 OSINT Risk: {osint_risk}/100 — No concerns")  # noqa: E701
             for dr in osint_data["domain_results"]:
                 with st.expander(f"🌐 **{dr['domain']}** — Risk: {dr['risk_score']}/100"):
                     dc1, dc2, dc3 = st.columns(3)
@@ -1424,9 +1475,9 @@ with tab1:
             st.markdown(section_title("Multi-LLM Jury Consensus"), unsafe_allow_html=True)
             jr = jury_result
             col_j1, col_j2, col_j3 = st.columns(3)
-            with col_j1: st.metric("Ensemble Score", f"{jr['final_score']:.0f}/100", delta=f"{jr.get('final_score',0)-score:+.0f} vs heuristic")
-            with col_j2: st.metric("Linguistic Jury", f"{jr.get('linguistic_score',0):.0f}/100")
-            with col_j3: st.metric("Corporate Jury", f"{jr.get('corporate_score',0):.0f}/100")
+            with col_j1: st.metric("Ensemble Score", f"{jr['final_score']:.0f}/100", delta=f"{jr.get('final_score',0)-score:+.0f} vs heuristic")  # noqa: E701
+            with col_j2: st.metric("Linguistic Jury", f"{jr.get('linguistic_score',0):.0f}/100")  # noqa: E701
+            with col_j3: st.metric("Corporate Jury", f"{jr.get('corporate_score',0):.0f}/100")  # noqa: E701
             if jr.get("final_score",0) > score + 15:
                 st.warning("⚠️ Jury rates this **significantly higher** than heuristic — priority threat.")
             elif jr.get("final_score",0) < score - 15:
@@ -1451,7 +1502,7 @@ with tab1:
             if _hp:
                 st.markdown(f"<div class='pg-card-success' style='margin:8px 0'><div style='color:#22c55e;font-weight:700'>{_hp.get('subject','')}</div><div style='color:#94a3b8;font-size:12px'>From: {_hp.get('sender_name','')} — {_hp.get('payload_type','')}</div></div>", unsafe_allow_html=True)
                 if st.button("✕ Clear", key="clear_hp"):
-                    st.session_state.pop("honeypot", None); st.rerun()
+                    st.session_state.pop("honeypot", None); st.rerun()  # noqa: E702
 
             # ── Upgrade Gate / Export in technical view ────────────────
             if _restricted_blur:
@@ -1498,7 +1549,7 @@ with tab1:
                     st.download_button(label="📥 Download PDF Report", data=pdf_bytes, file_name=f"phishguard_report_{sev_lower}.pdf", mime="application/pdf", use_container_width=True, type="primary")
                 with col_stix:
                     from src.stix_exporter import build_enterprise_stix_bundle
-                    _att_result = st.session_state.get("att_scan_result"); _sender_anom = st.session_state.get("sender_anomaly"); _perplex_t = st.session_state.get("perplexity_result")
+                    _att_result = st.session_state.get("att_scan_result"); _sender_anom = st.session_state.get("sender_anomaly"); _perplex_t = st.session_state.get("perplexity_result")  # noqa: E702
                     stix_bundle = build_enterprise_stix_bundle(email_text=email_text_saved, results=results, osint_data=osint_data, vt_results=vt_results, attachment_result=_att_result, sender_anomaly=_sender_anom, perplexity_result=_perplex_t)
                     stix_json = json.dumps(stix_bundle, indent=2)
                     st.download_button(label="📤 STIX 2.1 Export", data=stix_json, file_name=f"phishguard_stix_{sev_lower}.json", mime="application/json", use_container_width=True, type="secondary")
@@ -1529,9 +1580,9 @@ with tab3:
     if completed_count < 5:
         checklist_html = '<div style="background:linear-gradient(145deg,#0a0f1a,#0f1a2a);border:1px solid #1e293b;border-radius:14px;padding:16px 20px;margin-bottom:20px">'
         checklist_html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
-        checklist_html += f'<span style="color:#f0f6ff;font-weight:700;font-size:14px">🚀 Getting Started</span>'
+        checklist_html += '<span style="color:#f0f6ff;font-weight:700;font-size:14px">🚀 Getting Started</span>'
         checklist_html += f'<span style="color:#3b82f6;font-size:12px;font-weight:600">{completed_count}/5</span></div>'
-        checklist_html += f'<div style="background:#1e293b;border-radius:6px;height:4px;overflow:hidden;margin-bottom:12px">'
+        checklist_html += '<div style="background:#1e293b;border-radius:6px;height:4px;overflow:hidden;margin-bottom:12px">'
         checklist_html += f'<div style="background:linear-gradient(90deg,#3b82f6,#22c55e);width:{completed_count*20}%;height:100%;border-radius:6px"></div></div>'
         for item in checklist_items:
             unchecked, label, done, checked, done_label = item
@@ -1555,8 +1606,8 @@ with tab3:
         safe_pct = round(safe_count / total_scans * 100, 1) if total_scans else 0
         health = "🟢 Healthy" if avg_score < 30 else "🟡 Moderate" if avg_score < 60 else "🔴 At Risk"
     else:
-        total_scans = 0; avg_score = 0; critical_count = 0; high_count = 0
-        threats_neutralized = 0; safe_count = 0; safe_pct = 100; health = "🟢 No Data"
+        total_scans = 0; avg_score = 0; critical_count = 0; high_count = 0  # noqa: E702
+        threats_neutralized = 0; safe_count = 0; safe_pct = 100; health = "🟢 No Data"  # noqa: E702
 
     hero_col1, hero_col2 = st.columns([1.3, 1])
     with hero_col1:
@@ -1605,8 +1656,8 @@ with tab3:
         f"<div style='flex:1;height:6px;background:#1e293b;border-radius:100px;overflow:hidden'>"
         f"<div style='width:{min(q['pct'],100)}%;height:100%;background:{bar_color};border-radius:100px'></div></div>"
         f"<span style='color:{bar_color};font-size:0.75rem;font-weight:600;min-width:80px'>{q['used']} / {limit_display}</span>"
-        + (f"<a href='#' onclick='alert(\"switch to billing tab\")' style='color:#f59e0b;font-size:0.75rem;text-decoration:none;font-weight:600' onclick=''>⬆ Upgrade</a>" if q['pct'] >= 70 else "") +
-        f"</div>", unsafe_allow_html=True
+        + ("<a href='#' onclick='alert(\"switch to billing tab\")' style='color:#f59e0b;font-size:0.75rem;text-decoration:none;font-weight:600' onclick=''>⬆ Upgrade</a>" if q['pct'] >= 70 else "") +
+        "</div>", unsafe_allow_html=True
     )
 
     # ── Main content: Stats or empty state ─────────────────────────────────
@@ -1690,7 +1741,8 @@ with tab3:
             with sub_tabs[2]:
                 col_ex1, col_ex2, col_ex3 = st.columns(3)
                 with col_ex1:
-                    import csv, io
+                    import csv
+                    import io
                     out = io.StringIO()
                     w = csv.writer(out)
                     w.writerow(["Timestamp", "Risk Score", "Severity", "Keyword Hits", "Suspicious URLs", "Preview"])
@@ -1720,12 +1772,12 @@ with tab3:
                     _has_wl = "white_label" in PLANS.get(plan, {}).get("features", [])
                     if not _has_wl:
                         st.markdown(
-                            f"<div style='background:linear-gradient(135deg,#1a0a1a,#2a0f2a);border:2px solid #a855f7;"
-                            f"border-radius:16px;padding:24px 20px;text-align:center;margin:12px 0'>"
-                            f"<div style='font-size:2rem;margin-bottom:6px'>💼</div>"
-                            f"<div style='color:#f0f6ff;font-size:1rem;font-weight:700;margin-bottom:4px'>Consultant License Required</div>"
-                            f"<div style='color:#94a3b8;font-size:0.85rem'>White-label reports are exclusive to the <strong>Consultant License</strong>. Rebrand reports with your own company logo for commercial client delivery.</div>"
-                            f"</div>", unsafe_allow_html=True
+                            "<div style='background:linear-gradient(135deg,#1a0a1a,#2a0f2a);border:2px solid #a855f7;"
+                            "border-radius:16px;padding:24px 20px;text-align:center;margin:12px 0'>"
+                            "<div style='font-size:2rem;margin-bottom:6px'>💼</div>"
+                            "<div style='color:#f0f6ff;font-size:1rem;font-weight:700;margin-bottom:4px'>Consultant License Required</div>"
+                            "<div style='color:#94a3b8;font-size:0.85rem'>White-label reports are exclusive to the <strong>Consultant License</strong>. Rebrand reports with your own company logo for commercial client delivery.</div>"
+                            "</div>", unsafe_allow_html=True
                         )
                 if st.button("📄 Generate Report", type="primary", use_container_width=True):
                     from src.compliance_reports import ComplianceReport
@@ -1964,7 +2016,7 @@ if is_admin:
                     _values = [r[1] for r in _vol]
                     _colors = {"CRITICAL": "#ff4444", "HIGH": "#ff8800",
                                "MEDIUM": "#ffaa00", "LOW": "#44aa44"}
-                    _bar_c = [_colors.get(l, "#60a5fa") for l in _labels]
+                    _bar_c = [_colors.get(lb, "#60a5fa") for lb in _labels]
                     fig_vol = go.Figure(go.Bar(
                         x=_labels, y=_values, marker_color=_bar_c,
                         text=_values, textposition="outside",
@@ -2009,7 +2061,8 @@ if is_admin:
         with col_exp:
             all_a = _cached_all_analyses(100)
             if all_a:
-                import csv, io
+                import csv
+                import io
                 out = io.StringIO()
                 w = csv.writer(out)
                 w.writerow(["ID", "Timestamp", "Risk Score", "Severity",
@@ -2081,7 +2134,7 @@ if is_admin:
         unsafe_allow_html=True
     )
 
-    from src.feedback import mark_feedback, get_feedback_stats, get_feedback_history
+    from src.feedback import get_feedback_history, get_feedback_stats, mark_feedback
 
     fb_stats = get_feedback_stats()
     col_fb1, col_fb2, col_fb3, col_fb4 = st.columns(4)
@@ -2128,7 +2181,7 @@ if is_admin:
         st.divider()
         with st.expander("🔬 A/B Testing", expanded=False):
             st.caption("Run side-by-side detection rule comparisons.")
-            from src.ab_testing import ABTest, list_active_tests, stop_test, promote_variant
+            from src.ab_testing import ABTest, list_active_tests, promote_variant, stop_test
             col_ab1, col_ab2 = st.columns(2)
             with col_ab1:
                 ab_name = st.text_input("Test name", placeholder="keyword_boost_v2", key="ab_name")
@@ -2367,7 +2420,10 @@ if is_admin:
                         # Send verification email if email provided
                         if new_email:
                             try:
-                                from src.email_verify import create_verification, send_verification_email
+                                from src.email_verify import (
+                                    create_verification,
+                                    send_verification_email,
+                                )
                                 base = st.secrets.get("base_url", "http://localhost:8501")
                                 vt = create_verification(new_username, new_email)
                                 send_verification_email(new_email, f"{base}/?verify={vt['token']}")
@@ -2509,35 +2565,35 @@ with billing_tab:
 
     bar_color = "#3b82f6" if q["pct"] < 70 else "#f59e0b" if q["pct"] < 90 else "#ef4444"
     st.markdown(
-        f"<div style='background:linear-gradient(135deg,#0f172a,#1a1f2e);"
-        f"border:1px solid #1e3a5f;border-radius:16px;padding:28px 32px;margin-bottom:20px'>"
-        f"<div style='display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px'>"
-        f"<div>"
-        f"<div style='color:#64748b;font-size:0.7rem;text-transform:uppercase;"
-        f"letter-spacing:0.1em;margin-bottom:2px'>Current Plan</div>"
-        f"<div style='color:#f0f6ff;font-size:2rem;font-weight:800'>"
-        + plan_info["label"] + f"</div>"
-        f"<div style='color:#94a3b8;font-size:1rem;margin-top:2px'>"
-        + plan_info["price"] + f"</div>"
-        f"</div>"
-        f"<div style='text-align:right;min-width:180px'>"
+        "<div style='background:linear-gradient(135deg,#0f172a,#1a1f2e);"
+        "border:1px solid #1e3a5f;border-radius:16px;padding:28px 32px;margin-bottom:20px'>"
+        "<div style='display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px'>"
+        "<div>"
+        "<div style='color:#64748b;font-size:0.7rem;text-transform:uppercase;"
+        "letter-spacing:0.1em;margin-bottom:2px'>Current Plan</div>"
+        "<div style='color:#f0f6ff;font-size:2rem;font-weight:800'>"
+        + plan_info["label"] + "</div>"
+        "<div style='color:#94a3b8;font-size:1rem;margin-top:2px'>"
+        + plan_info["price"] + "</div>"
+        "</div>"
+        "<div style='text-align:right;min-width:180px'>"
         + (f"<div style='color:{status_color};font-size:0.85rem;font-weight:600;margin-bottom:6px'>{status_tag}</div>"
            if status_tag else "")
-        + f"<div style='color:#94a3b8;font-size:0.85rem;margin-bottom:4px'>"
+        + "<div style='color:#94a3b8;font-size:0.85rem;margin-bottom:4px'>"
         + str(q["usage"]) + " / " + str(q["limit"]) + " analyses this month</div>"
         f"<div style='background:#1e3a5f;border-radius:4px;height:8px;width:160px;margin:0 0 4px auto'>"
         f"<div style='background:{bar_color};border-radius:4px;height:8px;width:"
-        + str(min(q["pct"], 100)) + f"%'></div></div>"
+        + str(min(q["pct"], 100)) + "%'></div></div>"
         + (f"<div style='color:{bar_color};font-size:0.75rem;font-weight:600'>{q['pct']}% used"
-           + (f" · <span style='color:#f59e0b'>⬆ <a href='#upgrade-options' style='color:#f59e0b;text-decoration:none'>Upgrade</a></span>"
+           + (" · <span style='color:#f59e0b'>⬆ <a href='#upgrade-options' style='color:#f59e0b;text-decoration:none'>Upgrade</a></span>"
               if q["pct"] >= 70 else "")
-           + f"</div>" if plan != "enterprise" else f"<div style='color:#22c55e;font-size:0.75rem'>Unlimited</div>")
-        + f"</div></div>"
+           + "</div>" if plan != "enterprise" else "<div style='color:#22c55e;font-size:0.75rem'>Unlimited</div>")
+        + "</div></div>"
         + (f"<div style='color:#64748b;font-size:0.75rem;margin-top:12px;border-top:1px solid #1e293b;padding-top:10px'>"
            f"Subscription ID: <code style='color:#94a3b8'>{sub['subscription_id']}</code>"
            + (f" · Next billing: <strong>{sub.get('next_billed_at', 'N/A')}</strong>" if sub.get('next_billed_at') else "")
-           + f"</div>" if sub and sub.get('subscription_id') else "")
-        + f"</div>",
+           + "</div>" if sub and sub.get('subscription_id') else "")
+        + "</div>",
         unsafe_allow_html=True
     )
 
@@ -2610,7 +2666,7 @@ with billing_tab:
                         f"<span style='color:#475569'>{inv.get('paid_at', '')[:10]}</span>"
                         + (f"<a href='{inv['invoice_url']}' target='_blank' style='color:#60a5fa'>PDF</a>"
                            if inv.get('invoice_url') else "")
-                        + f"</div>",
+                        + "</div>",
                         unsafe_allow_html=True
                     )
             else:
@@ -2783,7 +2839,7 @@ with billing_tab:
         unsafe_allow_html=True
     )
 
-    from src.api_keys import generate_api_key, delete_api_key, init_api_keys_table
+    from src.api_keys import delete_api_key, generate_api_key, init_api_keys_table
     init_api_keys_table()
     conn = get_connection()
     c = conn.cursor()
@@ -2879,7 +2935,11 @@ with settings_tab:
             st.info("💡 Alerts fire automatically when an analysis scores HIGH or CRITICAL.")
         # Email verification status
         try:
-            from src.email_verify import is_email_verified, create_verification, send_verification_email
+            from src.email_verify import (
+                create_verification,
+                is_email_verified,
+                send_verification_email,
+            )
             if not is_email_verified(username):
                 if current_email:
                     st.warning("📧 Email not verified. Some features are restricted.")
@@ -2915,7 +2975,7 @@ with settings_tab:
         st.divider()
         st.markdown("#### 🔐 Multi-Factor Auth (TOTP)")
         try:
-            from src.mfa import setup_mfa, enable_mfa, disable_mfa, is_mfa_enabled
+            from src.mfa import disable_mfa, enable_mfa, is_mfa_enabled, setup_mfa
             mfa_enrolled = is_mfa_enabled(username)
             if mfa_enrolled:
                 st.success("✅ MFA is enabled on your account.")
@@ -3101,7 +3161,10 @@ with settings_tab:
         )
     else:
         from src.soar_gateway import (
-            quarantine_host, disable_ad_account, broadcast_slack_channel, get_soar_status,
+            broadcast_slack_channel,
+            disable_ad_account,
+            get_soar_status,
+            quarantine_host,
         )
         st.markdown(
             "<div style='background:#0a1628;border:1px solid #22c55e44;border-radius:14px;"
@@ -3244,7 +3307,7 @@ with settings_tab:
     elif alert_method == "Webhook":
         webhook_url = st.text_input("Webhook URL", key="webhook_url")
         if st.button("🔔 Test Webhook", use_container_width=True):
-            from src.alerting import send_webhook, build_alert
+            from src.alerting import send_webhook
             res = send_webhook(webhook_url, {"test": True, "message": "PhishGuard test"})
             if res["status"] == "ok":
                 st.success("Webhook test sent!")
@@ -3627,9 +3690,12 @@ with training_tab:
         if is_admin:
             # ── Enterprise Campaign Engine for Admins ──────────────────────
             from src.campaign_engine import (
-                CAMPAIGN_TEMPLATES, generate_llm_template,
-                launch_campaign, get_campaign_results,
-                save_template, list_templates, delete_template,
+                delete_template,
+                generate_llm_template,
+                get_campaign_results,
+                launch_campaign,
+                list_templates,
+                save_template,
             )
 
             st.markdown("## 🎣 Enterprise Phishing Campaign Engine")
@@ -3652,7 +3718,7 @@ with training_tab:
                             st.markdown(f"**Subject:** {t.get('subject', 'N/A')}")
                             st.markdown(f"**Body preview:** `{t.get('body', '')[:200]}...`")
                             st.markdown(f"**Category:** {t.get('category', 'General')}")
-                            if st.button(f"🗑 Delete", key=f"del_tmpl_{t['id']}"):
+                            if st.button("🗑 Delete", key=f"del_tmpl_{t['id']}"):
                                 delete_template(t["id"])
                                 st.rerun()
                 else:
@@ -4831,7 +4897,7 @@ with tab_ma:
     )
     st.divider()
 
-    from src.database import get_valuation_summary, get_valuation_logs
+    from src.database import get_valuation_logs, get_valuation_summary
     v = get_valuation_summary()
 
     col_v1, col_v2, col_v3, col_v4 = st.columns(4)
@@ -4958,7 +5024,7 @@ with tab_soc:
 # NEW TAB — ACTIVITY TIMELINE
 # ═════════════════════════════════════════════════════════════════════════════
 with tab_timeline:
-    from src.activity_timeline import init_activity_timeline, record_activity, get_activity
+    from src.activity_timeline import get_activity, init_activity_timeline, record_activity
     init_activity_timeline()
     st.markdown("## 📋 Activity Timeline")
     st.caption("Your recent actions and events across the platform.")

@@ -7,10 +7,8 @@ transitions, and repetitive sentence structures.  No external API required.
 
 from __future__ import annotations
 
-import re
 import math
-from collections import Counter
-
+import re
 
 # ── Pattern sets ─────────────────────────────────────────────────────────
 

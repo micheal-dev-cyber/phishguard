@@ -8,11 +8,11 @@ Migrates all tables from the SQLite database to PostgreSQL.
 Uses environment variables PGHOST, PGPORT, PGDATABASE, PGUSER, PGPASSWORD.
 """
 
-import sys
-import os
 import logging
+import os
+import sys
 
-from src.db import DB_PATH, get_connection
+from src.db import get_connection
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger("migrate")
@@ -49,7 +49,7 @@ def _get_pg_conn():
 def _get_sqlite_schema(table: str) -> str:
     conn = get_connection()
     c = conn.cursor()
-    c.execute(f"SELECT sql FROM sqlite_master WHERE type='table' AND name=? AND sql IS NOT NULL", (table,))
+    c.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name=? AND sql IS NOT NULL", (table,))
     row = c.fetchone()
     conn.close()
     if not row:

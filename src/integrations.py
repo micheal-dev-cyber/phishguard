@@ -3,7 +3,7 @@
 import json
 import logging
 
-from src.db import DB_PATH, get_connection
+from src.db import get_connection
 
 logger = logging.getLogger("integrations")
 

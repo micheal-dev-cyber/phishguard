@@ -15,13 +15,12 @@ Usage from webhook.py or any Flask/FastAPI handler:
     response = handle_scim_request(method, path, body)
 """
 
-import json
-import sqlite3
 import hashlib
 import secrets
+import sqlite3
 from typing import Optional
 
-from src.db import DB_PATH, get_connection
+from src.db import get_connection
 
 SCHEMA_USER = "urn:ietf:params:scim:schemas:core:2.0:User"
 SCHEMA_LIST = "urn:ietf:params:scim:api:messages:2.0:ListResponse"
@@ -128,7 +127,7 @@ def _create_user(body: dict) -> dict:
         row = c.fetchone()
         conn.close()
         return _scim_user(row)
-    except sqlite3.IntegrityError as e:
+    except sqlite3.IntegrityError:
         conn.close()
         return _error(409, f"User '{username}' already exists")
 
@@ -152,9 +151,12 @@ def _update_user(user_id: int, body: dict, partial: bool = False) -> dict:
         update_fields["status"] = "active" if body["active"] else "suspended"
 
     if update_fields:
-        set_clause = ", ".join(f"{k}=?" for k in update_fields)
-        values = list(update_fields.values()) + [user_id]
-        c.execute(f"UPDATE users SET {set_clause} WHERE rowid=?", values)
+        _allowed_scim = {"username", "email", "status", "role"}
+        filtered = {k: v for k, v in update_fields.items() if k in _allowed_scim}
+        if filtered:
+            set_clause = ", ".join(f"{k}=?" for k in filtered)
+            values = list(filtered.values()) + [user_id]
+            c.execute(f"UPDATE users SET {set_clause} WHERE rowid=?", values)
         conn.commit()
 
     c.execute("SELECT rowid, username, email, role, status FROM users WHERE rowid=?", (user_id,))

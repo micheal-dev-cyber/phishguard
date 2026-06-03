@@ -1,6 +1,5 @@
 """SSO / OIDC — Okta, Azure AD, Google Workspace, GitHub login."""
 
-import hashlib
 import json
 import logging
 import os

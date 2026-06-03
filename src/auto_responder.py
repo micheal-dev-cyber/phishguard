@@ -3,7 +3,6 @@
 import logging
 import smtplib
 from email.mime.text import MIMEText
-from pathlib import Path
 
 logger = logging.getLogger("auto-responder")
 

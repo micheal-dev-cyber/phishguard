@@ -1,7 +1,7 @@
 # src/admin.py
 from datetime import datetime, timedelta
 
-from src.db import DB_PATH, get_connection
+from src.db import get_connection
 
 
 def _connect():

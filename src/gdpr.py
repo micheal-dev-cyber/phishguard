@@ -1,10 +1,9 @@
 """GDPR Compliance Tools — data export, account deletion, consent records."""
 
-import json
 import logging
 from datetime import datetime
 
-from src.db import DB_PATH, get_connection
+from src.db import get_connection
 
 logger = logging.getLogger("gdpr")
 

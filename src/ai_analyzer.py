@@ -1,9 +1,11 @@
 # src/ai_analyzer.py
-import os
 import json
+import os
 import re
 from typing import Dict
+
 import openai
+
 
 # ─────────────────────────────────────────────
 # SAFE CLIENT INITIALIZATION (Prevents boot crashes)
@@ -352,7 +354,7 @@ def analyze_screenshot(image_base64: str, mime_type: str = "image/png") -> dict:
 def generate_ai_report(email_text, rule_findings=None):
     """Compiles a beautifully formatted markdown security report for the main UI panel."""
     analysis = analyze_email("Incident Scan", email_text, "External Source Channel")
-    
+
     report = f"""### 🔍 EXECUTIVE RISK BREAKDOWN
 - **Phishing Probability Assessment:** {"⚠️ CRITICAL THREAT FLAG" if analysis.get('isPhishing') else "✅ Low Suspicion Indicators"}
 - **Threat Vector Score:** `{analysis.get('score', 0)} / 100` ({analysis.get('severity', 'LOW')})
@@ -364,6 +366,6 @@ def generate_ai_report(email_text, rule_findings=None):
         report += f"- {indicator}\n"
     if "senderAssessment" in analysis:
         report += f"- {analysis['senderAssessment']}\n"
-        
+
     report += f"\n### 🛡️ SECURE MITIGATION ACTIONS\n{analysis.get('remediationPlan', 'Quarantine message headers and evaluate embedded links manually.')}"
     return report

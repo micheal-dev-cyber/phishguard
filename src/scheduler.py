@@ -3,12 +3,11 @@ Scheduled / recurring scan system.
 
 Uses the task queue to schedule periodic email analysis for connected mailboxes.
 """
-import json
 import logging
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from src.db import DB_PATH, get_connection
+from src.db import get_connection
 
 logger = logging.getLogger("scheduler")
 SCHEDULE_TABLE = "scan_schedules"

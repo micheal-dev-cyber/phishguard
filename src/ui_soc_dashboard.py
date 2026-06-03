@@ -1,8 +1,9 @@
-import streamlit as st
-import plotly.graph_objects as go
 import re
-import time
 from datetime import datetime, timedelta
+
+import plotly.graph_objects as go
+import streamlit as st
+
 from src.db import get_connection
 
 

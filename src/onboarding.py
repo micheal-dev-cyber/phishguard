@@ -2,13 +2,11 @@
 
 import json
 import logging
-import secrets
-from datetime import datetime
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 logger = logging.getLogger("onboarding")
-from src.tenants import PLANS
+from src.tenants import PLANS  # noqa: E402
 
 
 def create_checkout_session(plan: str, username: str, email: str, provider: str = "stripe") -> dict:
@@ -64,8 +62,8 @@ def _paddle_checkout(plan: str, username: str, email: str) -> dict:
     if pricing.get("custom"):
         return {"error": "Enterprise plan requires contact sales"}
     try:
-        from src.paddle_billing import generate_checkout_url
         from src.env import ENV
+        from src.paddle_billing import generate_checkout_url
         url = generate_checkout_url(username, plan, success_url=f"{ENV.APP_URL or 'https://phishguard.ai'}/?checkout=completed")
         if url:
             return {"url": url, "session_id": plan}

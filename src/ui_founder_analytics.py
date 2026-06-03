@@ -1,8 +1,9 @@
 import logging
 from datetime import datetime, timedelta
-import streamlit as st
+
 import plotly.graph_objects as go
-import plotly.express as px
+import streamlit as st
+
 from src.db import get_connection
 from src.tenants import PLANS
 

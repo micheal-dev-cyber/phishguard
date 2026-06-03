@@ -1,7 +1,9 @@
 import streamlit as st
+
 from src.health import (
-    init_health, run_all_checks, get_health_summary,
-    run_backup, list_backups,
+    get_health_summary,
+    list_backups,
+    run_backup,
 )
 
 

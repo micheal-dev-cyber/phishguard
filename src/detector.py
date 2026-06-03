@@ -153,7 +153,6 @@ def extract_emails(text: str) -> list:
 
 
 def extract_attachments(text: str) -> list:
-    attachment_pattern = r'\b[\w\-]+(\.[a-zA-Z]{2,5}){1,3}\b'
     candidates = re.findall(r'\b[\w\-]+(\.[\w]{2,5})+\b', text)
     return candidates
 

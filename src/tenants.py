@@ -1,9 +1,10 @@
 import logging
-import bcrypt
 import time
 from datetime import datetime
 
-from src.db import DB_PATH, get_connection
+import bcrypt
+
+from src.db import get_connection
 
 logger = logging.getLogger(__name__)
 

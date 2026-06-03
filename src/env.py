@@ -17,10 +17,9 @@ Usage:
 Naming convention:  All caps, underscores.  Every key defaults to "".
 """
 
-import os
 import logging
+import os
 from dataclasses import dataclass
-from typing import Optional
 
 logger = logging.getLogger("phishguard-env")
 

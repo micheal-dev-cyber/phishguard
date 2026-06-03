@@ -20,7 +20,6 @@ class TestTenantManagement:
     def setup(self, monkeypatch):
         self.tmpdir = tempfile.mkdtemp()
         self.db_path = Path(self.tmpdir) / "test.db"
-        monkeypatch.setattr(tenants_mod, "DB_PATH", str(self.db_path))
         import src.db; monkeypatch.setattr(src.db, "DB_PATH", str(self.db_path))
         tenants_mod.init_tenants()
 
@@ -97,7 +96,6 @@ class TestLoginLockout:
     def setup(self, monkeypatch):
         self.tmpdir = tempfile.mkdtemp()
         self.db_path = Path(self.tmpdir) / "lockout_test.db"
-        monkeypatch.setattr(tenants_mod, "DB_PATH", str(self.db_path))
         import src.db; monkeypatch.setattr(src.db, "DB_PATH", str(self.db_path))
         monkeypatch.setattr(tenants_mod, "MAX_LOGIN_ATTEMPTS", 3)
         monkeypatch.setattr(tenants_mod, "LOCKOUT_WINDOW", 30)

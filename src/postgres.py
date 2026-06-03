@@ -6,11 +6,8 @@ Usage:
         rows = pg.query("SELECT * FROM analyses LIMIT 10")
 """
 
-import json
 import logging
-from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 from src.db import DB_PATH, get_connection
 

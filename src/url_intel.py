@@ -1,7 +1,8 @@
 # src/url_intel.py
+
 import requests
 import tldextract
-from urllib.parse import urlparse
+
 
 def get_redirect_chain(url):
     """Traces the redirect chain of a URL."""
@@ -20,7 +21,7 @@ def analyze_url_safety(url):
     chain = get_redirect_chain(url)
     final_url = chain[-1]
     ext = tldextract.extract(final_url)
-    
+
     return {
         "final_url": final_url,
         "domain": f"{ext.domain}.{ext.suffix}",

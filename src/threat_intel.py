@@ -1,6 +1,8 @@
 import base64
 import time
+
 import requests
+
 from src.env import ENV
 
 
@@ -11,9 +13,9 @@ def get_url_reputation(url):
         return None
     headers = {"x-apikey": api_key}
     url_id = base64.urlsafe_b64encode(url.encode()).decode().strip("=")
-    
-    response = requests.get(f"https://www.virustotal.com/api/v3/urls/{url_id}", headers=headers)
-    
+
+    response = requests.get(f"https://www.virustotal.com/api/v3/urls/{url_id}", headers=headers, timeout=30)
+
     if response.status_code == 200:
         data = response.json()
         stats = data['data']['attributes']['last_analysis_stats']

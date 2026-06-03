@@ -11,13 +11,13 @@ Features:
 - Point history audit trail
 """
 
-import streamlit as st
 import plotly.graph_objects as go
+import streamlit as st
+
 from src.database import (
+    LEADERBOARD_SCORING,
     get_leaderboard,
     get_user_rank,
-    record_scan,
-    LEADERBOARD_SCORING,
 )
 
 
@@ -133,8 +133,8 @@ def render_leaderboard(username: str):
             "Department": dept,
             "Scans": scans,
             "Threats Reported": threats,
-            f"Critical (🔥)": crit,
-            f"High (⚠️)": high,
+            "Critical (🔥)": crit,
+            "High (⚠️)": high,
             "Points": pts,
             "Last Active": (last_active or "—")[:10],
         })
@@ -176,7 +176,7 @@ def render_leaderboard(username: str):
     if dept_stats:
         dept_names = list(dept_stats.keys())
         dept_points = [dept_stats[d]["points"] for d in dept_names]
-        dept_scans = [dept_stats[d]["scans"] for d in dept_names]
+        [dept_stats[d]["scans"] for d in dept_names]
         dept_threats = [dept_stats[d]["threats"] for d in dept_names]
 
         fig_dept = go.Figure()

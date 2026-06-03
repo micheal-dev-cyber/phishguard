@@ -1,9 +1,8 @@
 """Automated Incident Response — auto-block domains, quarantine emails."""
 
 import logging
-from typing import Optional
 
-from src.db import DB_PATH, get_connection
+from src.db import get_connection
 
 logger = logging.getLogger("incident_response")
 

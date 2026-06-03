@@ -1,6 +1,6 @@
 import streamlit as st
 
-from src.db import DB_PATH, get_connection
+from src.db import get_connection
 
 
 def render_audit_log_tab():
@@ -49,7 +49,8 @@ def render_audit_log_tab():
     cols = st.columns([1, 1])
     with cols[0]:
         if st.button("📥 Export CSV", use_container_width=True):
-            import csv, io
+            import csv
+            import io
             buf = io.StringIO()
             w = csv.writer(buf)
             w.writerow(["ID", "Timestamp", "User", "Action", "Details", "IP"])

@@ -2,9 +2,8 @@
 
 import json
 import logging
-from urllib.request import Request, urlopen
 from urllib.error import URLError
-from typing import Optional
+from urllib.request import Request, urlopen
 
 logger = logging.getLogger("siem")
 
@@ -66,7 +65,6 @@ class SIEMClient:
         return self._post(req, "Elastic")
 
     def _send_qradar(self, event: dict) -> dict:
-        import uuid
         payload = json.dumps({
             "events": [{
                 "eventName": "PhishGuard Threat Alert",
@@ -92,7 +90,7 @@ class SIEMClient:
     def _post(self, req: Request, name: str) -> dict:
         try:
             resp = urlopen(req, timeout=10)
-            body = resp.read().decode()
+            resp.read().decode()
             logger.info("SIEM %s: %d", name, resp.status)
             return {"siem": name, "status": resp.status, "success": True}
         except URLError as e:

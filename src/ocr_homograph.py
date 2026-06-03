@@ -15,17 +15,16 @@ Layers:
   6. Risk scoring and alert logging
 """
 
-import json
-import re
 import asyncio
+import json
 import logging
-import hashlib
+import re
 import time
+from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
 from typing import Optional
-from concurrent.futures import ThreadPoolExecutor
 
-from src.db import DB_PATH, get_connection
+from src.db import get_connection
 
 logger = logging.getLogger("ocr-homograph")
 
@@ -40,8 +39,7 @@ CONFUSABLE_MAP = {
     "у": "y",  # Cyrillic small u
     "х": "x",  # Cyrillic small kha
     "і": "i",  # Cyrillic small Byelorussian i
-    "ј": "j",  # Cyrillic small je
-    "а": "a",  # Cyrillic small a (duplicate — keep for clarity)
+    "ј": "j",  # Cyrillic small a (duplicate — keep for clarity)
     "Ь": "b",  # Cyrillic soft sign → b
     "Н": "H",  # Cyrillic en → H
     "Т": "T",  # Cyrillic te → T
@@ -96,7 +94,7 @@ except ImportError:
 
 try:
     import pytesseract
-    from PIL import Image
+    from PIL import Image  # noqa: F401
     _tesseract_available = True
 except ImportError:
     _tesseract_available = False
@@ -129,8 +127,9 @@ def extract_images_from_bytes(data: bytes) -> list:
 
     images = []
     try:
-        from PIL import Image
         import io
+
+        from PIL import Image
 
         stream = io.BytesIO(data)
         try:

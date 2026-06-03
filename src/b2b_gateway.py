@@ -1,12 +1,12 @@
-import time
 import functools
 import logging
-from typing import Dict, Any, Optional, Callable
+import time
 from collections import defaultdict
 from threading import Lock
+from typing import Any, Callable, Dict, Optional
 
 logger = logging.getLogger(__name__)
-from src.tenants import PLANS
+from src.tenants import PLANS  # noqa: E402
 
 # Tier definitions — features sourced from PLANS in tenants.py
 TIERS = {

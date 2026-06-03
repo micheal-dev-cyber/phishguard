@@ -4,12 +4,10 @@ Server-Sent Events (SSE) notification system.
 Replaces 30s polling with push-based notifications via a Streamlit component bridge.
 Uses a simple in-memory event queue flushed periodically.
 """
-import json
 import queue
 import threading
 import time
 from datetime import datetime, timezone
-from typing import Optional
 
 _events: dict[str, queue.Queue] = {}
 _lock = threading.Lock()

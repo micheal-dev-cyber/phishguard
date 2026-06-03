@@ -1,5 +1,6 @@
 import streamlit as st
-from src.bulk_users import export_users_csv, import_users_csv, export_template_csv
+
+from src.bulk_users import export_template_csv, export_users_csv, import_users_csv
 
 
 def render_bulk_users_ui():

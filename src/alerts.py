@@ -1,10 +1,10 @@
 # src/alerts.py
 import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 from datetime import datetime
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 
-from src.db import DB_PATH, get_connection
+from src.db import get_connection
 from src.env import ENV
 
 
@@ -236,7 +236,7 @@ def send_threat_alert(username: str, email: str, results: dict) -> bool:
             server.sendmail(cfg["from"], [email], msg.as_string())
         _log_alert(username, email, subject, severity, risk_score, success=True)
         return True
-    except Exception as e:
+    except Exception:
         _log_alert(username, email, subject, severity, risk_score, success=False)
         return False
 

@@ -5,10 +5,8 @@ Verifies that sending domains have proper DKIM and SPF records.
 """
 import hmac
 import logging
-import re
-from typing import Optional
 
-from src.db import DB_PATH, get_connection
+from src.db import get_connection
 
 logger = logging.getLogger("domain_verify")
 DOMAIN_TABLE = "verified_domains"
@@ -73,7 +71,6 @@ def check_dns_records(domain: str) -> dict:
     result = {"domain": domain, "spf": "not_found", "dkim": "not_found", "dmarc": "not_found", "errors": []}
     try:
         import socket
-        spf_queried = False
         for record_type in ["TXT", "TXT"]:
             try:
                 answers = socket.getaddrinfo(f"_dmarc.{domain}", 0)

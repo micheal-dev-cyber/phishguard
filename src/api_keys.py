@@ -12,15 +12,14 @@ Usage from api_proxy.py:
     # user = {"username": "...", "tier": "...", "remaining": N, "allowed": True}
 """
 
-import sqlite3
 import hashlib
-import secrets
-import time
 import logging
+import secrets
+import sqlite3
+import time
 from datetime import datetime, timezone
-from typing import Optional
 
-from src.db import DB_PATH, get_connection
+from src.db import get_connection
 
 logger = logging.getLogger("api-keys")
 

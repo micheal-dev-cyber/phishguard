@@ -4,10 +4,8 @@ import hashlib
 import logging
 import secrets
 import time
-import smtplib
-from email.mime.text import MIMEText
 
-from src.db import DB_PATH, get_connection
+from src.db import get_connection
 
 logger = logging.getLogger("password-reset")
 RESET_TOKEN_TTL = 3600  # 1 hour

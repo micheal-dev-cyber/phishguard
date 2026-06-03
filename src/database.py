@@ -1,8 +1,8 @@
-import sqlite3
 import hashlib
+import os
+import sqlite3
 from datetime import datetime
 from pathlib import Path
-import os
 
 # Create a 'data' folder in your project root to store the DB safely
 # __file__ gets the current path (src/database.py), so we go up one level to the root
@@ -15,13 +15,8 @@ DB_PATH = os.path.join(DATA_DIR, "phishguard.db")
 def init_db():
     """Initialize database tables for metrics telemetry and user provisioning."""
     conn = sqlite3.connect(DB_PATH)
-# ... [Keep the rest of your init_db and other functions exactly the same] ...
-
-def init_db():
-    """Initialize database tables for metrics telemetry and user provisioning."""
-    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    
+
     # 1. Historical Analysis Logs Table
     c.execute("""
         CREATE TABLE IF NOT EXISTS analyses (
@@ -35,7 +30,7 @@ def init_db():
             ai_report TEXT
         )
     """)
-    
+
     # 2. Dynamic SaaS User Accounts Table
     c.execute("""
         CREATE TABLE IF NOT EXISTS users (
@@ -48,7 +43,7 @@ def init_db():
             created_at TEXT
         )
     """)
-    
+
     # 3. Gamified Leaderboard Table
     c.execute("""
         CREATE TABLE IF NOT EXISTS leaderboard (
@@ -304,7 +299,8 @@ def init_db():
     # Pre-provision master admin access key if empty to avoid system lockouts
     c.execute("SELECT * FROM users WHERE username='admin'")
     if not c.fetchone():
-        admin_pass = "phishguard2026"
+        import os
+        admin_pass = os.environ.get("PHISHGUARD_ADMIN_PASSWORD", os.urandom(16).hex())
         hashed = hashlib.sha256(admin_pass.encode()).hexdigest()
         c.execute("""
             INSERT INTO users (username, password_hash, email, paddle_order_id, status, role, created_at)
@@ -536,8 +532,7 @@ def record_spend(username: str, amount_usd: float) -> dict:
 
 # ── M&A Valuation Telemetry ──────────────────────────────────────────────
 
-import uuid
-import time
+import uuid  # noqa: E402
 
 
 def record_valuation_metric(
@@ -630,8 +625,9 @@ def get_valuation_logs(limit: int = 100) -> list:
 
 def _generate_code(username: str) -> str:
     """Generate a unique referral code."""
-    import random, string
-    suffix = ''.join(random.choices(string.ascii_uppercase + string.digits, k=5))
+    import secrets
+    import string
+    suffix = ''.join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(5))
     return f"REF-{username[:4].upper()}{suffix}"
 
 

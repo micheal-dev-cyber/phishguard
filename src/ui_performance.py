@@ -1,7 +1,7 @@
 import logging
+
 import streamlit as st
-import time
-from datetime import datetime, timedelta
+
 from src.db import get_connection
 
 logger = logging.getLogger(__name__)

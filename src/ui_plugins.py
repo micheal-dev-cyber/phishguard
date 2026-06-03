@@ -1,7 +1,12 @@
 import streamlit as st
+
 from src.plugin_manager import (
-    init_plugins, register_plugin, unregister_plugin,
-    list_plugins, enable_plugin, disable_plugin,
+    disable_plugin,
+    enable_plugin,
+    init_plugins,
+    list_plugins,
+    register_plugin,
+    unregister_plugin,
 )
 
 

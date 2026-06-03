@@ -1,6 +1,7 @@
 # src/header_parser.py
 import re
 
+
 def parse_email_headers(raw_headers: str) -> dict:
     results = {
         "from": "",
@@ -21,7 +22,7 @@ def parse_email_headers(raw_headers: str) -> dict:
 
     # FIX 1: Isolate headers from the body. The body always starts after a double newline.
     lines = raw_headers.replace("\r\n", "\n").replace("\r", "\n")
-    header_part = lines.split("\n\n")[0] 
+    header_part = lines.split("\n\n")[0]
 
     # Unfold multi-line headers (RFC 2822 compliance)
     unfolded = re.sub(r'\n[ \t]+', ' ', header_part)
@@ -84,11 +85,11 @@ def _parse_received_hop(hop_string: str) -> dict:
     bm = re.search(r'by\s+(\S+)', hop_string, re.IGNORECASE)
     im = re.search(r'\[(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\]', hop_string)
     tm = re.search(r';\s*(.+)$', hop_string)
-    
-    if fm: info["from_host"] = fm.group(1)
-    if bm: info["by_host"]   = bm.group(1)
-    if im: info["ip"]        = im.group(1)
-    if tm: info["timestamp"] = tm.group(1).strip()[:50]
+
+    if fm: info["from_host"] = fm.group(1)  # noqa: E701
+    if bm: info["by_host"]   = bm.group(1)  # noqa: E701
+    if im: info["ip"]        = im.group(1)  # noqa: E701
+    if tm: info["timestamp"] = tm.group(1).strip()[:50]  # noqa: E701
     return info
 
 

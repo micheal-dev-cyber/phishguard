@@ -1,11 +1,11 @@
-import threading
-import time
 import json
 import logging
+import threading
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Callable, Optional
 
-from src.db import DB_PATH, get_connection
+from src.db import get_connection
 
 logger = logging.getLogger("task-queue")
 

@@ -1,9 +1,13 @@
 import json
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Optional
+
 from src.threat_intel_sharing import (
-    _stix_id, _fingerprint, build_stix_bundle,
-    build_indicator, build_observed_data, build_relationship,
+    _stix_id,
+    build_indicator,
+    build_observed_data,
+    build_relationship,
+    build_stix_bundle,
     compute_linguistic_baseline,
 )
 

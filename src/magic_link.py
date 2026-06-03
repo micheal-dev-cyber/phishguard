@@ -1,10 +1,10 @@
-import secrets
 import hashlib
 import logging
+import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from src.db import DB_PATH, get_connection
+from src.db import get_connection
 
 logger = logging.getLogger("magic-link")
 

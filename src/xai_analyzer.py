@@ -1,5 +1,5 @@
 import re
-from typing import Dict, List, Any
+from typing import Any, Dict
 
 TRIGGER_DEFINITIONS = {
     "urgency": {

@@ -1,10 +1,11 @@
 import email
+import logging
 import re
-import base64
-import quopri
 from email import policy
-from email.utils import parsedate_to_datetime, parseaddr
-from typing import Optional, Dict, Any, List
+from email.utils import parseaddr, parsedate_to_datetime
+from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger("email-parser")
 
 try:
     from bs4 import BeautifulSoup
@@ -52,8 +53,8 @@ def _html_to_text(html: str) -> str:
             text = soup.get_text(separator="\n")
             lines = [line.strip() for line in text.splitlines() if line.strip()]
             return "\n".join(lines)
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug("HTML parse failed, falling back to regex: %s", _exc)
     # Fallback: strip tags with regex
     text = re.sub(r"<[^>]+>", " ", html)
     text = re.sub(r"\s+", " ", text).strip()
@@ -139,61 +140,42 @@ def _extract_headers(msg) -> Dict[str, Any]:
         name, addr = parseaddr(from_val)
         headers["from_name"] = name
         headers["from_address"] = addr
-    except Exception:
-        pass
-
+    except Exception as _exc:
+        logger.debug("Failed to parse From header: %s", _exc)
+    for _hdr, _getter in (
+        ("to", "To"),
+        ("cc", "Cc"),
+        ("subject", "Subject"),
+        ("reply_to", "Reply-To"),
+        ("return_path", "Return-Path"),
+        ("authentication_results", "Authentication-Results"),
+        ("received_spf", "Received-SPF"),
+        ("x_originating_ip", "X-Originating-IP"),
+        ("content_type", "Content-Type"),
+    ):
+        try:
+            if _hdr in ("to", "cc", "reply_to", "subject"):
+                headers[_hdr] = _decode_mime_header(msg.get(_getter, ""))
+            else:
+                headers[_hdr] = str(msg.get(_getter, ""))
+        except Exception as _exc:
+            logger.debug("Failed to parse %s header: %s", _hdr, _exc)
     try:
-        headers["to"] = _decode_mime_header(msg.get("To", ""))
-    except Exception:
-        pass
-    try:
-        headers["cc"] = _decode_mime_header(msg.get("Cc", ""))
-    except Exception:
-        pass
-    try:
-        headers["subject"] = _decode_mime_header(msg.get("Subject", ""))
-    except Exception:
-        pass
+        headers["message_id"] = str(msg.get("Message-ID", "")).strip("<>")
+    except Exception as _exc:
+        logger.debug("Failed to parse message_id: %s", _exc)
     try:
         date_str = msg.get("Date", "")
         headers["date"] = date_str
         parsed = parsedate_to_datetime(date_str)
         if parsed:
             headers["date_iso"] = parsed.isoformat()
-    except Exception:
-        pass
-    try:
-        headers["message_id"] = str(msg.get("Message-ID", "")).strip("<>")
-    except Exception:
-        pass
-    try:
-        headers["reply_to"] = _decode_mime_header(msg.get("Reply-To", ""))
-    except Exception:
-        pass
-    try:
-        headers["return_path"] = str(msg.get("Return-Path", ""))
-    except Exception:
-        pass
-    try:
-        headers["authentication_results"] = str(msg.get("Authentication-Results", ""))
-    except Exception:
-        pass
-    try:
-        headers["received_spf"] = str(msg.get("Received-SPF", ""))
-    except Exception:
-        pass
+    except Exception as _exc:
+        logger.debug("Failed to parse date header: %s", _exc)
     try:
         headers["dkim_signature"] = str(msg.get("DKIM-Signature", ""))[:100]
-    except Exception:
-        pass
-    try:
-        headers["x_originating_ip"] = str(msg.get("X-Originating-IP", ""))
-    except Exception:
-        pass
-    try:
-        headers["content_type"] = str(msg.get("Content-Type", ""))
-    except Exception:
-        pass
+    except Exception as _exc:
+        logger.debug("Failed to parse DKIM signature: %s", _exc)
 
     return headers
 
@@ -239,7 +221,7 @@ def parse_eml(file_bytes: bytes) -> Dict[str, Any]:
 
     try:
         msg = email.message_from_bytes(file_bytes, policy=policy.default)
-    except Exception as exc:
+    except Exception:
         # Try with different policy
         try:
             msg = email.message_from_bytes(file_bytes)

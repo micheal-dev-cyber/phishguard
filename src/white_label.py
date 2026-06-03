@@ -3,9 +3,8 @@ White-label branding — custom logo, colors, company name.
 
 Stores branding preferences per user/tenant for multi-tenant white-labeling.
 """
-import json
 import logging
-from typing import Optional
+
 from src.db import get_connection
 
 logger = logging.getLogger("white_label")

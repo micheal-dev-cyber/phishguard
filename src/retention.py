@@ -3,7 +3,7 @@
 import logging
 from datetime import datetime, timedelta
 
-from src.db import DB_PATH, get_connection
+from src.db import get_connection
 
 logger = logging.getLogger("retention")
 

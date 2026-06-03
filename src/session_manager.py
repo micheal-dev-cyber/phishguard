@@ -4,7 +4,7 @@ import hashlib
 import logging
 import time
 
-from src.db import DB_PATH, get_connection
+from src.db import get_connection
 
 logger = logging.getLogger("session-mgr")
 SESSION_TTL = 1800

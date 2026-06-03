@@ -16,12 +16,12 @@ Usage from FastAPI/Flask:
     return JSONResponse(handle_scan_request(request.json))
 """
 
-from src.detector import analyze_email
-from src.perplexity_analyzer import compute_perplexity_score
 from src.aitm_detector import detect_aitm_harvester
+from src.detector import analyze_email
 from src.env import ENV
-from src.threat_intel import check_multiple_urls, get_threat_summary
 from src.osint import run_osint
+from src.perplexity_analyzer import compute_perplexity_score
+from src.threat_intel import check_multiple_urls, get_threat_summary
 
 
 def handle_scan_request(body: dict) -> dict:

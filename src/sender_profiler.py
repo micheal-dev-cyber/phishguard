@@ -28,15 +28,15 @@ Architecture:
                                           └──────────────────┘
 """
 
-import json
-import re
 import hashlib
+import json
 import logging
+import re
 import statistics
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Optional
 
-from src.db import DB_PATH, get_connection
+from src.db import get_connection
 
 logger = logging.getLogger("sender-profiler")
 
@@ -194,10 +194,16 @@ def get_or_create_profile(sender_email: str, display_name: str = "") -> SenderPr
 
 def _update_profile_rolling(conn, sender_email: str, updates: dict):
     """Apply rolling-window aggregations to a profile."""
+    _ALLOWED_COLS = {"total_emails", "total_risk", "avg_risk", "last_risk",
+                     "max_risk", "high_risk_count", "categories", "last_body",
+                     "last_subject", "last_display_name", "last_contact"}
     sql_parts = []
     params = []
 
     for key, value in updates.items():
+        if key not in _ALLOWED_COLS:
+            logger.warning("Ignoring unknown profile column: %s", key)
+            continue
         sql_parts.append(f"{key} = ?")
         params.append(value)
 

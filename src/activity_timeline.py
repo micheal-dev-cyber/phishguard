@@ -5,7 +5,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional
 
-from src.db import DB_PATH, get_connection
+from src.db import get_connection
 
 logger = logging.getLogger("activity_timeline")
 ACTIVITY_TABLE = "activity_timeline"
@@ -90,7 +90,7 @@ def get_all_activity(limit: int = 100, offset: int = 0,
 
 def get_activity_summary(username: str, days: int = 30) -> dict:
     init_activity_timeline()
-    cutoff = datetime.now(timezone.utc).isoformat()
+    datetime.now(timezone.utc).isoformat()
     conn = get_connection()
     c = conn.cursor()
     c.execute(

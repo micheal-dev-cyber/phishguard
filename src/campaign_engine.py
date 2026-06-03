@@ -16,13 +16,12 @@ import json
 import logging
 import random
 import re
-import time
 from datetime import datetime, timezone
-from typing import Optional
-from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from typing import Optional
 
-from src.db import DB_PATH, get_connection
+from src.db import get_connection
 from src.env import ENV
 from src.providers import get_chat_completion
 

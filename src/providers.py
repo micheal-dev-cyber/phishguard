@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+
 from src.env import ENV
 
 logger = logging.getLogger("phishguard-providers")
@@ -13,8 +14,8 @@ logger = logging.getLogger("phishguard-providers")
 
 def _http_post_json(url: str, headers: dict, payload: dict, timeout: int = 30) -> dict:
     import json
-    import urllib.request
     import urllib.error
+    import urllib.request
     data = json.dumps(payload).encode()
     req = urllib.request.Request(url, data=data, headers=headers, method="POST")
     try:

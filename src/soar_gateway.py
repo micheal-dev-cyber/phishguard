@@ -7,12 +7,10 @@ and Slack/SOAR channel broadcast. In production, these would call real APIs.
 
 from __future__ import annotations
 
-import json
-import time
 import logging
+import time
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional
 
 logger = logging.getLogger("soar-gateway")
 

@@ -1,9 +1,8 @@
 """Employee Auto-Training — assign training campaigns to at-risk users."""
 
 import logging
-from datetime import datetime
 
-from src.db import DB_PATH, get_connection
+from src.db import get_connection
 
 logger = logging.getLogger("auto_training")
 

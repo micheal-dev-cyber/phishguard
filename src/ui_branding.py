@@ -1,7 +1,11 @@
 import streamlit as st
+
 from src.white_label import (
-    init_white_label, set_branding, get_branding,
-    enable_branding, inject_branding_css,
+    enable_branding,
+    get_branding,
+    init_white_label,
+    inject_branding_css,
+    set_branding,
 )
 
 

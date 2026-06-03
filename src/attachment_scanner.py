@@ -15,8 +15,8 @@ Usage:
 from __future__ import annotations
 
 import hashlib
-import logging
 import json
+import logging
 import os
 from typing import Optional
 

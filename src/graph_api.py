@@ -3,9 +3,9 @@
 import json
 import logging
 import time
+from typing import Optional
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
-from typing import Optional
 
 logger = logging.getLogger("graph_api")
 

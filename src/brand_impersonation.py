@@ -7,9 +7,8 @@ impersonation patterns in email content.
 import difflib
 import logging
 import re
-from typing import Optional
 
-from src.db import DB_PATH, get_connection
+from src.db import get_connection
 
 logger = logging.getLogger("brand_impersonation")
 BRAND_TABLE = "brand_protection"

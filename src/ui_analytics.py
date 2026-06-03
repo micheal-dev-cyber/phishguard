@@ -1,7 +1,8 @@
-import streamlit as st
-import plotly.graph_objects as go
-import plotly.express as px
 from datetime import datetime
+
+import plotly.graph_objects as go
+import streamlit as st
+
 from src.database import get_history
 
 WIDGETS = {
@@ -212,7 +213,8 @@ def render_analytics_tab():
         st.markdown("#### 📤 Export & Compliance")
         col_e1, col_e2, col_e3 = st.columns(3)
         with col_e1:
-            import csv, io
+            import csv
+            import io
             buf = io.StringIO()
             w = csv.writer(buf)
             w.writerow(["timestamp","risk_score","severity","keyword_hits","suspicious_urls","email_preview"])
@@ -265,7 +267,6 @@ def render_analytics_tab():
                     standard=cr_standard, days=cr_days,
                     whitelabel=whitelabel,
                 )
-            label = "PhishGuard" if not whitelabel else "Security Team"
             st.download_button(
                 f"💾 Download {cr_standard.upper()} Report",
                 pdf_bytes, f"phishguard_{cr_standard}_report.pdf", "application/pdf",

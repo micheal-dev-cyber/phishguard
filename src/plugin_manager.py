@@ -5,14 +5,12 @@ Users can write Python plugins that implement detect(text) -> dict
 and register them at runtime without modifying core code.
 """
 import importlib
-import inspect
 import logging
-import os
 import sys
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-from src.db import DB_PATH, get_connection
+from src.db import get_connection
 
 logger = logging.getLogger("plugin_manager")
 

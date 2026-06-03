@@ -3,7 +3,7 @@
 import ipaddress
 import logging
 
-from src.db import DB_PATH, get_connection
+from src.db import get_connection
 
 logger = logging.getLogger("ip-allowlist")
 
@@ -66,7 +66,7 @@ def is_ip_allowed(username: str, ip_str: str) -> bool:
     if not rules:
         return True
     try:
-        addr = ipaddress.ip_address(ip_str)
+        ipaddress.ip_address(ip_str)
         for r in rules:
             if r["is_active"] and ipaddress.ip_address(ip_str) in ipaddress.ip_network(r["cidr"], strict=False):
                 return True

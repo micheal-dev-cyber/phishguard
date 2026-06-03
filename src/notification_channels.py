@@ -8,7 +8,7 @@ import logging
 from typing import Optional
 from urllib.request import Request, urlopen
 
-from src.db import DB_PATH, get_connection
+from src.db import get_connection
 
 logger = logging.getLogger("notification_channels")
 CHANNELS_TABLE = "notification_channels"

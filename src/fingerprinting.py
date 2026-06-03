@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import os
 import re
-from typing import Any
 
 
 def _load_kits() -> list[dict]:
@@ -48,8 +47,6 @@ def fingerprint_email(
 
     for kit in kits:
         sig = kit["signatures"]
-        total_possible = 0
-        total_matched = 0
 
         categories_data = [
             ("html", sig.get("html_patterns", [])),

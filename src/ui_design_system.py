@@ -481,6 +481,7 @@ def feature_gate(feature: str, plan: str, plans: dict, upgrade_callback: str = "
         if feature in plans.get(t, {}).get("features", []):
             next_tier = plans[t]["label"]
             break
+    upgrade_link = ' <a href="#" style="color:#a855f7">Upgrade now →</a>' if upgrade_callback else ""
     return (
         f'<div style="background:linear-gradient(135deg,#1a0a1a,#2a0f2a);border:2px solid #a855f7;'
         f'border-radius:16px;padding:24px 20px;text-align:center;margin:12px 0">'
@@ -489,7 +490,7 @@ def feature_gate(feature: str, plan: str, plans: dict, upgrade_callback: str = "
         f'Upgrade Required</div>'
         f'<div style="color:#94a3b8;font-size:0.85rem">This feature requires the '
         f'<strong>{next_tier or "Enterprise"}</strong> plan or higher.'
-        f'{" <a href=\'#\' style=\'color:#a855f7\'>Upgrade now →</a>" if upgrade_callback else ""}</div>'
+        f'{upgrade_link}</div>'
         f'</div>'
     )
 
@@ -507,8 +508,8 @@ def metric_row(metrics: list) -> str:
         f'padding:12px 8px;text-align:center">'
         f'<div style="font-size:1.3rem;font-weight:800;color:{c or "#f1f5f9"};letter-spacing:-0.02em">{v}</div>'
         f'<div style="font-size:0.65rem;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;'
-        f'font-weight:600;margin-top:2px">{l}</div></div>'
-        for v, l, *rest in metrics
+        f'font-weight:600;margin-top:2px">{lb}</div></div>'
+        for v, lb, *rest in metrics
         for c in (rest[0] if rest else [None])
     )
     return f'<div style="display:flex;gap:8px;margin:12px 0">{cols}</div>'

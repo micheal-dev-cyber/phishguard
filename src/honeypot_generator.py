@@ -13,11 +13,10 @@ fake-data generation if no LLM is available.
 from __future__ import annotations
 
 import json
-import re
-import random
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+import random
+import re
+from datetime import datetime, timezone
 
 logger = logging.getLogger("phishguard-honeypot")
 

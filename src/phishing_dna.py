@@ -7,11 +7,10 @@ session state. If similarity >= 85%, flags as known variant.
 
 from __future__ import annotations
 
-import re
 import hashlib
+import re
 from difflib import SequenceMatcher
 from typing import Optional
-
 
 # ── Signature computation ────────────────────────────────────────────────
 
