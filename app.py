@@ -1,8 +1,11 @@
 import json
+import logging
 import os
 import time
 from datetime import datetime
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 import plotly.graph_objects as go
 import streamlit as st
