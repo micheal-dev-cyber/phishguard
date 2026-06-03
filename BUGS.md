@@ -1,6 +1,6 @@
 # PhishGuard AI — Known Bugs
 
-**Last updated:** 2026-06-03 (Session 2)
+**Last updated:** 2026-06-03 (Session 3)
 **Status:** 0 known unfixed issues (all discovered bugs resolved)
 
 ---
@@ -40,6 +40,15 @@
 | B-037 | MEDIUM | No retries or timeouts on 22 external HTTP calls | 6 files | Centralized `src/http_client.py` with retries + default 30s timeout | 2026-06-03 |
 | B-038 | LOW | Admin seed uses SHA-256 (cosmetic, hash never verified) | `database.py:304` | Changed to bcrypt | 2026-06-03 |
 | B-039 | LOW | SCIM provisioning uses SHA-256 (cosmetic, hash never verified) | `scim.py:114` | Changed to bcrypt | 2026-06-03 |
+| B-040 | CRITICAL | Predictable session IDs: username+time+ip hashed with SHA-256 | `session_manager.py:30` | Replaced with `secrets.token_urlsafe(32)` | 2026-06-03 |
+| B-041 | HIGH | Auto-login after signup before email verification | `auth.py:170` | Signup no longer sets `authenticated`; login checks `is_email_verified()` | 2026-06-03 |
+| B-042 | HIGH | No IP binding on sessions | `session_manager.py:44` | `touch_session()` now persists IP address | 2026-06-03 |
+| B-043 | HIGH | Sessions not revoked on password change | `tenants.py:268` | `set_password()` calls `revoke_all_sessions()` | 2026-06-03 |
+| B-044 | HIGH | Dead code: unsalted SHA-256 in `verify_user_login` / `register_premium_user` | `database.py:745-772` | Removed both functions | 2026-06-03 |
+| B-045 | HIGH | Missing imports: `analyze_auth_headers`, `generate_ai_report` | `ui_analyzer.py:307,471,795` | Added imports from `header_auth` and `ai_analyzer` | 2026-06-03 |
+| B-046 | MEDIUM | Multi-statement lines, unused variables in ui_analyzer.py | `ui_analyzer.py` | Split lines, removed unused `threats` | 2026-06-03 |
+| B-047 | MEDIUM | Unsorted imports across 9 files | Multiple | Auto-sorted with Ruff | 2026-06-03 |
+| B-048 | MEDIUM | `test_health_check_database` patched wrong module | `test_e2e.py:255` | Now patches `health_check.DB_PATH` directly | 2026-06-03 |
 
 ## Previously Fixed Bugs (Prior Sessions)
 

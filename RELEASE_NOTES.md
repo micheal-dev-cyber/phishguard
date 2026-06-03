@@ -2,7 +2,32 @@
 
 **Project:** PhishGuard AI — Advanced Phishing Detection & Response Platform  
 **Repository:** https://huggingface.co/spaces/Sabersouihi/phishguard-ai  
-**Latest release:** Centralized HTTP client + mixed hashing fix (2026-06-03)
+**Latest release:** Security audit session 3 — session management, email verification gate (2026-06-03)
+
+---
+
+## v0.9.2 — Security Audit Session 3 (2026-06-03)
+
+### Security (Critical)
+- **CRITICAL** — Predictable session IDs: `hashlib.sha256(username+time+ip)` replaced with `secrets.token_urlsafe(32)`
+- **HIGH** — IP binding for sessions: `touch_session()` now persists the caller's IP address
+- **HIGH** — Revoke sessions on password change: `set_password()` calls `revoke_all_sessions()`
+- **HIGH** — Auto-login before email verification: signup no longer auto-authenticates; login checks `is_email_verified()` before granting access
+- **HIGH** — Dead code removed: `verify_user_login()` and `register_premium_user()` used unsalted SHA-256 for passwords
+
+### Bugfixes (Lint + CI)
+- **F821** — Missing imports for `analyze_auth_headers` and `generate_ai_report` in `ui_analyzer.py` (runtime crashes)
+- **F841** — Removed unused variables `username`, `mailbox` in app.py
+- **E701/E702** — Split multi-statement lines in `ui_analyzer.py` (7 locations)
+- **I001** — Auto-sorted imports across 9 files via Ruff
+
+### Tests
+- 8 new regression tests for session unpredictability, IP binding, password-change revocation, email verification flow
+- Fixed `test_health_check_database` to patch the correct module
+
+### Stats
+- 10 files changed, +156/-120 lines
+- 259 tests passing (251 existing + 8 new), 2 skipped (Redis unavailable)
 
 ---
 

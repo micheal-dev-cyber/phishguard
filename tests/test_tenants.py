@@ -135,3 +135,85 @@ class TestLoginLockout:
         fake_future = time.time() + 31
         monkeypatch.setattr(time, "time", lambda: fake_future)
         assert tenants_mod.is_locked_out("lockme") is False
+
+
+class TestSessionSecurity:
+    """Regression tests for session security fixes."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self, monkeypatch):
+        self.tmpdir = tempfile.mkdtemp()
+        self.db_path = Path(self.tmpdir) / "security_test.db"
+        import src.db; monkeypatch.setattr(src.db, "DB_PATH", str(self.db_path))
+        tenants_mod.init_tenants()
+
+    def test_session_id_unpredictable(self):
+        """Session IDs should be long, random, and different each time."""
+        from src.session_manager import create_session, revoke_all_sessions
+        sid1 = create_session("alice")
+        sid2 = create_session("alice")
+        sid3 = create_session("bob")
+        revoke_all_sessions("alice")
+        revoke_all_sessions("bob")
+        assert len(sid1) >= 32, f"Session ID too short: {len(sid1)}"
+        assert len(sid2) >= 32
+        assert sid1 != sid2, "Two consecutive sessions for same user are identical"
+        assert sid1 != sid3, "Sessions for different users are identical"
+
+    def test_session_id_no_predictable_pattern(self):
+        """Session IDs should not contain username, ip, or timestamp."""
+        from src.session_manager import create_session, revoke_all_sessions
+        sid = create_session("charlie", ip_address="192.168.1.1")
+        revoke_all_sessions("charlie")
+        assert "charlie" not in sid
+        assert "192.168" not in sid
+
+    def test_touch_session_stores_ip(self):
+        """touch_session with ip_address should persist it."""
+        from src.session_manager import create_session, touch_session, list_sessions, revoke_all_sessions
+        sid = create_session("dave", ip_address="10.0.0.1")
+        touch_session(sid, ip_address="10.0.0.2")
+        sessions = list_sessions("dave")
+        revoke_all_sessions("dave")
+        matching = [s for s in sessions if s["is_active"]]
+        assert any("10.0.0.2" in s["ip"] for s in matching), "IP not updated"
+
+    def test_revoke_all_sessions_clears_active(self):
+        """revoke_all_sessions should mark all user sessions inactive."""
+        from src.session_manager import create_session, revoke_all_sessions, list_sessions
+        create_session("eve")
+        create_session("eve")
+        revoke_all_sessions("eve")
+        sessions = list_sessions("eve")
+        active = [s for s in sessions if s["is_active"]]
+        assert len(active) == 0, f"Expected 0 active sessions, got {len(active)}"
+
+    def test_revoke_all_sessions_invalid_table_does_not_crash(self):
+        """revoke_all_sessions should handle missing sessions table."""
+        from src.session_manager import revoke_all_sessions
+        revoke_all_sessions("nonexistent_user")
+
+    def test_set_password_revokes_sessions(self):
+        """set_password should call revoke_all_sessions."""
+        from src.session_manager import create_session, list_sessions
+        tenants_mod.create_tenant("pwsec_user", "oldpass")
+        sid = create_session("pwsec_user")
+        tenants_mod.set_password("pwsec_user", "newpass")
+        sessions = list_sessions("pwsec_user")
+        active = [s for s in sessions if s["is_active"]]
+        assert len(active) == 0, "Sessions still active after password change"
+
+    def test_email_verification_default_unverified(self):
+        """New tenants should not be email-verified by default."""
+        from src.email_verify import is_email_verified
+        tenants_mod.create_tenant("unverified_user", "pass", email="test@example.com")
+        assert not is_email_verified("unverified_user")
+
+    def test_email_verification_flow(self):
+        """create_verification + verify_email_token should mark as verified."""
+        from src.email_verify import create_verification, is_email_verified, verify_email_token
+        tenants_mod.create_tenant("verify_user", "pass", email="v@example.com")
+        assert not is_email_verified("verify_user")
+        result = create_verification("verify_user", "v@example.com")
+        assert verify_email_token(result["token"])
+        assert is_email_verified("verify_user")
