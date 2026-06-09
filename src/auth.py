@@ -90,6 +90,9 @@ def _landing_page():
     elif page == "contact":
         _contact_page()
         return
+    elif page == "demo":
+        _demo_scan_page()
+        return
 
     if show_demo:
         _demo_scan_page()
