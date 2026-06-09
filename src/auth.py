@@ -287,9 +287,22 @@ def _login_form():
                 if not tenant.get("is_active"):
                     st.error("Your account has been suspended. Please contact support to regain access.")
                 else:
-                    from src.email_verify import is_email_verified
+                    from src.email_verify import create_verification, is_email_verified, send_verification_email
+                    from src.env import ENV
                     if not is_email_verified(tenant["username"]):
-                        st.warning("Please verify your email before logging in. Check your inbox (and spam folder) for the verification link.")
+                        st.warning("Please verify your email before logging in.")
+                        col_resend, _ = st.columns([1, 3])
+                        with col_resend:
+                            if st.button("Resend verification email", key=f"resend_{tenant['username']}"):
+                                try:
+                                    v = create_verification(tenant["username"], tenant.get("email", ""))
+                                    base_url = getattr(ENV, "APP_URL", "http://localhost:8501")
+                                    verify_url = f"{base_url}/?verify={v['token']}"
+                                    send_verification_email(tenant.get("email", ""), verify_url)
+                                    st.success("Verification email resent! Check your inbox (and spam).")
+                                except Exception as e:
+                                    st.error("Could not send verification. SMTP may not be configured.")
+                                    logger.warning("Resend verification failed for %s: %s", tenant["username"], e)
                     else:
                         st.session_state["authenticated"] = True
                         st.session_state["username"] = tenant["username"]
@@ -824,23 +837,19 @@ def _hero_page():
                 unsafe_allow_html=True)
 
     plans = [
-        ("Trial", "Free", "forever",
-         ["10 analyses / month", "URL scanning", "Risk scoring", "PDF export", "Community support"],
+        ("Free", "$0", "forever",
+         ["10 analyses / month", "URL scanning", "Risk scoring", "PDF export"],
          False),
         ("Starter", "$29", "/ month",
          ["100 analyses / month", "VirusTotal integration", "OSINT investigation",
-          "AI security reports", "Usage dashboard", "Email support"],
+          "AI security reports", "Email support"],
          True),
         ("Business", "$99", "/ month",
          ["500 analyses / month", "Everything in Starter", "Priority support",
-          "Team access (3 seats)", "Export + API access"],
-         False),
-        ("Enterprise", "Custom", "contact us",
-         ["Unlimited analyses", "SLA guarantee", "White-label option",
-          "Unlimited team seats", "Dedicated support", "Custom integrations"],
+          "Team access (3 seats)", "API access"],
          False),
     ]
-    cols = st.columns(4)
+    cols = st.columns(3)
     for col, (name, price, period, plan_features, featured) in zip(cols, plans):
         with col:
             badge = ("<div class='plan-badge'>Most Popular</div>" if featured else "")
@@ -858,38 +867,11 @@ def _hero_page():
                 "</div>", unsafe_allow_html=True
             )
 
-    st.markdown("<div style='height:50px'></div>", unsafe_allow_html=True)
-
-    # ═════════════════════════════════════════════════════════════════════
-    # USE CASES
-    # ═════════════════════════════════════════════════════════════════════
-    st.markdown("<div style='text-align:center;margin-bottom:36px'>"
-                "<span style='color:#3b82f6;font-size:11px;letter-spacing:.15em;"
-                "text-transform:uppercase'>// Use cases</span>"
-                "<h2 style='font-size:clamp(1.3rem,2.5vw,2rem);font-weight:800;"
-                "color:#f0f6ff;margin-top:8px;margin-bottom:28px'>"
-                "Who uses PhishGuard?</h2></div>",
+    st.markdown("<div style='text-align:center;margin:12px 0 40px'>"
+                "<p style='color:#475569;font-size:13px'>"
+                "Need more scans or team features? "
+                "<a href='?page=contact' style='color:#3b82f6'>Contact us for custom plans.</a></p></div>",
                 unsafe_allow_html=True)
-
-    use_cases = [
-        ("🏢", "SOC Teams", "Triage suspicious emails in seconds. Reduce false positive fatigue with multi-engine correlation."),
-        ("🔐", "CISOs & Security Leaders", "Get organization-wide visibility into phishing threats with compliance-ready reports."),
-        ("💼", "IT Administrators", "Protect every inbox with automated scanning, IMAP integration, and real-time alerts."),
-        ("📋", "Compliance Officers", "Generate SOC 2, GDPR, and HIPAA reports. Maintain audit-ready threat documentation."),
-        ("🎓", "Security Researchers", "Analyze phishing campaigns, extract IOCs, and export STIX 2.1 intelligence bundles."),
-        ("🏥", "Healthcare & Finance", "Meet regulatory requirements with encrypted data handling and role-based access controls."),
-    ]
-    cols = st.columns(3)
-    for i in range(0, len(use_cases), 3):
-        row_cases = use_cases[i:i+3]
-        row_cols = st.columns(3)
-        for col, (icon, title, desc) in zip(row_cols, row_cases):
-            with col:
-                st.markdown(
-                    f"<div class='feature-card'>"
-                    f"<div style='display:flex;align-items:center;gap:10px;margin-bottom:8px'>"
-                    f"<span style='font-size:1.5rem'>{icon}</span>"
-                    f"<span style='font-size:1rem;font-weight:700;color:#e2e8f0'>{title}</span></div>"
                     f"<div style='color:#475569;font-size:12.5px;line-height:1.7'>{desc}</div>"
                     f"</div>", unsafe_allow_html=True
                 )

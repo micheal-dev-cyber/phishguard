@@ -360,6 +360,11 @@ from src.ui_design_system import (  # noqa: E402
 inject_design_system(theme)
 
 init_db()
+try:
+    from src.analytics import init_analytics_db
+    init_analytics_db()
+except Exception:
+    pass
 log_config_status()
 
 # ── Start background task queue worker ──────────────────────────────────────
@@ -635,13 +640,6 @@ if st.session_state.get("show_upgrade") and plan != "enterprise":
             st.rerun()
         st.stop()
     st.stop()
-
-# ── Onboarding Wizard (first-time users) ───────────────────────────────────
-try:
-    from src.ui_onboarding import render_onboarding
-    render_onboarding(username)
-except Exception as e:
-    logger.warning("Onboarding wizard failed: %s", e)
 
 # ── Weekly Report Check ─────────────────────────────────────────────────────
 try:
