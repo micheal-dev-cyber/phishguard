@@ -160,6 +160,11 @@ def _signup_form():
             else:
                 st.success("🎉 Account created! Check your email to verify your account before logging in.")
                 try:
+                    from src.analytics import track_signup
+                    track_signup(new_username.strip(), email=new_email.strip(), plan="trial")
+                except Exception:
+                    pass
+                try:
                     v = create_verification(new_username.strip(), new_email.strip())
                     base_url = getattr(ENV, "APP_URL", "http://localhost:8501")
                     verify_url = f"{base_url}/?verify={v['token']}"
@@ -291,7 +296,15 @@ def _login_form():
                         st.session_state["plan"] = tenant["plan"]
                         st.session_state["is_admin"] = bool(tenant["is_admin"])
                         st.session_state["email"] = tenant["email"]
+                        st.session_state["show_onboarding"] = True
                         st.session_state.pop("show_login", None)
+
+                        # Track login
+                        try:
+                            from src.analytics import track_login
+                            track_login(tenant["username"])
+                        except Exception:
+                            pass
 
                         # Track session
                         try:
@@ -476,6 +489,11 @@ def _demo_scan_page():
                                 result = analyze_email(demo_text)
                                 st.session_state["demo_results"] = result
                                 st.session_state["demo_email_text"] = demo_text
+                                try:
+                                    from src.analytics import track_demo_scan
+                                    track_demo_scan(risk_score=result.get("risk_score", 0), severity=result.get("severity", ""))
+                                except Exception:
+                                    pass
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"Demo scan failed: {e}")
@@ -632,18 +650,15 @@ def _hero_page():
     st.markdown("</div>", unsafe_allow_html=True)
 
     # ═════════════════════════════════════════════════════════════════════
-    # TRUST BAR
+    # EARLY ACCESS STATUS
     # ═════════════════════════════════════════════════════════════════════
     st.markdown("<div style='text-align:center;padding:16px 0 32px'>"
-                "<span style='color:#475569;font-size:10px;letter-spacing:.12em;"
-                "text-transform:uppercase'>Trusted by security teams worldwide</span>"
-                "<div style='display:flex;justify-content:center;gap:28px;margin-top:12px;"
-                "flex-wrap:wrap'>"
-                "<span style='color:#334155;font-size:12px;font-weight:600'>◈ 10,000+ scans analyzed</span>"
-                "<span style='color:#334155;font-size:12px;font-weight:600'>◈ 99% detection rate</span>"
-                "<span style='color:#334155;font-size:12px;font-weight:600'>◈ <2s average scan</span>"
-                "<span style='color:#334155;font-size:12px;font-weight:600'>◈ 90+ vendor correlation</span>"
-                "</div></div>", unsafe_allow_html=True)
+                "<span style='color:#3b82f6;font-size:10px;letter-spacing:.12em;"
+                "text-transform:uppercase'>⚡ Early Access — Now in open beta</span>"
+                "<p style='color:#475569;font-size:12px;margin-top:6px'>"
+                "PhishGuard is new. Your feedback shapes the roadmap. "
+                "<a href='?page=contact' style='color:#3b82f6'>Join the early users →</a></p></div>",
+                unsafe_allow_html=True)
 
     # ═════════════════════════════════════════════════════════════════════
     # HOW IT WORKS — 3 simple steps
@@ -759,39 +774,7 @@ def _hero_page():
 
     st.markdown("<div style='height:50px'></div>", unsafe_allow_html=True)
 
-    # ═════════════════════════════════════════════════════════════════════
-    # TESTIMONIALS
-    # ═════════════════════════════════════════════════════════════════════
-    st.markdown("<div style='text-align:center;margin-bottom:36px'>"
-                "<span style='color:#3b82f6;font-size:11px;letter-spacing:.15em;"
-                "text-transform:uppercase'>// What security teams say</span>"
-                "<h2 style='font-size:clamp(1.3rem,2.5vw,2rem);font-weight:800;"
-                "color:#f0f6ff;margin-top:8px;margin-bottom:28px'>"
-                "Trusted by professionals who defend inboxes daily</h2></div>",
-                unsafe_allow_html=True)
-
-    testimonials = [
-        ("PhishGuard caught a spear-phishing campaign our SIEM missed. The AI report was on my desk in under 3 seconds.",
-         "Sarah Chen", "CISO, FinTech Corp"),
-        ("The OSINT enrichment alone is worth the subscription. Domain WHOIS, geolocation, and registrar data automatically bundled into every scan.",
-         "Marcus Rivera", "Security Engineer, CloudScale"),
-        ("We reduced our SOC triage time by 60% after rolling out PhishGuard. The risk scoring is incredibly accurate.",
-         "Dr. Amara Osei", "Director of IT Security, EduGlobal"),
-    ]
-    cols = st.columns(3)
-    for col, (quote, name, role) in zip(cols, testimonials):
-        with col:
-            st.markdown(
-                f"<div class='feature-card' style='display:flex;flex-direction:column;height:100%;padding:24px'>"
-                f"<div style='color:#6b8cae;font-size:13px;line-height:1.7;margin-bottom:16px;flex:1'>"
-                f"\"{quote}\"</div>"
-                f"<div style='border-top:1px solid rgba(255,255,255,0.05);padding-top:12px'>"
-                f"<div style='color:#e2e8f0;font-size:13px;font-weight:600'>{name}</div>"
-                f"<div style='color:#475569;font-size:11px'>{role}</div></div></div>",
-                unsafe_allow_html=True
-            )
-
-    st.markdown("<div style='height:40px'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='height:30px'></div>", unsafe_allow_html=True)
 
     # ═════════════════════════════════════════════════════════════════════
     # SECURITY & TRUST
@@ -811,11 +794,8 @@ def _hero_page():
 
     trust_items = [
         ("🔒", "256-bit Encryption", "All data encrypted at rest and in transit with AES-256 and TLS 1.3."),
-        ("🛡", "SOC 2 Compliant", "We follow SOC 2 Type II security controls and audit procedures."),
         ("🌍", "GDPR Compliant", "Data processing compliant with GDPR. Right to erasure included."),
-        ("🔍", "Penetration Tested", "Regular third-party penetration testing and vulnerability assessments."),
         ("📋", "Audit Trail", "Every analysis and action logged for compliance and incident response."),
-        ("🏢", "Enterprise SSO", "SAML/SSO integration, role-based access, and team management."),
     ]
     for icon, title, desc in trust_items:
         st.markdown(

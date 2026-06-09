@@ -26,6 +26,7 @@ class TestDetector:
 
         email = (
             "From: alice@example.com\n"
+            "Authentication-Results: spf=pass smtp.mailfrom=example.com; dkim=pass; dmarc=pass\n"
             "Subject: Lunch tomorrow\n"
             "Hi Bob, want to grab lunch tomorrow at 12? Let me know. Best, Alice"
         )
@@ -91,7 +92,8 @@ class TestDetector:
             "urls_found", "suspicious_urls", "url_count",
             "suspicious_url_count", "keyword_matches",
             "total_keyword_hits", "has_attachments",
-            "header_analysis", "attachment_analysis",
+            "header_analysis", "auth_headers",
+            "attachment_analysis",
             "language_analysis", "languages_detected",
             "kit_fingerprinting",
         }

@@ -3,6 +3,7 @@ import re
 from pathlib import Path
 
 from src.fingerprinting import fingerprint_email
+from src.header_auth import analyze_auth_headers
 
 # Load keywords
 KEYWORDS_PATH = Path(__file__).parent.parent / "data" / "phishing_keywords.json"
@@ -416,13 +417,20 @@ def analyze_email(email_text: str) -> dict:
     language_analysis  = analyze_language(email_text)
 
     kit_fingerprint    = fingerprint_email(email_text)
+    auth_headers       = analyze_auth_headers(email_text)
+    auth_risk = auth_headers.get("risk_contribution", 0) if auth_headers.get("has_from_header") else 0
+
+    combined_header_score = min(
+        header_analysis["risk_score"] + auth_risk,
+        40
+    )
 
     risk = calculate_risk_score(
         total_hits,
         len(urls),
         len(suspicious_urls),
         has_attachments,
-        header_analysis["risk_score"],
+        combined_header_score,
         attachment_analysis["risk_score"],
         language_analysis["risk_score"],
         kit_fingerprint["highest_confidence"] / 100,
@@ -448,6 +456,7 @@ def analyze_email(email_text: str) -> dict:
         "url_count":             len(urls),
         "suspicious_url_count":  len(suspicious_urls),
         "header_analysis":       header_analysis,
+        "auth_headers":          auth_headers,
         "attachment_analysis":   attachment_analysis,
         "language_analysis":     language_analysis,
         "languages_detected":    lang_codes,
