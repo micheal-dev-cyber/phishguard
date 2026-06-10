@@ -67,6 +67,12 @@ class _PgCursor:
     def __init__(self, cursor):
         self._c = cursor
 
+    def __getattr__(self, name):
+        """Forward unknown attribute access to the real cursor (e.g., rowcount)."""
+        if name == "_c":
+            raise AttributeError(name)
+        return getattr(self._c, name)
+
     def execute(self, sql, params=None):
         # Track whether we need ON CONFLICT for INSERT OR IGNORE/REPLACE
         needs_on_conflict = False
@@ -86,6 +92,9 @@ class _PgCursor:
 
         # Translate SQLite datetime('now') → PostgreSQL CURRENT_TIMESTAMP
         sql = sql.replace("datetime('now')", "CURRENT_TIMESTAMP")
+
+        # Make ADD COLUMN idempotent for PostgreSQL
+        sql = re.sub(r"\b(ADD\s+COLUMN)\b", "ADD COLUMN IF NOT EXISTS", sql, flags=re.IGNORECASE)
 
         # Handle INSERT OR IGNORE → INSERT ... ON CONFLICT DO NOTHING
         if re.search(r"\bINSERT\s+OR\s+IGNORE\b", sql, re.IGNORECASE):
