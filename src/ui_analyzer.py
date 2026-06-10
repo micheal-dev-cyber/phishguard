@@ -47,15 +47,35 @@ from src.xai_analyzer import analyze_psychological_triggers, format_xai_report
 logger = logging.getLogger("ui-analyzer")
 
 
+_EXAMPLE_EMAIL = """From: "Security Alert" <no-reply@secure-verify2738.xyz>
+Subject: URGENT: Account Security Alert - Action Required
+
+Dear Valued Customer,
+
+We detected unusual activity on your account from an unrecognized device in Russia.
+
+To prevent account suspension, please verify your identity immediately:
+
+https://secure-verify2738.xyz/account/verify?token=29a8f1b3
+
+Failure to verify within 24 hours will result in permanent account suspension.
+
+This is an automated security message. Do not reply to this email."""
+
+
 def render_analyzer_tab(username: str, plan: str):
     try:
         if not is_email_verified(username):
-            st.warning(
-                "📧 **Email not verified.** You must verify your email before scanning. "
-                "[Resend verification email](#) — check your inbox.",
-                icon="⚠️",
-            )
-            st.stop()
+            from src.smtp_validation import smtp_configured
+            if not smtp_configured():
+                pass
+            else:
+                st.warning(
+                    "📧 **Email not verified.** You must verify your email before scanning. "
+                    "[Resend verification email](#) — check your inbox.",
+                    icon="⚠️",
+                )
+                st.stop()
     except Exception as e:
         logger.error("Email verification check failed (proceeding without check): %s", e)
 
@@ -67,6 +87,26 @@ def render_analyzer_tab(username: str, plan: str):
             "Upgrade your plan to continue."
         )
         st.stop()
+
+    # Quick-start for first-time users
+    if not st.session_state.get("checklist_first_scan", False):
+        st.markdown(
+            "<div style='background:linear-gradient(135deg,#0a1a2a,#0f1a2a);"
+            "border:1px solid rgba(59,130,246,0.3);border-radius:14px;padding:20px 24px;margin-bottom:20px'>"
+            "<div style='display:flex;align-items:center;gap:12px;flex-wrap:wrap'>"
+            "<span style='font-size:2rem'>🚀</span>"
+            "<div style='flex:1'>"
+            "<div style='font-weight:700;color:#f0f6ff;font-size:1rem'>Quick Start — Scan your first email</div>"
+            "<div style='color:#94a3b8;font-size:13px'>Not sure what to paste? Load an example phishing email to see what PhishGuard detects.</div>"
+            "</div>"
+            "<button onclick='document.querySelector(\"textarea\").value = `From: \"Security Alert\" <no-reply@secure-verify2738.xyz>\nSubject: URGENT: Account Security Alert\n\nDear Customer,\n\nWe detected unusual activity on your account.\nClick here to verify: https://secure-verify2738.xyz/verify`' "
+            "style='background:#3b82f6;color:white;border:none;border-radius:8px;padding:8px 20px;font-weight:600;cursor:pointer'>📋 Load Example</button>"
+            "</div></div>",
+            unsafe_allow_html=True,
+        )
+        if st.button("📋 Load & Scan Example Email", use_container_width=True, type="primary", key="quickstart_load"):
+            st.session_state["email_input"] = _EXAMPLE_EMAIL
+            st.rerun()
 
     col_left, col_right = st.columns([2, 1])
 
@@ -841,3 +881,34 @@ def render_analyzer_tab(username: str, plan: str):
                 if "ai_report" in st.session_state:
                     st.markdown(section_title("AI Security Analysis"), unsafe_allow_html=True)
                     st.markdown(st.session_state["ai_report"])
+
+                # First-scan guidance
+                if st.session_state.get("checklist_first_scan", False):
+                    _guidance_shown = st.session_state.get("_guidance_shown", False)
+                    if not _guidance_shown:
+                        st.divider()
+                        st.markdown("### 🎉 First scan complete! Here's what to do next")
+                        _gs = results["risk_score"]
+            if _gs >= 50:
+                st.markdown(
+                    "<div style='background:linear-gradient(145deg,#0a0f1a,#0f1a2a);border:1px solid #1e293b;"
+                    "border-radius:14px;padding:20px;margin:8px 0'>"
+                    "🔴 <strong>This email shows phishing indicators.</strong> Do not click any links. "
+                    "Forward the email to your IT team and delete it from your inbox.<br><br>"
+                    "📊 Explore the <strong>Dashboard</strong> tab to see your scan history and analytics.<br>"
+                    "⬆ Consider <strong>upgrading</strong> for VirusTotal and OSINT analysis on every scan."
+                    "</div>",
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.markdown(
+                    "<div style='background:linear-gradient(145deg,#0a0f1a,#0f1a2a);border:1px solid #1e293b;"
+                    "border-radius:14px;padding:20px;margin:8px 0'>"
+                    "🟢 <strong>This email appears safe.</strong> Always verify unexpected attachments or links "
+                    "before clicking — even from known senders.<br><br>"
+                    "📊 Visit the <strong>Dashboard</strong> to see your scan history and track threats over time.<br>"
+                    "📧 Try the <strong>Inbox Scanner</strong> to connect your email account and scan real messages."
+                    "</div>",
+                    unsafe_allow_html=True,
+                )
+            st.session_state["_guidance_shown"] = True
