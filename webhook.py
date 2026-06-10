@@ -127,10 +127,6 @@ def gumroad_webhook():
     return jsonify(result), 200
 
 
-# ── Paddle Webhook (legacy) ──────────────────────────────────────────────
-@app.route("/webhook", methods=["POST"])
-
-
 @app.route("/analyze", methods=["POST"])
 def analyze():
     """API endpoint for the browser extension to scan email/page text."""

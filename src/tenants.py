@@ -108,11 +108,14 @@ def init_tenants():
         )
     """)
     c.execute("CREATE INDEX IF NOT EXISTS idx_login_attempts_user ON login_attempts (username, timestamp)")
-    # Schema migrations for new columns
+    # Schema migrations for new columns (use savepoint to avoid aborting txn on PG)
     for col in ("email_verified", "mfa_enabled"):
+        c.execute("SAVEPOINT sp_add_column")
         try:
             c.execute(f"ALTER TABLE tenants ADD COLUMN {col} INTEGER DEFAULT 0")
+            c.execute("RELEASE SAVEPOINT sp_add_column")
         except Exception as e:
+            c.execute("ROLLBACK TO SAVEPOINT sp_add_column")
             logger.warning("tenants: Schema migration failed for column %s: %s", col, e)
     conn.commit()
     conn.close()

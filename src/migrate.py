@@ -12,19 +12,45 @@ import logging
 import os
 import sys
 
-from src.db import get_connection
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
+from src.db import DB_PATH
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger("migrate")
 
 TABLES_TO_MIGRATE = [
-    "analyses", "users", "tenants", "api_keys", "audit_log",
-    "notifications", "sessions", "custom_rules", "ip_allowlist",
-    "retention_policies", "workspaces", "workspace_members",
-    "gdpr_consent", "integrations", "task_queue", "magic_links",
-    "perf_metrics", "campaigns", "campaign_results", "honeypot_tokens",
-    "phishing_dna_signatures", "stix_bundles", "compliance_reports",
-    "quota_usage", "spending_caps", "rate_limits",
+    # Core application
+    "analyses", "users", "tenants", "api_keys", "api_usage",
+    # Billing
+    "billing_subscriptions", "webhook_events", "paddle_subscriptions",
+    # Security & auth
+    "login_attempts", "totp_secrets", "user_permissions", "magic_links",
+    # Leaderboard & gamification
+    "leaderboard", "leaderboard_history",
+    # Threat detection
+    "threat_intel", "reported_phish", "url_sandbox", "homograph_alerts",
+    "intel_broadcasts", "ocr_extractions",
+    # Sender intelligence
+    "sender_profiles", "sender_communications",
+    # Campaigns
+    "campaigns", "campaign_templates", "campaign_targets",
+    # Scan metering & caps
+    "scan_consumption", "spending_caps",
+    # Referrals
+    "referral_codes", "referral_redemptions",
+    # Telemetry & valuation
+    "valuation_metrics", "activity_timeline",
+    # A/B testing
+    "ab_tests", "ab_test_results",
+    # Other
+    "analysis_plugins", "brand_protection", "email_verifications",
+    "health_checks", "notification_channels", "scan_schedules",
+    "task_queue", "usage_log", "webhook_routes",
 ]
 
 
@@ -41,13 +67,16 @@ def _get_pg_conn():
         dbname=os.getenv("PGDATABASE", "phishguard"),
         user=os.getenv("PGUSER", "postgres"),
         password=os.getenv("PGPASSWORD", ""),
+        sslmode="require",
     )
     conn.autocommit = False
     return conn
 
 
 def _get_sqlite_schema(table: str) -> str:
-    conn = get_connection()
+    import sqlite3
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
     c = conn.cursor()
     c.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name=? AND sql IS NOT NULL", (table,))
     row = c.fetchone()
@@ -69,11 +98,15 @@ def _to_pg_type(sqlite_type: str) -> str:
 
 
 def _translate_schema(sqlite_sql: str) -> str:
-    sqlite_sql = sqlite_sql.replace("AUTOINCREMENT", "").replace("autoincrement", "")
+    import re
+    sqlite_sql = re.sub(
+        r"\bINTEGER\s+PRIMARY\s+KEY(?:\s+AUTOINCREMENT)?\b",
+        "SERIAL PRIMARY KEY",
+        sqlite_sql,
+        flags=re.IGNORECASE,
+    )
     sqlite_sql = sqlite_sql.replace("CREATE TABLE ", "CREATE TABLE IF NOT EXISTS ")
-    for stype, pgtype in [("INTEGER", "INTEGER"), ("TEXT", "TEXT"),
-                          ("REAL", "DOUBLE PRECISION"), ("BLOB", "BYTEA")]:
-        sqlite_sql = sqlite_sql.replace(f" {stype}", f" {pgtype}")
+    sqlite_sql = sqlite_sql.replace("datetime('now')", "CURRENT_TIMESTAMP")
     return sqlite_sql
 
 
@@ -82,7 +115,8 @@ def migrate_to_postgres(drop_first: bool = False):
     pg_conn = _get_pg_conn()
     pg_c = pg_conn.cursor()
 
-    sqlite_conn = get_connection()
+    import sqlite3
+    sqlite_conn = sqlite3.connect(DB_PATH)
     sqlite_c = sqlite_conn.cursor()
 
     for table in TABLES_TO_MIGRATE:
@@ -120,8 +154,8 @@ def migrate_to_postgres(drop_first: bool = False):
             batch.append(tuple(row))
 
         try:
-            from psycopg2.extras import execute_values
-            execute_values(pg_c, insert_sql, batch)
+            for row in batch:
+                pg_c.execute(insert_sql, row)
             pg_conn.commit()
             logger.info("  Migrated %d rows to %s", len(batch), table)
         except Exception as e:
