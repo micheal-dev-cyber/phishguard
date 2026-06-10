@@ -294,7 +294,14 @@ class BillingService:
         product_name = data.get("product_name", "")
         recurrence = data.get("recurrence", "monthly")
         sub_id = data.get("subscription_id", "")
-        username = data.get("custom_fields", {}).get("username", "") or email.split("@")[0]
+        # Gumroad Ping URL: "custom" flat field. Resource Subs: "custom_fields.username"
+        custom_fields = data.get("custom_fields", {})
+        custom_username = ""
+        if isinstance(custom_fields, dict):
+            custom_username = custom_fields.get("username", "")
+        if not custom_username:
+            custom_username = data.get("custom", "")
+        username = custom_username or email.split("@")[0]
 
         plan = self._plan_from_product(product_name)
         if not plan:
@@ -337,6 +344,9 @@ class BillingService:
         custom = sale.get("custom_fields", {})
         if isinstance(custom, dict) and custom.get("username"):
             return custom["username"]
+        custom_flat = sale.get("custom", "")
+        if custom_flat:
+            return custom_flat
         email = sale.get("email", "")
         if email:
             return email.split("@")[0].replace(".", "_")
