@@ -19,6 +19,7 @@ import logging
 import os
 import sys
 from pathlib import Path
+from urllib.parse import parse_qs
 
 # Ensure the project root is on sys.path so we can import src.*
 sys.path.insert(0, str(Path(__file__).parent.resolve()))
@@ -96,13 +97,26 @@ def webhook():
 # ── Gumroad Webhook ──────────────────────────────────────────────────────
 @app.route("/webhooks/gumroad", methods=["POST"])
 def gumroad_webhook():
-    """Receive Gumroad subscription events."""
+    """Receive Gumroad subscription events (JSON or form-encoded)."""
     if not _gumroad_available:
         return jsonify({"error": "Gumroad billing module not available"}), 500
     if not is_gumroad_configured():
         return jsonify({"error": "Gumroad not configured"}), 503
 
-    body = request.get_data()
+    # Handle both JSON (Resource Subscriptions) and form-encoded (Ping URL)
+    content_type = request.content_type or ""
+    if "application/json" in content_type:
+        body = request.get_data()
+    else:
+        raw = dict(request.form)
+        payload = {}
+        # Normalize Ping URL field names to match Resource Subs format
+        field_map = {"sale_id": "id", "subscription_id": "subscription_id"}
+        for k, v in raw.items():
+            key = field_map.get(k, k)
+            payload[key] = v[0] if isinstance(v, (list, tuple)) else v
+        body = json.dumps(payload).encode("utf-8")
+
     headers = {k: v for k, v in request.headers.items()}
 
     provider = GumroadProvider()
