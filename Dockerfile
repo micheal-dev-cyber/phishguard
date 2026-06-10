@@ -4,7 +4,6 @@ WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
-    nginx \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
@@ -13,8 +12,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 RUN mkdir -p data \
-    && chmod +x /app/scripts/start.sh \
-    && rm -f /etc/nginx/sites-enabled/*
+    && chmod +x /app/scripts/start.sh
 
 EXPOSE 7860
 
