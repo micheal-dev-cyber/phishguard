@@ -412,18 +412,33 @@ except Exception as e:
 if "notification_check" not in st.session_state:
     st.session_state["notification_check"] = 0
 
-# ── Startup config banner (admin only) ──────────────────────────────────────
+# ── Startup health check + config banner (admin only) ─────────────────────
+from src.smtp_validation import smtp_config_status
+_smtp_status = smtp_config_status()
+if not _smtp_status["configured"]:
+    import logging
+    logging.getLogger("phishguard").warning(
+        "SMTP not configured at startup. Missing: %s  — email verification, password reset, and welcome emails disabled.",
+        ", ".join(_smtp_status["missing"]),
+    )
+
 if st.session_state.get("is_admin"):
     cfg_status = get_config_status()
     missing = [k for k, v in cfg_status.items() if isinstance(v, dict) and not v["configured"]]
+    issues = []
     if missing:
+        issues.append(("Missing API keys", missing))
+    if not _smtp_status["configured"]:
+        issues.append(("SMTP not configured", _smtp_status["missing"]))
+    if issues:
         import logging
         logger = logging.getLogger("phishguard")
-        logger.warning("Missing API keys on startup: %s", ", ".join(missing))
         with st.sidebar.expander("⚠️ Configuration Status", expanded=True):
-            st.caption("Set these via HF Space → Settings → Variables and secrets:")
-            for key in missing:
-                st.markdown(f"- `{key}`")
+            for title, keys in issues:
+                st.caption(f"{title}:")
+                for key in keys:
+                    st.markdown(f"- `{key}`")
+            st.caption("Set these via env vars or HF Space → Settings → Variables and secrets.")
             st.caption("The app will still run — features needing these keys will gracefully degrade.")
 
 username = st.session_state.get("username", "user")

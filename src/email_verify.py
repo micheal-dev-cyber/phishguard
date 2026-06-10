@@ -84,16 +84,18 @@ def is_email_verified(username: str) -> bool:
 
 
 def send_verification_email(email: str, verify_url: str) -> dict:
-    from src.email_templates import render_html, send_html_email
+    from src.email_templates import render_html
+    from src.email_test_backend import send_via_backend
     html = render_html("verify", verify_url=verify_url)
     if not html:
         return {"success": False, "error": "Template not found"}
-    return send_html_email(email, "PhishGuard — Verify Your Email", html)
+    return send_via_backend(email, "PhishGuard — Verify Your Email", html, template="verify")
 
 
 def send_welcome_email(email: str, username: str, quota: int, app_url: str) -> dict:
-    from src.email_templates import render_html, send_html_email
+    from src.email_templates import render_html
+    from src.email_test_backend import send_via_backend
     html = render_html("welcome", username=username, quota=quota, app_url=app_url)
     if not html:
         return {"success": False, "error": "Template not found"}
-    return send_html_email(email, "Welcome to PhishGuard 🛡", html)
+    return send_via_backend(email, "Welcome to PhishGuard 🛡", html, template="welcome")

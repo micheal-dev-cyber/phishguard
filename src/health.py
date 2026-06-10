@@ -103,8 +103,33 @@ def check_redis() -> dict:
         return {"component": "redis", "status": "disabled", "message": "Redis not configured"}
 
 
+def check_smtp() -> dict:
+    try:
+        from src.smtp_validation import smtp_config_status, test_smtp_connection
+        status = smtp_config_status()
+        if not status["configured"]:
+            return {
+                "component": "smtp",
+                "status": "disabled",
+                "message": f"Missing: {', '.join(status['missing'])}",
+            }
+        result = test_smtp_connection()
+        if result["success"]:
+            return {"component": "smtp", "status": "healthy", "message": "SMTP connected"}
+        return {"component": "smtp", "status": "degraded", "message": result["error"]}
+    except Exception as e:
+        return {"component": "smtp", "status": "down", "message": str(e)}
+
+
+def check_app_url() -> dict:
+    from src.env import ENV
+    if ENV.APP_URL:
+        return {"component": "app_url", "status": "healthy", "message": ENV.APP_URL}
+    return {"component": "app_url", "status": "disabled", "message": "APP_URL not set — using localhost"}
+
+
 def run_all_checks() -> list[dict]:
-    checks = [check_database(), check_disk(), check_task_queue(), check_redis()]
+    checks = [check_database(), check_disk(), check_task_queue(), check_redis(), check_smtp(), check_app_url()]
     conn = get_connection()
     c = conn.cursor()
     for chk in checks:

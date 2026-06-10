@@ -156,25 +156,31 @@ def _signup_form():
         else:
             from src.email_verify import create_verification, send_verification_email
             from src.env import ENV
+            from src.smtp_validation import smtp_configured
             from src.tenants import create_tenant
             success = create_tenant(new_username.strip(), new_password, email=new_email.strip(), plan="trial")
             if not success:
                 st.error("That username is already taken. Try a different one.")
             else:
-                st.success("🎉 Account created! Check your email to verify your account before logging in.")
+                st.success("🎉 Account created!")
                 try:
                     from src.analytics import track_signup
                     track_signup(new_username.strip(), email=new_email.strip(), plan="trial")
                 except Exception:
                     pass
-                try:
-                    v = create_verification(new_username.strip(), new_email.strip())
-                    base_url = getattr(ENV, "APP_URL", "http://localhost:8501")
-                    verify_url = f"{base_url}/?verify={v['token']}"
-                    send_verification_email(new_email.strip(), verify_url)
-                    st.info("📧 We sent a verification email. Check your inbox (and spam folder).")
-                except Exception as e:
-                    logger.warning("auth: Failed to send verification email for %s: %s", new_email.strip(), e)
+                _smtp_ok = smtp_configured()
+                if _smtp_ok:
+                    try:
+                        v = create_verification(new_username.strip(), new_email.strip())
+                        base_url = ENV.APP_URL or "http://localhost:8501"
+                        verify_url = f"{base_url}/?verify={v['token']}"
+                        send_verification_email(new_email.strip(), verify_url)
+                        st.info("📧 Verification email sent! Check your inbox (and spam folder).")
+                    except Exception as e:
+                        logger.warning("auth: Failed to send verification email for %s: %s", new_email.strip(), e)
+                        st.warning("Could not send verification email. You can still log in, but some features may be limited.")
+                else:
+                    st.info("📧 SMTP not configured — email verification is disabled. You can log in directly.")
                 st.session_state["pending_verification_user"] = new_username.strip()
                 st.session_state["show_login"] = True
                 st.session_state.pop("show_signup", None)
@@ -227,20 +233,24 @@ def _login_form():
             from src.alerting import send_email
             from src.env import ENV
             from src.magic_link import generate_magic_link
-            token = generate_magic_link(magic_email)
-            link = f"{ENV.APP_URL}/?magic_token={token}&email={magic_email}"
-            body = (
-                f"Click the link below to sign in to PhishGuard:\n\n{link}\n\n"
-                f"This link expires in 15 minutes. If you did not request this, ignore it."
-            )
-            try:
-                send_email(ENV.SMTP_HOST, ENV.SMTP_PORT, ENV.SMTP_USER,
-                           getattr(ENV, "SMTP_PASSWORD", "") or ENV.SMTP_PASS,
-                           ENV.SMTP_FROM or ENV.SMTP_USER,
-                           magic_email, "Your PhishGuard Magic Link", body)
-                st.success("✅ Magic link on its way! Check your inbox (and spam folder).")
-            except Exception as e:
-                st.error(f"Couldn't send the magic link. Make sure SMTP is configured, or try logging in with your password instead. Details: {e}")
+            from src.smtp_validation import smtp_configured
+            if not smtp_configured():
+                st.warning("SMTP is not configured. Magic links require email to be set up. Log in with your password instead.")
+            else:
+                token = generate_magic_link(magic_email)
+                link = f"{ENV.APP_URL}/?magic_token={token}&email={magic_email}"
+                body = (
+                    f"Click the link below to sign in to PhishGuard:\n\n{link}\n\n"
+                    f"This link expires in 15 minutes. If you did not request this, ignore it."
+                )
+                try:
+                    send_email(ENV.SMTP_HOST, ENV.SMTP_PORT, ENV.SMTP_USER,
+                               getattr(ENV, "SMTP_PASSWORD", "") or ENV.SMTP_PASS,
+                               ENV.SMTP_FROM or ENV.SMTP_USER,
+                               magic_email, "Your PhishGuard Magic Link", body)
+                    st.success("✅ Magic link on its way! Check your inbox (and spam folder).")
+                except Exception as e:
+                    st.error(f"Couldn't send the magic link. Make sure SMTP is configured, or try logging in with your password instead. Details: {e}")
         else:
             st.warning("Enter the email address associated with your account.")
 
@@ -292,14 +302,17 @@ def _login_form():
                 else:
                     from src.email_verify import create_verification, is_email_verified, send_verification_email
                     from src.env import ENV
-                    if not is_email_verified(tenant["username"]):
+                    from src.smtp_validation import smtp_configured
+                    if not smtp_configured():
+                        pass
+                    elif not is_email_verified(tenant["username"]):
                         st.warning("Please verify your email before logging in.")
                         col_resend, _ = st.columns([1, 3])
                         with col_resend:
                             if st.button("Resend verification email", key=f"resend_{tenant['username']}"):
                                 try:
                                     v = create_verification(tenant["username"], tenant.get("email", ""))
-                                    base_url = getattr(ENV, "APP_URL", "http://localhost:8501")
+                                    base_url = ENV.APP_URL or "http://localhost:8501"
                                     verify_url = f"{base_url}/?verify={v['token']}"
                                     send_verification_email(tenant.get("email", ""), verify_url)
                                     st.success("Verification email resent! Check your inbox (and spam).")
@@ -387,21 +400,26 @@ def _reset_form():
     if st.button("Send Reset Link", use_container_width=True, type="primary"):
         if reset_email:
             from src.db import get_connection
+            from src.env import ENV
             from src.password_reset import create_reset_token, send_reset_email
-            conn = get_connection()
-            c = conn.cursor()
-            c.execute("SELECT username FROM tenants WHERE email = ?", (reset_email,))
-            row = c.fetchone()
-            conn.close()
-            if row:
-                username = row[0]
-                result = create_reset_token(username, reset_email)
-                base_url = st.secrets.get("base_url", "http://localhost:8501")
-                reset_url = f"{base_url}/?reset={result['token']}"
-                send_reset_email(reset_email, reset_url)
-                st.success("If that email is in our system, a password reset link is on its way. Check your inbox (and spam folder).")
+            from src.smtp_validation import smtp_configured
+            if not smtp_configured():
+                st.warning("SMTP is not configured. Password reset requires email to be set up. Contact the administrator.")
             else:
-                st.success("If that email is in our system, a password reset link is on its way. Check your inbox (and spam folder).")
+                conn = get_connection()
+                c = conn.cursor()
+                c.execute("SELECT username FROM tenants WHERE email = ?", (reset_email,))
+                row = c.fetchone()
+                conn.close()
+                if row:
+                    username = row[0]
+                    result = create_reset_token(username, reset_email)
+                    base_url = ENV.APP_URL or "http://localhost:8501"
+                    reset_url = f"{base_url}/?reset={result['token']}"
+                    send_reset_email(reset_email, reset_url)
+                    st.success("If that email is in our system, a password reset link is on its way. Check your inbox (and spam folder).")
+                else:
+                    st.success("If that email is in our system, a password reset link is on its way. Check your inbox (and spam folder).")
         else:
             st.error("Enter the email address associated with your account.")
 
