@@ -5,7 +5,8 @@ title: PhishGuard AI
 emoji: 🛡
 colorFrom: indigo
 colorTo: blue
-sdk: docker
+sdk: streamlit
+app_file: app.py
 pinned: true
 
 # Environment variables (set in HF Spaces > Settings > Secrets)
