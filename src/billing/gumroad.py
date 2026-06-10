@@ -24,7 +24,7 @@ from src.billing.provider import BillingProvider
 logger = logging.getLogger(__name__)
 
 GUMROAD_API_BASE = "https://api.gumroad.com/v2"
-GUMROAD_CHECKOUT_BASE = "https://app.gumroad.com/checkout"
+GUMROAD_CHECKOUT_BASE = "https://gumroad.com/l"
 
 
 class GumroadProvider(BillingProvider):
@@ -73,7 +73,7 @@ class GumroadProvider(BillingProvider):
         if not permalink:
             return None
 
-        params = f"affiliate_id=&affcode=&custom={username}"
+        params = f"custom={username}"
         base = f"{GUMROAD_CHECKOUT_BASE}/{permalink}?{params}"
 
         if success_url:
