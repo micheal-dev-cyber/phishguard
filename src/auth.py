@@ -1182,9 +1182,10 @@ def check_password() -> bool:
                 if _vrow:
                     _vuname, _vemail = _vrow
                     from src.email_verify import send_welcome_email
+                    from src.env import ENV
                     from src.tenants import PLANS
                     _vquota = PLANS.get("trial", {}).get("analyses_per_month", 10)
-                    send_welcome_email(_vemail, _vuname, _vquota, "https://phishguard.ai")
+                    send_welcome_email(_vemail, _vuname, _vquota, ENV.APP_URL or "https://phishguard.ai")
             except Exception as _ve:
                 logger.warning("auth: Welcome email failed for %s: %s", _vuname, _ve)
             st.session_state["show_login"] = True
