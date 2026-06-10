@@ -221,8 +221,7 @@ def generate_llm_template(topic: str = "phishing email") -> dict:
         "Return ONLY valid JSON with keys: name, subject, body, difficulty, category."
     )
     try:
-        response = get_chat_completion(prompt, max_tokens=800)
-        text = response.get("content", "")
+        text = get_chat_completion([{"role": "user", "content": prompt}], max_tokens=800)
         json_match = re.search(r"\{.*\}", text, re.DOTALL)
         if json_match:
             tpl = json.loads(json_match.group())

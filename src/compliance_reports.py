@@ -189,3 +189,9 @@ class ComplianceReport:
             f"{'='*60}",
         ]
         return "\n".join(lines).encode("utf-8")
+
+
+def generate_report(standard: str = "soc2", days: int = 90, whitelabel: bool = False) -> bytes:
+    """Generate a compliance report. Wraps ComplianceReport for backward compat."""
+    report = ComplianceReport(standard=standard, date_range_days=days)
+    return report.generate()
