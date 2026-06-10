@@ -69,8 +69,7 @@ from src.tenants import (  # noqa: E402
 # Secondary imports (wrapped — may fail on minimal installs)
 def _safe_import(mod, names, fallback=None):
     try:
-        __import__(mod)
-        m = __import__(mod)
+        m = __import__(mod, fromlist=names)
         result = {}
         for name in names:
             if hasattr(m, name):
@@ -205,8 +204,12 @@ record_consent = _gdpr['record_consent']
 revoke_consent = _gdpr['revoke_consent']
 
 _i18n = _safe_import('src.i18n', ['SUPPORTED_LANGUAGES', 't'])
-SUPPORTED_LANGUAGES = _i18n['SUPPORTED_LANGUAGES']
-t = _i18n['t']
+SUPPORTED_LANGUAGES = _i18n.get('SUPPORTED_LANGUAGES', {'en': 'English'})
+if not isinstance(SUPPORTED_LANGUAGES, dict):
+    SUPPORTED_LANGUAGES = {'en': 'English'}
+t = _i18n.get('t', lambda s, **kw: s)
+if not callable(t):
+    t = lambda s, **kw: s
 
 _integrations = _safe_import('src.integrations', ['get_available_providers', 'list_integrations', 'remove_integration', 'save_integration'])
 get_available_providers = _integrations['get_available_providers']
