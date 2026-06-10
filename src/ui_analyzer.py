@@ -36,6 +36,7 @@ from src.ratelimit import check_rate_limit, get_rate_limit_remaining
 from src.report_generator import generate_pdf_report
 from src.siem_webhook import SIEMClient
 from src.stix_exporter import build_enterprise_stix_bundle
+from src.env import ENV
 from src.tenants import PLANS, check_quota, log_usage
 from src.threat_intel import check_multiple_urls, get_threat_summary
 from src.threat_scorer import compute_combined_threat_score
@@ -236,6 +237,14 @@ def render_analyzer_tab(username: str, plan: str):
                 results = analyze_email(email_text)
                 save_analysis(results, email_text)
                 st.session_state["checklist_first_scan"] = True
+                try:
+                    from src.analytics import track_scan, track_first_scan
+                    track_scan(username, risk_score=results["risk_score"], severity=results["severity"])
+                    if not st.session_state.get("_tracked_first_scan", False):
+                        track_first_scan(username)
+                        st.session_state["_tracked_first_scan"] = True
+                except Exception:
+                    pass
                 log_usage(username, "analysis", results["risk_score"])
                 lb_record_scan(
                     username,
@@ -340,7 +349,7 @@ def render_analyzer_tab(username: str, plan: str):
                     triggers=triggers,
                     snippet=email_text[:300],
                     action="Investigate and quarantine this email immediately.",
-                    dashboard_url="https://phishguard.ai",
+                    dashboard_url=ENV.APP_URL or "http://localhost:8501",
                 )
 
             q_key = f"quarantine_threshold_{username}"

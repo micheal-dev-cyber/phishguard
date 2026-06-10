@@ -83,7 +83,7 @@ def _openrouter_completion(system: str, user: str, max_tokens: int = 1000) -> st
     headers = {
         "Authorization": f"Bearer {ENV.OPENROUTER_API_KEY}",
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://phishguard-ai.hf.space",
+        "HTTP-Referer": ENV.APP_URL or "https://phishguard-ai.hf.space",
     }
     data = _http_post_json(OPENROUTER_URL, headers, payload)
     choices = data.get("choices", [])

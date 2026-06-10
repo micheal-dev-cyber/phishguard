@@ -105,8 +105,17 @@ def dispatch_event(username: str, event_type: str, payload: dict):
     if not url:
         return
     try:
+        from src.env import ENV
         from src.webhook_gateway import send_alert
-        send_alert(url, payload=payload)
+        send_alert(
+            url,
+            score=payload.get("score", 0),
+            severity=payload.get("severity", "HIGH"),
+            triggers=payload.get("triggers", []),
+            snippet=payload.get("snippet", ""),
+            action=payload.get("action", "Investigate immediately."),
+            dashboard_url=payload.get("dashboard_url", ENV.APP_URL or "http://localhost:8501"),
+        )
     except Exception as e:
         logger.error("Failed to dispatch %s for %s: %s", event_type, username, e)
 

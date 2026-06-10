@@ -618,7 +618,7 @@ if st.session_state.get("show_upgrade") and plan != "enterprise":
                 else:
                     if st.button("⬆ Subscribe — " + plabel, key="sub_" + pkey, use_container_width=True, type="primary"):
                         with st.spinner("Creating checkout session..."):
-                            base = getattr(getattr(st, 'context', None), 'headers', {}).get("Origin", "https://phishguard.streamlit.app")
+                            base = ENV.APP_URL or getattr(getattr(st, 'context', None), 'headers', {}).get("Origin", "http://localhost:8501")
                             success_url = base + "/?checkout=completed"
                             url = generate_checkout_url(username, pkey, success_url=success_url)
                         if url:
@@ -1765,7 +1765,7 @@ if is_admin:
                                             create_verification,
                                             send_verification_email,
                                         )
-                                        base = st.secrets.get("base_url", "http://localhost:8501")
+                                        base = ENV.APP_URL or st.secrets.get("base_url", "http://localhost:8501")
                                         vt = create_verification(new_username, new_email)
                                         send_verification_email(new_email, f"{base}/?verify={vt['token']}")
                                     except Exception:
@@ -2281,7 +2281,7 @@ with settings_tab:
                 if current_email:
                     st.warning("📧 Email not verified. Some features are restricted.")
                     if st.button("📨 Resend Verification Email", use_container_width=True):
-                        base = st.secrets.get("base_url", "http://localhost:8501")
+                        base = ENV.APP_URL or st.secrets.get("base_url", "http://localhost:8501")
                         vt = create_verification(username, current_email)
                         r = send_verification_email(vt["email"], f"{base}/?verify={vt['token']}")
                         if r.get("success"):

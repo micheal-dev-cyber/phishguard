@@ -199,7 +199,7 @@ def scan_webhook():
                     f"Keyword Hits: {verdict['total_keyword_hits']}\n"
                     f"Suspicious URLs: {len(verdict['suspicious_urls'])}\n\n"
                     f"Verdict: {'⚠️ PHISHING DETECTED' if verdict['is_phishing'] else '✅ No phishing indicators'}\n\n"
-                    f"Full details: https://phishguard.ai\n"
+                    f"Full details: {ENV.APP_URL or 'http://localhost:8501'}\n"
                 )
                 send_email(smtp_host, smtp_port, smtp_user, smtp_pass,
                            smtp_user, reply_to, subject, body)

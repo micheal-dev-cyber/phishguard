@@ -139,9 +139,13 @@ def _render_teams_payload(
             if "<ACTION>" in fact["value"]:
                 fact["value"] = fact["value"].replace("<ACTION>", action)
 
+    _dash_url = dashboard_url
+    if not _dash_url:
+        from src.env import ENV
+        _dash_url = ENV.APP_URL or "http://localhost:8501"
     for action_block in payload.get("potentialAction", []):
         for target in action_block.get("targets", []):
-            target["uri"] = target["uri"].replace("<DASHBOARD_URL>", dashboard_url or "https://phishguard.ai")
+            target["uri"] = target["uri"].replace("<DASHBOARD_URL>", _dash_url)
 
     return payload
 
@@ -186,7 +190,7 @@ def send_teams_alert(
     triggers: Optional[list] = None,
     snippet: str = "",
     action: str = "Investigate and quarantine immediately.",
-    dashboard_url: str = "https://phishguard.ai",
+    dashboard_url: str = "",
 ) -> Dict[str, Any]:
     """Send a formatted actionable message card to Microsoft Teams via Incoming Webhook."""
     if not _validate_webhook_url(webhook_url):
@@ -220,7 +224,7 @@ def send_alert(
     triggers: Optional[list] = None,
     snippet: str = "",
     action: str = "Investigate and quarantine immediately.",
-    dashboard_url: str = "https://phishguard.ai",
+    dashboard_url: str = "",
 ) -> Dict[str, Any]:
     """Auto-detect webhook type (Slack or Teams) and route accordingly."""
     if webhook_url.startswith("https://hooks.slack.com/"):

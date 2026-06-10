@@ -36,8 +36,8 @@ def _stripe_checkout(plan: str, username: str, email: str) -> dict:
         "line_items[0][quantity]": "1",
         "customer_email": email,
         "client_reference_id": username,
-        "success_url": f"{ENV.APP_URL or 'https://phishguard.ai'}/billing?success=true",
-        "cancel_url": f"{ENV.APP_URL or 'https://phishguard.ai'}/billing?canceled=true",
+        "success_url": f"{ENV.APP_URL or 'http://localhost:8501'}/billing?success=true",
+        "cancel_url": f"{ENV.APP_URL or 'http://localhost:8501'}/billing?canceled=true",
     }).encode()
 
     req = Request(
@@ -64,7 +64,7 @@ def _paddle_checkout(plan: str, username: str, email: str) -> dict:
     try:
         from src.env import ENV
         from src.paddle_billing import generate_checkout_url
-        url = generate_checkout_url(username, plan, success_url=f"{ENV.APP_URL or 'https://phishguard.ai'}/?checkout=completed")
+        url = generate_checkout_url(username, plan, success_url=f"{ENV.APP_URL or 'http://localhost:8501'}/?checkout=completed")
         if url:
             return {"url": url, "session_id": plan}
         return {"error": "Failed to create Paddle checkout"}
