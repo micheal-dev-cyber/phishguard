@@ -73,10 +73,21 @@ class EnvConfig:
     PGDATABASE: str = ""
     STRIPE_SECRET_KEY: str = ""
     STRIPE_WEBHOOK_SECRET: str = ""
+    # Gumroad
+    GUMROAD_ACCESS_TOKEN: str = ""
+    GUMROAD_WEBHOOK_SECRET: str = ""
+    GUMROAD_STARTER_MONTHLY_PERMALINK: str = ""
+    GUMROAD_STARTER_YEARLY_PERMALINK: str = ""
+    GUMROAD_BUSINESS_MONTHLY_PERMALINK: str = ""
+    GUMROAD_BUSINESS_YEARLY_PERMALINK: str = ""
+    gumroad_configured: bool = False
 
     def __post_init__(self):
         self.paddle_configured = bool(
             self.PADDLE_API_KEY and self.PADDLE_CLIENT_TOKEN
+        )
+        self.gumroad_configured = bool(
+            self.GUMROAD_ACCESS_TOKEN
         )
 
 
@@ -133,6 +144,12 @@ def load_env() -> EnvConfig:
         PGDATABASE=_read_env("PGDATABASE"),
         STRIPE_SECRET_KEY=_read_env("STRIPE_SECRET_KEY"),
         STRIPE_WEBHOOK_SECRET=_read_env("STRIPE_WEBHOOK_SECRET"),
+        GUMROAD_ACCESS_TOKEN=_read_env("GUMROAD_ACCESS_TOKEN"),
+        GUMROAD_WEBHOOK_SECRET=_read_env("GUMROAD_WEBHOOK_SECRET"),
+        GUMROAD_STARTER_MONTHLY_PERMALINK=_read_env("GUMROAD_STARTER_MONTHLY_PERMALINK"),
+        GUMROAD_STARTER_YEARLY_PERMALINK=_read_env("GUMROAD_STARTER_YEARLY_PERMALINK"),
+        GUMROAD_BUSINESS_MONTHLY_PERMALINK=_read_env("GUMROAD_BUSINESS_MONTHLY_PERMALINK"),
+        GUMROAD_BUSINESS_YEARLY_PERMALINK=_read_env("GUMROAD_BUSINESS_YEARLY_PERMALINK"),
     )
 
 
@@ -154,6 +171,7 @@ def get_config_status() -> dict:
             "value": (val[:8] + "..." + val[-4:]) if len(val) > 14 else ("***" if val else ""),
         }
     status["paddle_configured"] = ENV.paddle_configured
+    status["gumroad_configured"] = ENV.gumroad_configured
     return status
 
 

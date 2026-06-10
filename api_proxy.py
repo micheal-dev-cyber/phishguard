@@ -2,10 +2,16 @@
 PhishGuard AI — Enterprise API Proxy (stdlib only)
 
 Endpoints:
-  POST /api/v1/scan          Multi-layered phishing scan (requires X-PhishGuard-Key)
-  POST /api/v1/report-phish  Webhook for Outlook/Gmail add-in (requires X-PhishGuard-Key)
-  GET  /health               Health check (no key required)
-  GET  /                     Service index
+  POST /api/v1/scan                Multi-layered phishing scan (key required)
+  POST /api/v1/report-phish        Webhook for Outlook/Gmail add-in (key required)
+  GET  /api/v1/metrics/summary     Overall platform metrics (no key)
+  GET  /api/v1/feedback/stats      Feedback loop FP/FN stats (no key)
+  GET  /api/v1/detection/rules     Detection rules listing (no key)
+  GET  /api/v1/billing/revenue-summary  Subscription revenue summary (no key)
+  POST /api/v1/logs/ingest         Ingest telemetry/event log (no key)
+  GET  /api/v1/health/status       Detailed health status (no key)
+  GET  /health                     Health check (no key)
+  GET  /                           Service index
 
 Usage:
   python api_proxy.py                    # default port 8080
@@ -97,6 +103,21 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
                 "version": "3.0.0",
             })
 
+        if parsed.path == "/api/v1/health/status":
+            return self._handle_health_status()
+
+        if parsed.path == "/api/v1/metrics/summary":
+            return self._handle_metrics_summary()
+
+        if parsed.path == "/api/v1/feedback/stats":
+            return self._handle_feedback_stats()
+
+        if parsed.path == "/api/v1/detection/rules":
+            return self._handle_detection_rules()
+
+        if parsed.path == "/api/v1/billing/revenue-summary":
+            return self._handle_billing_revenue()
+
         if parsed.path.startswith("/api/v1/campaign/track/open"):
             qs = parse_qs(parsed.query)
             cid = qs.get("cid", [None])[0]
@@ -116,10 +137,16 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
             return self._send_json({
                 "service": "PhishGuard AI — API Proxy",
                 "endpoints": {
-                    "POST /api/v1/scan":          "Multi-layered phishing scan (key required)",
-                    "POST /api/v1/report-phish":   "Report phish webhook for add-ins (key required)",
-                    "GET /api/v1/openapi.json":    "OpenAPI 3.0 specification",
-                    "GET /health":                 "Health check",
+                    "POST /api/v1/scan":                "Multi-layered phishing scan (key required)",
+                    "POST /api/v1/report-phish":         "Report phish webhook for add-ins (key required)",
+                    "GET /api/v1/metrics/summary":       "Overall platform metrics",
+                    "GET /api/v1/feedback/stats":        "Feedback loop FP/FN stats",
+                    "GET /api/v1/detection/rules":       "Detection rules listing",
+                    "GET /api/v1/billing/revenue-summary": "Subscription revenue summary",
+                    "POST /api/v1/logs/ingest":          "Ingest telemetry events",
+                    "GET /api/v1/health/status":         "Detailed health status",
+                    "GET /api/v1/openapi.json":          "OpenAPI 3.0 specification",
+                    "GET /health":                       "Health check",
                 },
             })
         self._send_json({"error": "Not found"}, 404)
@@ -143,6 +170,9 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
         if not check_rate_limit(f"api:{ip}", RATE_LIMIT["max"], RATE_LIMIT["window"]):
             remaining = get_rate_limit_remaining(f"api:{ip}", RATE_LIMIT["max"], RATE_LIMIT["window"])
             return self._send_json({"error": "rate_limited", "remaining": remaining}, 429)
+
+        if parsed.path == "/api/v1/logs/ingest":
+            return self._handle_logs_ingest()
 
         if parsed.path not in PROTECTED_ENDPOINTS and parsed.path != "/analyze":
             return self._send_json({"error": "Not found"}, 404)
@@ -174,6 +204,136 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
             save_analysis(analyze_email(text), text)
 
         return self._send_json(result)
+
+    def _handle_metrics_summary(self):
+        from src.database import get_valuation_summary as _get_val
+        from src.db import get_connection
+        conn = get_connection()
+        c = conn.cursor()
+        try:
+            c.execute("SELECT COUNT(*) as total FROM analyses")
+            total_analyses = c.fetchone()["total"]
+            c.execute("SELECT COUNT(*) as total FROM tenants")
+            total_tenants = c.fetchone()["total"]
+            c.execute("SELECT COUNT(*) as total FROM threat_intel")
+            total_threats = c.fetchone()["total"]
+            c.execute("SELECT COUNT(*) as total FROM reported_phish")
+            total_reported = c.fetchone()["total"]
+        finally:
+            conn.close()
+        val = _get_val()
+        return self._send_json({
+            "total_analyses": total_analyses,
+            "total_tenants": total_tenants,
+            "total_threats": total_threats,
+            "total_reported_phish": total_reported,
+            "valuation": val,
+        })
+
+    def _handle_feedback_stats(self):
+        from src.db import get_connection
+        conn = get_connection()
+        c = conn.cursor()
+        try:
+            c.execute("SELECT COUNT(*) as total FROM feedback_loop")
+            total = c.fetchone()["total"]
+            c.execute("SELECT COUNT(*) FROM feedback_loop WHERE user_label='fp'")
+            fps = c.fetchone()[0]
+            c.execute("SELECT COUNT(*) FROM feedback_loop WHERE user_label='fn'")
+            fns = c.fetchone()[0]
+            c.execute("SELECT COUNT(*) FROM feedback_loop WHERE user_label='correct'")
+            correct = c.fetchone()[0]
+        except Exception:
+            total = fps = fns = correct = 0
+        finally:
+            conn.close()
+        total_labeled = fps + fns + correct
+        return self._send_json({
+            "total": total,
+            "false_positives": fps,
+            "false_negatives": fns,
+            "correct": correct,
+            "accuracy": round(correct / total_labeled * 100, 1) if total_labeled else 0,
+        })
+
+    def _handle_detection_rules(self):
+        from src.db import get_connection
+        conn = get_connection()
+        c = conn.cursor()
+        try:
+            c.execute("SELECT * FROM custom_rules ORDER BY id DESC LIMIT 100")
+            rules = [dict(r) for r in c.fetchall()]
+        except Exception:
+            rules = []
+        conn.close()
+        return self._send_json({"rules": rules, "count": len(rules)})
+
+    def _handle_billing_revenue(self):
+        from src.db import get_connection
+        conn = get_connection()
+        c = conn.cursor()
+        try:
+            c.execute("SELECT plan, status, COUNT(*) as count FROM paddle_subscriptions GROUP BY plan, status")
+            rows = [dict(r) for r in c.fetchall()]
+        except Exception:
+            rows = []
+        conn.close()
+        total_active = sum(r["count"] for r in rows if r["status"] == "active")
+        plans = {"starter": 29, "business": 99, "consultant": 199, "enterprise": 499}
+        mrr = sum(plans.get(r["plan"], 0) * r["count"] for r in rows if r["status"] == "active")
+        return self._send_json({
+            "subscriptions": rows,
+            "total_active": total_active,
+            "mrr": mrr,
+            "arr": mrr * 12,
+        })
+
+    def _handle_logs_ingest(self):
+        try:
+            body = json.loads(self._read_body().decode("utf-8") or "{}")
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            return self._send_json({"error": "Invalid JSON"}, 400)
+        event = body.get("event", body.get("action", "unknown"))
+        username = body.get("username", "api")
+        detail = body.get("detail", json.dumps(body))
+        from src.db import get_connection
+        conn = get_connection()
+        c = conn.cursor()
+        c.execute(
+            "INSERT INTO usage_log (username, action, timestamp, risk_score) "
+            "VALUES (?, ?, datetime('now'), ?)",
+            (username, event, body.get("risk_score", 0)),
+        )
+        conn.commit()
+        conn.close()
+        return self._send_json({"status": "logged", "event": event})
+
+    def _handle_health_status(self):
+        from src.db import get_connection
+        checks = {}
+        try:
+            conn = get_connection()
+            conn.execute("SELECT 1")
+            conn.close()
+            checks["database"] = "ok"
+        except Exception as e:
+            checks["database"] = str(e)
+        try:
+            import importlib
+            for mod in ["src.detector", "src.ai_analyzer", "src.jury_engine"]:
+                importlib.import_module(mod)
+            checks["modules"] = "ok"
+        except Exception as e:
+            checks["modules"] = str(e)
+        from src.env import ENV
+        checks["paddle_configured"] = ENV.paddle_configured
+        checks["llm_providers"] = sum(1 for k in ["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GROQ_API_KEY", "OPENROUTER_API_KEY"] if getattr(ENV, k, ""))
+        return self._send_json({
+            "status": "ok" if checks.get("database") == "ok" else "degraded",
+            "service": "phishguard-api-proxy",
+            "version": "3.0.0",
+            "checks": checks,
+        })
 
     def _handle_report_phish(self, body: dict, auth: dict):
         raw_email = body.get("raw_email", "")

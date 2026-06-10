@@ -72,9 +72,10 @@ def verify_reset_token(token: str) -> dict:
 
 def mark_token_used(token: str):
     _init_table()
+    token_hash = _hash_token(token)
     conn = get_connection()
     c = conn.cursor()
-    c.execute("UPDATE password_reset_tokens SET used = 1 WHERE token = ?", (token,))
+    c.execute("UPDATE password_reset_tokens SET used = 1 WHERE token = ?", (token_hash,))
     conn.commit()
     conn.close()
 

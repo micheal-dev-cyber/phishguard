@@ -1,0 +1,12 @@
+# PhishGuard AI — Hugging Face Spaces Configuration
+# https://huggingface.co/spaces
+
+title: PhishGuard AI
+emoji: 🛡
+colorFrom: indigo
+colorTo: blue
+sdk: docker
+pinned: true
+
+# Environment variables (set in HF Spaces > Settings > Secrets)
+# See .env.example for all supported variables

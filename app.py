@@ -138,10 +138,10 @@ format_xai_report = _xai['format_xai_report']
 try:
     from src.paddle_billing import (
         cancel_subscription,
-        generate_checkout_url,
+        generate_checkout_url as paddle_generate_checkout_url,
         get_customer_portal_url,
         get_invoices,
-        get_local_subscription,
+        get_local_subscription as paddle_get_local_subscription,
         get_price_id,
         get_subscription,
         pause_subscription,
@@ -152,14 +152,35 @@ try:
     from src.paddle_billing import is_configured as paddle_configured
 except Exception:
     def paddle_configured(): return False
-    def generate_checkout_url(*a, **kw): return None
+    def paddle_generate_checkout_url(*a, **kw): return None
     def verify_transaction(*a, **kw): return None
-    def get_local_subscription(*a, **kw): return None
+    def paddle_get_local_subscription(*a, **kw): return None
     def get_subscription(*a, **kw): return None
     def get_price_id(*a, **kw): return None
     def get_customer_portal_url(*a, **kw): return None
     def get_invoices(*a, **kw): return []
     pause_subscription = cancel_subscription = resume_subscription = update_subscription_plan = lambda *a, **kw: False
+
+# Gumroad billing (new provider)
+try:
+    from src.billing.gumroad import GumroadProvider, is_gumroad_configured
+    from src.billing.service import BillingService
+    from src.billing.config import get_plan, get_yearly_savings_pct, get_all_plans as get_billing_plans
+    _gumroad_provider = GumroadProvider()
+    billing_service = BillingService(_gumroad_provider)
+    def gumroad_configured(): return is_gumroad_configured()
+except Exception:
+    def gumroad_configured(): return False
+    billing_service = None
+    def get_plan(*a, **kw): return None
+    def get_yearly_savings_pct(*a, **kw): return 0
+    def get_billing_plans(): return []
+
+# Determine active billing provider
+def _billing_service():
+    if gumroad_configured():
+        return billing_service
+    return None
 
 # Remaining secondary imports
 _camp = _safe_import('src.campaign_engine', ['create_campaign', 'generate_llm_template', 'get_campaign_results', 'get_campaigns', 'get_templates', 'launch_campaign'])
@@ -566,24 +587,43 @@ if st.session_state.get("show_upgrade") and plan != "enterprise":
             unsafe_allow_html=True
         )
 
-        if not paddle_configured():
+        billing_available = paddle_configured() or gumroad_configured()
+        if not billing_available:
             st.warning(
                 "⚠️ Payment processing is not configured. "
-                "Contact the administrator to set up Paddle."
+                "Contact the administrator to set up billing."
             )
             if st.button("← Back", key="upgrade_back_no"):
                 st.session_state["show_upgrade"] = False
                 st.rerun()
             st.stop()
 
-        cols = st.columns(3)
-        upgrade_plans = [
-            ("starter",  "Starter",  "$29/mo",  ["100 analyses/mo", "VirusTotal scans", "OSINT investigation", "AI security reports", "Email alerts"]),
-            ("business", "Business", "$99/mo",  ["500 analyses/mo", "Everything in Starter", "Priority support", "Team access", "Export + API access"]),
-        ]
-        for i, (pkey, plabel, pprice, pfeatures) in enumerate(upgrade_plans):
+        # Billing cycle toggle
+        billing_cycle = st.session_state.get("billing_cycle", "monthly")
+        col_t1, col_t2, col_t3 = st.columns([1, 1, 1])
+        with col_t2:
+            cycle_opts = ["Monthly", "Yearly"]
+            cycle_idx = 1 if billing_cycle == "yearly" else 0
+            selected = st.segmented_control(
+                "Billing cycle", cycle_opts, default=cycle_opts[cycle_idx],
+                label_visibility="collapsed", key="billing_cycle_toggle",
+            )
+            new_cycle = "yearly" if selected == "Yearly" else "monthly"
+            if new_cycle != billing_cycle:
+                st.session_state["billing_cycle"] = new_cycle
+                st.rerun()
+
+        cols = st.columns(2)
+        from src.billing.config import get_plan as _get_billing_plan, get_yearly_savings_pct as _yearly_savings
+        for i, pkey in enumerate(["starter", "business"]):
             with cols[i]:
+                pcfg = _get_billing_plan(pkey)
+                if not pcfg:
+                    continue
                 featured = pkey == "business"
+                is_yearly = billing_cycle == "yearly"
+                price = f"${pcfg.price_yearly}/yr" if is_yearly else f"${pcfg.price_monthly}/mo"
+                savings = _yearly_savings(pkey)
                 border = "2px solid #3b82f6" if featured else "1px solid rgba(255,255,255,0.1)"
                 bg = "linear-gradient(160deg, #040f24, #071530)" if featured else "#0f172a"
                 st.markdown(
@@ -594,16 +634,20 @@ if st.session_state.get("show_upgrade") and plan != "enterprise":
                        "background:#3b82f6;color:#020818;font-size:10px;font-weight:700;"
                        "padding:4px 16px;border-radius:100px;letter-spacing:0.1em'>"
                        "MOST POPULAR</div>" if featured else "")
+                    + ("<div style='position:absolute;top:-10px;right:20px;"
+                       "background:#22c55e;color:#020818;font-size:10px;font-weight:700;"
+                       "padding:4px 10px;border-radius:100px'>"
+                       f"Save {savings}%</div>" if is_yearly and savings > 0 else "")
                     + "<div style='color:#94a3b8;font-size:0.9rem;font-weight:600;"
-                       "letter-spacing:0.05em;margin-bottom:8px'>" + plabel + "</div>"
+                       "letter-spacing:0.05em;margin-bottom:8px'>" + pcfg.label + "</div>"
                     + "<div style='color:#f0f6ff;font-size:2.4rem;font-weight:800;"
-                       "margin-bottom:4px'>" + pprice + "</div>"
+                       "margin-bottom:4px'>" + price + "</div>"
                     + "<div style='color:#475569;font-size:0.75rem;margin-bottom:20px;"
-                       "font-family:monospace'>per month</div>"
+                       "font-family:monospace'>" + ("per year" if is_yearly else "per month") + "</div>"
                     + "<ul style='list-style:none;padding:0;margin:0 0 24px;text-align:left'>"
                     + "".join("<li style='color:#94a3b8;font-size:0.8rem;padding:4px 0;"
                               "border-bottom:1px solid rgba(255,255,255,0.04)'>→ " + f + "</li>"
-                              for f in pfeatures)
+                              for f in pcfg.features)
                     + "</ul></div>",
                     unsafe_allow_html=True
                 )
@@ -612,11 +656,23 @@ if st.session_state.get("show_upgrade") and plan != "enterprise":
                 if already_on:
                     st.success("✅ Current Plan")
                 else:
-                    if st.button("⬆ Subscribe — " + plabel, key="sub_" + pkey, use_container_width=True, type="primary"):
+                    if st.button("⬆ Subscribe — " + pcfg.label, key="sub_" + pkey + "_" + billing_cycle, use_container_width=True, type="primary"):
                         with st.spinner("Creating checkout session..."):
                             base = ENV.APP_URL or getattr(getattr(st, 'context', None), 'headers', {}).get("Origin", "http://localhost:8501")
                             success_url = base + "/?checkout=completed"
-                            url = generate_checkout_url(username, pkey, success_url=success_url)
+
+                            if gumroad_configured() and billing_service:
+                                from src.billing.models import CheckoutRequest
+                                req = CheckoutRequest(
+                                    username=username,
+                                    plan_name=pkey,
+                                    billing_cycle=billing_cycle,
+                                    success_url=success_url,
+                                )
+                                resp = billing_service.create_checkout(req)
+                                url = resp.url if resp else None
+                            else:
+                                url = paddle_generate_checkout_url(username, pkey, success_url=success_url)
                         if url:
                             st.session_state["checkout_url"] = url
                             st.session_state["checkout_plan"] = pkey
@@ -624,14 +680,15 @@ if st.session_state.get("show_upgrade") and plan != "enterprise":
                         else:
                             st.error("Could not create checkout. Please try again.")
 
-        # If checkout URL is set, show proceed button + success URL guidance
+        # If checkout URL is set, show proceed button
         checkout_url = st.session_state.get("checkout_url")
         if checkout_url:
             cplan = st.session_state["checkout_plan"]
             st.divider()
             st.markdown(f"### 🛒 Ready to subscribe to **{PLANS[cplan]['label']}**")
+            provider_name = "Gumroad" if gumroad_configured() else "Paddle"
             st.info(
-                "You will be redirected to Paddle's secure checkout. "
+                f"You will be redirected to {provider_name}'s secure checkout. "
                 "After payment, you'll be returned here and your plan will upgrade automatically."
             )
             col_pay, col_cancel = st.columns([1, 1])
@@ -1877,8 +1934,21 @@ with billing_tab:
     q = check_quota(username, plan)
 
     # ── Current Plan + Subscription Status Card ───────────────────────────
-    sub = get_local_subscription(username)
+    # Try both old (Paddle) and new (billing service) subscription lookups
+    sub = paddle_get_local_subscription(username)
+    if not sub and billing_service:
+        _bsub = billing_service.get_user_subscription(username)
+        if _bsub:
+            sub = {
+                "subscription_id": _bsub.provider_subscription_id,
+                "plan": _bsub.plan_name,
+                "status": _bsub.status,
+                "billing_cycle": _bsub.billing_cycle,
+                "next_billed_at": _bsub.next_billing_date or "",
+                "billing_provider": _bsub.billing_provider,
+            }
     paddle_avail = paddle_configured()
+    gumroad_avail = gumroad_configured()
 
     status_tag = ""
     status_color = "#22c55e"
@@ -1886,11 +1956,14 @@ with billing_tab:
         s = sub.get("status", "")
         if s == "active":
             status_tag = "🟢 Active"
-        elif s == "paused":
-            status_tag = "⏸ Paused"
-            status_color = "#f59e0b"
         elif s == "cancelled":
             status_tag = "⏹ Cancelled"
+            status_color = "#ef4444"
+        elif s == "expired":
+            status_tag = "⏹ Expired"
+            status_color = "#ef4444"
+        elif s == "refunded":
+            status_tag = "🔴 Refunded"
             status_color = "#ef4444"
         elif s == "past_due":
             status_tag = "🔴 Past Due"
@@ -1899,13 +1972,18 @@ with billing_tab:
             status_tag = s.capitalize()
 
     bar_color = "#3b82f6" if q["pct"] < 70 else "#f59e0b" if q["pct"] < 90 else "#ef4444"
+
+    billing_provider_label = "Gumroad" if gumroad_avail else ("Paddle" if paddle_avail else "")
+
     st.markdown(
         "<div style='background:linear-gradient(135deg,#0f172a,#1a1f2e);"
         "border:1px solid #1e3a5f;border-radius:16px;padding:28px 32px;margin-bottom:20px'>"
         "<div style='display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px'>"
         "<div>"
         "<div style='color:#64748b;font-size:0.7rem;text-transform:uppercase;"
-        "letter-spacing:0.1em;margin-bottom:2px'>Current Plan</div>"
+        "letter-spacing:0.1em;margin-bottom:2px'>Current Plan"
+        + (f" · via {billing_provider_label}" if billing_provider_label else "")
+        + "</div>"
         "<div style='color:#f0f6ff;font-size:2rem;font-weight:800'>"
         + plan_info["label"] + "</div>"
         "<div style='color:#94a3b8;font-size:1rem;margin-top:2px'>"
@@ -1926,6 +2004,7 @@ with billing_tab:
         + "</div></div>"
         + (f"<div style='color:#64748b;font-size:0.75rem;margin-top:12px;border-top:1px solid #1e293b;padding-top:10px'>"
            f"Subscription ID: <code style='color:#94a3b8'>{sub['subscription_id']}</code>"
+           + (f" · Billing cycle: <strong>{sub.get('billing_cycle', 'N/A')}</strong>" if sub.get('billing_cycle') else "")
            + (f" · Next billing: <strong>{sub.get('next_billed_at', 'N/A')}</strong>" if sub.get('next_billed_at') else "")
            + "</div>" if sub and sub.get('subscription_id') else "")
         + "</div>",
@@ -1933,40 +2012,57 @@ with billing_tab:
     )
 
     # ── Subscription Management Actions ───────────────────────────────────
-    if sub and sub.get("subscription_id") and sub["subscription_id"].startswith("sub_"):
+    if sub and sub.get("subscription_id"):
         sub_id = sub["subscription_id"]
         sub_status = sub.get("status", "")
-        remote = get_subscription(sub_id) if paddle_avail else None
-        if remote:
-            sub_status = remote.get("status", sub_status)
 
-        col_m1, col_m2, col_m3, col_m4 = st.columns(4)
-        with col_m1:
-            if sub_status == "active" and st.button("⏸ Pause", key="sub_pause", use_container_width=True):
-                if pause_subscription(sub_id):
-                    st.success("Subscription paused.")
-                    st.rerun()
-                else:
-                    st.error("Failed to pause subscription.")
-        with col_m2:
-            if sub_status == "paused" and st.button("▶ Resume", key="sub_resume", use_container_width=True):
-                if resume_subscription(sub_id):
-                    st.success("Subscription resumed.")
-                    st.rerun()
-                else:
-                    st.error("Failed to resume subscription.")
-        with col_m3:
-            if sub_status not in ("cancelled",) and st.button("⏹ Cancel", key="sub_cancel", use_container_width=True):
-                if cancel_subscription(sub_id):
-                    st.success("Subscription cancelled. You retain access until end of billing period.")
-                    st.rerun()
-                else:
-                    st.error("Failed to cancel subscription.")
-        with col_m4:
-            if paddle_avail and remote and remote.get("customer_id"):
-                portal_url = get_customer_portal_url(remote["customer_id"])
-                if portal_url:
-                    st.link_button("🔧 Manage Billing", portal_url, use_container_width=True)
+        # Gumroad cancellation
+        if gumroad_avail and billing_service and sub.get("billing_provider") in ("gumroad", ""):
+            col_m1, col_m2 = st.columns([1, 1])
+            with col_m1:
+                if sub_status == "active" and st.button("⏹ Cancel Subscription", key="gumroad_cancel", use_container_width=True):
+                    ok = billing_service.cancel_subscription(username)
+                    if ok:
+                        st.success("Subscription cancelled. You retain access until end of billing period.")
+                        st.rerun()
+                    else:
+                        st.error("Failed to cancel. Please contact support.")
+            with col_m2:
+                if st.button("🔧 Manage on Gumroad", use_container_width=True):
+                    st.info("Visit gumroad.com to manage your subscription.")
+        elif paddle_avail:
+            if sub_id.startswith("sub_"):
+                remote = get_subscription(sub_id) if paddle_avail else None
+                if remote:
+                    sub_status = remote.get("status", sub_status)
+
+                col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+                with col_m1:
+                    if sub_status == "active" and st.button("⏸ Pause", key="sub_pause", use_container_width=True):
+                        if pause_subscription(sub_id):
+                            st.success("Subscription paused.")
+                            st.rerun()
+                        else:
+                            st.error("Failed to pause subscription.")
+                with col_m2:
+                    if sub_status == "paused" and st.button("▶ Resume", key="sub_resume", use_container_width=True):
+                        if resume_subscription(sub_id):
+                            st.success("Subscription resumed.")
+                            st.rerun()
+                        else:
+                            st.error("Failed to resume subscription.")
+                with col_m3:
+                    if sub_status not in ("cancelled",) and st.button("⏹ Cancel", key="sub_cancel", use_container_width=True):
+                        if cancel_subscription(sub_id):
+                            st.success("Subscription cancelled. You retain access until end of billing period.")
+                            st.rerun()
+                        else:
+                            st.error("Failed to cancel subscription.")
+                with col_m4:
+                    if paddle_avail and remote and remote.get("customer_id"):
+                        portal_url = get_customer_portal_url(remote["customer_id"])
+                        if portal_url:
+                            st.link_button("🔧 Manage Billing", portal_url, use_container_width=True)
 
         # ── Plan Change ────────────────────────────────────────────────────
         if sub_status == "active":
@@ -2078,16 +2174,19 @@ with billing_tab:
         st.markdown("<div id='upgrade-options'></div>", unsafe_allow_html=True)
 
         # ── Plan comparison table ─────────────────────────────────────────────
-        upgrade_options = [
-            ("starter", "Starter", "$29/mo", "$290/yr",
-             PLANS["starter"]["features"]),
-            ("business", "Business", "$99/mo", "$990/yr",
-             PLANS["business"]["features"]),
-            ("consultant", "Consultant", "$149/mo", "$1,490/yr",
-             PLANS["consultant"]["features"]),
-            ("enterprise", "Enterprise", "Custom", "Custom",
-             PLANS["enterprise"]["features"]),
-        ]
+        from src.billing.config import get_plan as _cmp_get_plan
+        plan_keys = ["starter", "business", "consultant", "enterprise"]
+        upgrade_options = []
+        for pkey in plan_keys:
+            pcfg = _cmp_get_plan(pkey)
+            if pcfg:
+                upgrade_options.append(
+                    (pkey, pcfg.label,
+                     f"${pcfg.price_monthly}/mo", f"${pcfg.price_yearly}/yr",
+                     pcfg.features)
+                )
+            else:
+                upgrade_options.append((pkey, pkey.capitalize(), "—", "—", []))
 
         annual_pricing = st.checkbox("Show annual pricing (save ~17%)", key="annual_toggle",
                                      help="Annual plans billed yearly at ~10 months' cost")

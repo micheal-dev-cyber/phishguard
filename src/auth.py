@@ -304,7 +304,14 @@ def _login_form():
                     from src.env import ENV
                     from src.smtp_validation import smtp_configured
                     if not smtp_configured():
-                        pass
+                        st.session_state["authenticated"] = True
+                        st.session_state["username"] = tenant["username"]
+                        st.session_state["plan"] = tenant["plan"]
+                        st.session_state["is_admin"] = bool(tenant["is_admin"])
+                        st.session_state["email"] = tenant["email"]
+                        st.session_state["show_onboarding"] = True
+                        st.session_state.pop("show_login", None)
+                        st.rerun()
                     elif not is_email_verified(tenant["username"]):
                         st.warning("Please verify your email before logging in.")
                         col_resend, _ = st.columns([1, 3])
@@ -449,9 +456,19 @@ def _mfa_form():
             from src.mfa import verify_totp
             username = st.session_state.get("mfa_username", "")
             if verify_totp(username, mfa_code):
+                from src.db import get_connection
+                _mfa_conn = get_connection()
+                _mfa_c = _mfa_conn.cursor()
+                _mfa_c.execute("SELECT plan, is_admin, email FROM tenants WHERE username = ?", (username,))
+                _mfa_row = _mfa_c.fetchone()
+                _mfa_conn.close()
                 st.session_state["authenticated"] = True
                 st.session_state["mfa_passed"] = True
                 st.session_state["username"] = username
+                if _mfa_row:
+                    st.session_state["plan"] = _mfa_row[0] or "trial"
+                    st.session_state["is_admin"] = bool(_mfa_row[1])
+                    st.session_state["email"] = _mfa_row[2] or ""
                 st.session_state.pop("mfa_username", None)
                 st.session_state.pop("show_mfa", None)
                 st.rerun()
@@ -565,10 +582,12 @@ def _demo_scan_page():
     with col_signup:
         if st.button("→ Create Free Account", use_container_width=True, type="primary", key="demo_signup"):
             st.session_state["show_signup"] = True
+            st.session_state.pop("show_demo", None)
             st.rerun()
     with col_login:
         if st.button("Sign In", use_container_width=True, key="demo_login"):
             st.session_state["show_login"] = True
+            st.session_state.pop("show_demo", None)
             st.rerun()
 
 
@@ -626,6 +645,7 @@ def _show_demo_results(results):
     with col_c1:
         if st.button("→ Create Free Account", use_container_width=True, type="primary", key="demo_cta_1"):
             st.session_state["show_signup"] = True
+            st.session_state.pop("show_demo", None)
             st.rerun()
     with col_c2:
         if st.button("🔄 Scan Another Email", use_container_width=True, key="demo_scan_another"):
@@ -893,9 +913,6 @@ def _hero_page():
                 "Need more scans or team features? "
                 "<a href='?page=contact' style='color:#3b82f6'>Contact us for custom plans.</a></p></div>",
                 unsafe_allow_html=True)
-                    f"<div style='color:#475569;font-size:12.5px;line-height:1.7'>{desc}</div>"
-                    f"</div>", unsafe_allow_html=True
-                )
 
     st.markdown("<div style='height:50px'></div>", unsafe_allow_html=True)
 
@@ -1211,7 +1228,10 @@ def check_password() -> bool:
             st.toast("Verification link expired or invalid.")
         st.query_params.clear()
 
-    _landing_page()
+    if st.session_state.get("show_demo"):
+        _demo_scan_page()
+    else:
+        _landing_page()
     return False
 
 

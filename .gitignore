@@ -7,6 +7,7 @@ reports/*.pdf
 .DS_Store
 .streamlit/secrets.toml
 data/*.db
+data/test/
 backups/
 .git-rewrite/
 t.py

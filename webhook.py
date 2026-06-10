@@ -24,8 +24,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.resolve()))
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
-logger = logging.getLogger("paddle-webhook")
+logger = logging.getLogger("phishguard-webhook")
 
+# ── Paddle imports ─────────────────────────────────────────────────────────
 try:
     from flask import Flask, jsonify, request
 except ImportError:
@@ -37,6 +38,14 @@ try:
 except ImportError as e:
     print(f"Could not import Paddle billing module: {e}")
     sys.exit(1)
+
+# ── Gumroad imports (optional — gracefully degrade if billing module missing) ─
+try:
+    from src.billing.gumroad import GumroadProvider, is_gumroad_configured
+    from src.billing.service import BillingService
+    _gumroad_available = True
+except ImportError:
+    _gumroad_available = False
 
 try:
     from src.detector import analyze_email
@@ -84,6 +93,30 @@ def webhook():
         return jsonify({"error": str(e)}), 500
 
 
+# ── Gumroad Webhook ──────────────────────────────────────────────────────
+@app.route("/webhooks/gumroad", methods=["POST"])
+def gumroad_webhook():
+    """Receive Gumroad subscription events."""
+    if not _gumroad_available:
+        return jsonify({"error": "Gumroad billing module not available"}), 500
+    if not is_gumroad_configured():
+        return jsonify({"error": "Gumroad not configured"}), 503
+
+    body = request.get_data()
+    headers = {k: v for k, v in request.headers.items()}
+
+    provider = GumroadProvider()
+    service = BillingService(provider)
+    result = service.process_webhook(body, headers)
+
+    logger.info(f"Gumroad webhook result: {result}")
+    return jsonify(result), 200
+
+
+# ── Paddle Webhook (legacy) ──────────────────────────────────────────────
+@app.route("/webhook", methods=["POST"])
+
+
 @app.route("/analyze", methods=["POST"])
 def analyze():
     """API endpoint for the browser extension to scan email/page text."""
@@ -122,9 +155,11 @@ def health():
 @app.route("/", methods=["GET"])
 def index():
     return jsonify({
-        "service": "PhishGuard Paddle Webhook",
+        "service": "PhishGuard Webhook Server",
         "endpoints": {
-            "POST /webhook": "Receive Paddle subscription events",
+            "POST /webhooks/gumroad": "Receive Gumroad subscription events",
+            "POST /webhook": "Receive Paddle subscription events (legacy)",
+            "POST /analyze": "Scan email/page text for threats",
             "POST /analyze": "Scan email/page text for threats",
             "POST /scan-webhook": "Receive forwarded email via webhook, scan, reply with verdict",
             "POST /api/v1/scim/Users": "SCIM 2.0 — Create user",

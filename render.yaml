@@ -5,6 +5,18 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn webhook:app --bind 0.0.0.0:$PORT --workers 1 --timeout 30
     envVars:
+      - key: GUMROAD_ACCESS_TOKEN
+        sync: false
+      - key: GUMROAD_WEBHOOK_SECRET
+        sync: false
+      - key: GUMROAD_STARTER_MONTHLY_PERMALINK
+        sync: false
+      - key: GUMROAD_STARTER_YEARLY_PERMALINK
+        sync: false
+      - key: GUMROAD_BUSINESS_MONTHLY_PERMALINK
+        sync: false
+      - key: GUMROAD_BUSINESS_YEARLY_PERMALINK
+        sync: false
       - key: PADDLE_API_KEY
         sync: false
       - key: PADDLE_CLIENT_TOKEN

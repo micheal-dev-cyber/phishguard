@@ -61,6 +61,6 @@ bcrypt>=4.1.0,<5.0.0
 #   easyocr          → pulls pytorch (~800 MB, build timeout)
 #   pytesseract      → requires system tesseract-ocr binary
 #   lxml             → C extension (safe but heavy; bs4 + html.parser is enough)
-#   gunicorn         → not needed — HF runs `streamlit run` directly
-#   uvicorn          → not needed — this is a Streamlit app, not FastAPI
+flask
+gunicorn
 # ──────────────────────────────────────────────────────────────────────────────
