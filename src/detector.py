@@ -28,7 +28,7 @@ SUSPICIOUS_URL_PATTERNS = [
 
 # Malicious attachment extensions
 MALICIOUS_EXTENSIONS = [
-    '.exe', '.bat', '.cmd', '.scr', '.pif', '.com',
+    '.exe', '.bat', '.cmd', '.scr', '.pif',
     '.vbs', '.vbe', '.js', '.jse', '.wsf', '.wsh',
     '.ps1', '.psm1', '.psd1', '.msi', '.dll', '.reg',
     '.hta', '.cpl', '.inf', '.lnk',
@@ -241,7 +241,7 @@ def analyze_headers(text: str) -> dict:
 
     return {
         "findings": findings,
-        "risk_score": min(risk_score, 40),
+        "risk_score": min(risk_score, 60),
         "emails_found": emails_found,
     }
 
@@ -287,7 +287,7 @@ def analyze_attachments(text: str) -> dict:
 
     return {
         "findings": findings,
-        "risk_score": min(risk_score, 40),
+        "risk_score": min(risk_score, 60),
         "detected_extensions": detected,
         "has_attachment_language": len(attachment_language) > 0,
     }
@@ -355,7 +355,7 @@ def analyze_language(text: str) -> dict:
 
     return {
         "findings": findings,
-        "risk_score": min(risk_score, 40),
+        "risk_score": min(risk_score, 60),
         "urgency_count": len(urgency_hits),
         "fear_count": len(fear_hits),
         "grammar_issues": len(grammar_hits),
@@ -381,9 +381,9 @@ def calculate_risk_score(keyword_hits: int, url_count: int,
     score += min(suspicious_urls * 12, 25)
     score += min(url_count * 2, 8)
     score += 10 if has_attachments else 0
-    score += min(header_score, 20)
-    score += min(attachment_score, 15)
-    score += min(language_score, 15)
+    score += min(header_score, 25)
+    score += min(attachment_score, 20)
+    score += min(language_score, 20)
     score += int(kit_score * 20)
     score = min(score, 100)
 
