@@ -578,10 +578,8 @@ if st.session_state.get("show_upgrade") and plan != "enterprise":
 
         cols = st.columns(3)
         upgrade_plans = [
-            ("starter",    "Starter",     "$29/mo",  ["100 analyses/mo", "VirusTotal scans", "OSINT investigation", "AI security reports", "Email alerts"]),
-            ("business",   "Business",    "$99/mo",  ["500 analyses/mo", "Everything in Starter", "Priority support", "Team access", "Export + API access"]),
-            ("consultant", "Consultant",  "$149/mo", ["2000 analyses/mo", "Everything in Business", "White-label reports", "SOC dashboard", "All integrations"]),
-            ("enterprise", "Enterprise",  "Custom",  ["Unlimited analyses", "SLA guarantee", "White-label option", "Dedicated support", "Custom integrations"]),
+            ("starter",  "Starter",  "$29/mo",  ["100 analyses/mo", "VirusTotal scans", "OSINT investigation", "AI security reports", "Email alerts"]),
+            ("business", "Business", "$99/mo",  ["500 analyses/mo", "Everything in Starter", "Priority support", "Team access", "Export + API access"]),
         ]
         for i, (pkey, plabel, pprice, pfeatures) in enumerate(upgrade_plans):
             with cols[i]:
@@ -613,8 +611,6 @@ if st.session_state.get("show_upgrade") and plan != "enterprise":
                 already_on = plan == pkey
                 if already_on:
                     st.success("✅ Current Plan")
-                elif pkey == "enterprise":
-                    st.info("Contact sales")
                 else:
                     if st.button("⬆ Subscribe — " + plabel, key="sub_" + pkey, use_container_width=True, type="primary"):
                         with st.spinner("Creating checkout session..."):
