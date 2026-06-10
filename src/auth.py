@@ -652,7 +652,7 @@ def _hero_page():
                 "letter-spacing:.15em;text-transform:uppercase;"
                 "background:rgba(37,99,235,0.1);border:1px solid rgba(59,130,246,0.25);"
                 "border-radius:100px;padding:6px 16px;display:inline-block;"
-                "margin-bottom:20px'>⬡ AI-Powered Phishing Defense Platform</span>",
+                 "margin-bottom:20px'>⬡ Phishing Email Analyzer</span>",
                 unsafe_allow_html=True)
 
     st.markdown("<h1 style='font-size:clamp(2rem,4vw,3.5rem);font-weight:800;"
@@ -668,7 +668,7 @@ def _hero_page():
                 "line-height:1.7;font-size:14px'>"
                 "PhishGuard analyzes emails in seconds — detecting malicious URLs, "
                 "spoofed headers, and social engineering with multi-engine AI. "
-                "Trusted by security teams worldwide.</p>",
+                 "Built for teams that need fast, accurate email analysis.</p>",
                 unsafe_allow_html=True)
 
     col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 1])
@@ -783,7 +783,7 @@ def _hero_page():
         ("🔍", "AI Threat Detection",
          "Multi-layer analysis combining keyword heuristics, URL pattern matching, header forensics and social engineering detection."),
         ("🌐", "VirusTotal Integration",
-         "Every URL cross-referenced against 90+ security vendors in real-time. Malicious links flagged instantly."),
+         "When configured, URLs are checked against VirusTotal's threat database. Threat status is displayed per URL."),
         ("🔎", "OSINT Engine",
          "Domain age, registrar, geolocation, WHOIS and infrastructure risk scoring — automatic for every suspicious sender."),
         ("📊", "Risk Scoring",
@@ -926,11 +926,11 @@ def _hero_page():
          "Claude AI for plain-English threat narratives, and IMAP inbox scanning for Gmail, Outlook, and any "
          "standard email provider."),
         ("How accurate is the detection?",
-         "PhishGuard achieves a 99%+ detection rate across our test corpus of 10,000+ known phishing emails, "
-         "with a false-positive rate under 0.5%. Multi-engine correlation dramatically reduces noise."),
+         "Detection quality varies by email type. Our benchmark suite covers 5 phishing and 5 legitimate scenarios "
+         "and we publish results transparently. We recommend testing with your own known samples."),
         ("Do you offer team or enterprise plans?",
-         "Yes. Business plans support team access (3 seats), and Enterprise plans include unlimited analyses, SLA guarantees, "
-         "white-label options, and custom integrations. Contact us for a demo."),
+         "Yes. Business plans support team access (3 seats). For larger teams or custom requirements, "
+         "contact us and we'll work out a plan that fits your needs."),
     ]
     for question, answer in faqs:
         with st.expander(f"▸ {question}", expanded=False):
@@ -1073,7 +1073,7 @@ def _security_page():
     st.markdown("""**1. Encryption**
 All data in transit is encrypted using TLS 1.3. Data at rest is encrypted using AES-256. We enforce HTTPS across all endpoints including our API and webhook endpoints.""")
     st.markdown("""**2. Vulnerability Management**
-We conduct quarterly penetration tests via third-party security firms. Critical vulnerabilities are patched within 24 hours of confirmation. We maintain a responsible disclosure program for security researchers.""")
+We follow industry-standard security practices and promptly patch confirmed vulnerabilities. We maintain a responsible disclosure program for security researchers.""")
     st.markdown("""**3. Access Control**
 Production access is restricted to authorized personnel with multi-factor authentication. All access is logged and audited monthly. We follow the principle of least privilege across all systems.""")
     st.markdown("""**4. Data Processing**
@@ -1083,7 +1083,7 @@ We use Groq AI API for generating security narrative reports. All subprocessors 
     st.markdown("""**6. Incident Response**
 We have a documented incident response plan covering detection, containment, eradication, recovery, and post-mortem. Security incidents are disclosed to affected users within 72 hours of confirmation.""")
     st.markdown("""**7. Compliance**
-PhishGuard AI follows SOC 2 Type II control objectives and GDPR requirements. For compliance inquiries: [security@phishguard.ai](mailto:security@phishguard.ai)""")
+PhishGuard AI follows GDPR requirements. Contact us for our security questionnaire. For compliance inquiries: [security@phishguard.ai](mailto:security@phishguard.ai)""")
     st.markdown("""**8. Bug Bounty**
 We welcome responsible disclosure of security vulnerabilities. Report findings to [security@phishguard.ai](mailto:security@phishguard.ai). We commit to prompt validation and remediation.""")
     if st.button("← Back to home", use_container_width=True, key="security_back"):

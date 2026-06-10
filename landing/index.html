@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PhishGuard AI — Phishing Protection for Small Business</title>
+  <meta name="description" content="AI-powered phishing detection for small and medium businesses. Paste any email, get an instant threat analysis. Free tier available.">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background: #020818; color: #e2e8f0; line-height: 1.6; }
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+    nav { display: flex; align-items: center; justify-content: space-between; padding: 20px 24px; max-width: 1100px; margin: 0 auto; }
+    .logo { font-size: 1.3rem; font-weight: 800; color: #f0f6ff; display: flex; align-items: center; gap: 8px; }
+    .logo span { color: #3b82f6; }
+    .nav-links { display: flex; gap: 24px; align-items: center; }
+    .nav-links a { color: #94a3b8; text-decoration: none; font-size: 14px; font-weight: 500; transition: color .2s; }
+    .nav-links a:hover { color: #f0f6ff; }
+    .btn { display: inline-flex; align-items: center; gap: 6px; padding: 10px 24px; border-radius: 10px; font-weight: 700; font-size: 14px; text-decoration: none; transition: all .2s; cursor: pointer; border: none; }
+    .btn-primary { background: #3b82f6; color: #fff; }
+    .btn-primary:hover { background: #2563eb; transform: translateY(-1px); box-shadow: 0 8px 30px rgba(37,99,235,.25); }
+    .btn-secondary { background: rgba(255,255,255,.05); color: #e2e8f0; border: 1px solid rgba(255,255,255,.1); }
+    .btn-secondary:hover { background: rgba(255,255,255,.1); border-color: rgba(255,255,255,.2); }
+    .btn-lg { padding: 14px 32px; font-size: 16px; }
+    .hero { padding: 80px 0 60px; text-align: center; position: relative; overflow: hidden; }
+    .hero-grid { display: none; position: absolute; inset: 0; background-image: linear-gradient(rgba(37,99,235,.06) 1px, transparent 1px), linear-gradient(90deg,rgba(37,99,235,.06) 1px, transparent 1px); background-size: 60px 60px; mask-image: radial-gradient(ellipse 80% 80% at 50% 50%, black 20%, transparent 100%); }
+    .hero-badge { display: inline-flex; align-items: center; gap: 6px; background: rgba(37,99,235,.1); border: 1px solid rgba(59,130,246,.25); border-radius: 100px; padding: 6px 16px; font-size: 11px; font-weight: 500; color: #3b82f6; letter-spacing: .15em; text-transform: uppercase; margin-bottom: 20px; }
+    .hero h1 { font-size: clamp(2rem, 4vw, 3.2rem); font-weight: 800; line-height: 1.15; color: #f0f6ff; max-width: 700px; margin: 0 auto 16px; letter-spacing: -.02em; }
+    .hero h1 span { background: linear-gradient(135deg, #3b82f6, #60a5fa, #93c5fd); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    .hero p { color: #64748b; max-width: 520px; margin: 0 auto 32px; font-size: 15px; }
+    .hero-ctas { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+    .trust-bar { text-align: center; padding: 16px 0 40px; }
+    .trust-bar span { color: #475569; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; }
+    .trust-bar .stats { display: flex; justify-content: center; gap: 28px; margin-top: 12px; flex-wrap: wrap; }
+    .trust-bar .stats span { color: #334155; font-size: 12px; font-weight: 600; text-transform: none; letter-spacing: 0; }
+    .demo-section { background: linear-gradient(145deg,#0a0f1a,#0f1a2a); border: 1px solid rgba(59,130,246,.2); border-radius: 20px; padding: 40px 32px; text-align: center; margin: 0 0 60px; }
+    .demo-section h2 { font-size: clamp(1.3rem,2.5vw,1.8rem); font-weight: 800; color: #f0f6ff; margin: 12px 0 6px; }
+    .demo-section p { color: #64748b; font-size: 13px; max-width: 450px; margin: 0 auto 24px; }
+    .demo-preview { background: #111827; border: 1px solid #1e293b; border-radius: 12px; padding: 20px; text-align: left; max-width: 600px; margin: 0 auto; }
+    .demo-preview .email-header { display: flex; justify-content: space-between; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid #1e293b; }
+    .demo-preview .email-header div { font-size: 12px; color: #94a3b8; }
+    .demo-preview .email-header .subject { color: #f0f6ff; font-weight: 600; }
+    .demo-preview .result { display: flex; align-items: center; gap: 12px; background: rgba(239,68,68,.08); border: 1px solid rgba(239,68,68,.25); border-radius: 8px; padding: 12px 16px; margin-top: 12px; }
+    .demo-preview .result .score { font-size: 1.5rem; font-weight: 800; color: #ef4444; }
+    .demo-preview .result .label { font-size: 11px; color: #94a3b8; }
+    .demo-preview .result .badge { background: rgba(239,68,68,.15); color: #ef4444; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 100px; }
+    .how-it-works { padding: 40px 0; }
+    .how-it-works .label { text-align: center; color: #3b82f6; font-size: 11px; letter-spacing: .15em; text-transform: uppercase; margin-bottom: 8px; }
+    .how-it-works h2 { text-align: center; font-size: clamp(1.3rem,2.5vw,1.8rem); font-weight: 800; color: #f0f6ff; margin-bottom: 36px; }
+    .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+    .step { background: rgba(255,255,255,.025); border: 1px solid rgba(255,255,255,.06); border-radius: 16px; padding: 28px; text-align: center; transition: all .25s; }
+    .step:hover { border-color: rgba(59,130,246,.25); transform: translateY(-2px); }
+    .step .num { color: #3b82f6; font-size: 11px; font-weight: 700; letter-spacing: .1em; margin-bottom: 8px; }
+    .step .icon { font-size: 2.2rem; margin-bottom: 10px; }
+    .step h3 { font-size: 1rem; font-weight: 700; color: #e2e8f0; margin-bottom: 8px; }
+    .step p { color: #475569; font-size: 12.5px; line-height: 1.7; }
+    .features { padding: 40px 0; }
+    .features .label { text-align: center; color: #3b82f6; font-size: 11px; letter-spacing: .15em; text-transform: uppercase; margin-bottom: 8px; }
+    .features h2 { text-align: center; font-size: clamp(1.3rem,2.5vw,1.8rem); font-weight: 800; color: #f0f6ff; margin-bottom: 36px; }
+    .feature-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+    .feature-card { background: rgba(255,255,255,.025); border: 1px solid rgba(255,255,255,.06); border-radius: 16px; padding: 28px; transition: all .25s; }
+    .feature-card:hover { border-color: rgba(59,130,246,.25); transform: translateY(-2px); }
+    .feature-card .icon { font-size: 2rem; margin-bottom: 12px; }
+    .feature-card h3 { font-size: 1rem; font-weight: 700; color: #e2e8f0; margin-bottom: 8px; }
+    .feature-card p { color: #475569; font-size: 12.5px; line-height: 1.7; }
+    .pricing { padding: 40px 0; }
+    .pricing .label { text-align: center; color: #3b82f6; font-size: 11px; letter-spacing: .15em; text-transform: uppercase; margin-bottom: 8px; }
+    .pricing h2 { text-align: center; font-size: clamp(1.3rem,2.5vw,1.8rem); font-weight: 800; color: #f0f6ff; margin-bottom: 8px; }
+    .pricing .subtitle { text-align: center; color: #64748b; font-size: 13px; margin-bottom: 36px; }
+    .plan-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+    .plan { background: #040f24; border: 1px solid rgba(255,255,255,.07); border-radius: 20px; padding: 32px 24px; position: relative; transition: transform .2s; }
+    .plan:hover { transform: translateY(-3px); }
+    .plan.featured { border-color: rgba(59,130,246,.5); background: linear-gradient(160deg,#040f24,#071530); box-shadow: 0 0 60px rgba(37,99,235,.15); }
+    .plan .badge { position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background: #3b82f6; color: #020818; font-size: 10px; font-weight: 700; padding: 4px 14px; border-radius: 100px; letter-spacing: .12em; text-transform: uppercase; }
+    .plan .name { font-size: .9rem; font-weight: 700; color: #94a3b8; margin-bottom: 10px; letter-spacing: .08em; }
+    .plan .price { font-size: 2.4rem; font-weight: 800; color: #f0f6ff; line-height: 1; margin-bottom: 2px; }
+    .plan .period { color: #475569; font-size: 12px; margin-bottom: 20px; }
+    .plan ul { list-style: none; padding: 0; }
+    .plan li { color: #64748b; font-size: 12.5px; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,.04); }
+    .plan li::before { content: "→ "; }
+    .plan .btn { width: 100%; justify-content: center; margin-top: 20px; }
+    .faq { padding: 40px 0; max-width: 700px; margin: 0 auto; }
+    .faq .label { text-align: center; color: #3b82f6; font-size: 11px; letter-spacing: .15em; text-transform: uppercase; margin-bottom: 24px; }
+    details { background: rgba(255,255,255,.02); border: 1px solid rgba(255,255,255,.05); border-radius: 12px; padding: 16px 20px; margin-bottom: 10px; }
+    details summary { color: #e2e8f0; font-weight: 600; font-size: 14px; cursor: pointer; }
+    details p { color: #64748b; font-size: 13px; margin-top: 12px; line-height: 1.7; }
+    .trust-section { background: linear-gradient(145deg,#0a0f1a,#0f1a2a); border: 1px solid #1e293b; border-radius: 20px; padding: 36px 28px; margin: 40px 0; }
+    .trust-section .label { text-align: center; color: #3b82f6; font-size: 11px; letter-spacing: .15em; text-transform: uppercase; margin-bottom: 8px; }
+    .trust-section h2 { text-align: center; font-size: clamp(1.3rem,2.5vw,1.8rem); font-weight: 800; color: #f0f6ff; margin-bottom: 24px; }
+    .trust-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
+    .trust-item { background: rgba(255,255,255,.02); border: 1px solid rgba(255,255,255,.05); border-radius: 12px; padding: 18px; }
+    .trust-item .header { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+    .trust-item .header .ti { font-size: 1.3rem; }
+    .trust-item .header h4 { color: #e2e8f0; font-weight: 700; font-size: 13px; }
+    .trust-item p { color: #64748b; font-size: 12px; line-height: 1.6; margin: 0; }
+    .cta-section { text-align: center; padding: 60px 0; }
+    .cta-section h2 { font-size: clamp(1.5rem,3vw,2.2rem); font-weight: 800; color: #f0f6ff; margin-bottom: 12px; }
+    .cta-section p { color: #64748b; font-size: 14px; max-width: 450px; margin: 0 auto 28px; }
+    footer { text-align: center; padding: 40px 0; border-top: 1px solid #1e293b; color: #475569; font-size: 12px; }
+    footer a { color: #3b82f6; text-decoration: none; }
+    @media (max-width: 640px) { .hero { padding: 40px 0; } .nav-links { display: none; } }
+  </style>
+</head>
+<body>
+  <nav>
+    <div class="logo">🛡 <span>PhishGuard</span> AI</div>
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#pricing">Pricing</a>
+      <a href="#faq">FAQ</a>
+      <a href="https://huggingface.co/spaces/phishguard" class="btn btn-primary" target="_blank">Try Demo</a>
+    </div>
+  </nav>
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="hero-grid"></div>
+    <div class="container">
+      <div class="hero-badge">⬡ Phishing Email Detection</div>
+      <h1>Paste a suspicious email. <span>Know instantly</span> if it's a phishing attack.</h1>
+      <p>PhishGuard analyzes emails in seconds — detecting malicious URLs, spoofed headers, and social engineering. No installation, no configuration. Just paste and scan.</p>
+      <div class="hero-ctas">
+        <a href="https://huggingface.co/spaces/phishguard" class="btn btn-primary btn-lg">Try Demo — No Account Needed</a>
+        <a href="#pricing" class="btn btn-secondary btn-lg">See Pricing</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- DEMO PREVIEW -->
+  <div class="container">
+    <div class="demo-section">
+      <span style="font-size:2.5rem">🔬</span>
+      <h2>See it in action</h2>
+      <p>No signup required. Paste any email and see exactly what PhishGuard detects.</p>
+      <div class="demo-preview" style="border:1px dashed rgba(245,158,11,0.3)">
+        <div style="background:rgba(245,158,11,0.08);border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:11px;color:#f59e0b;text-align:center">
+          🧪 Example preview — actual results vary by email content
+        </div>
+        <div class="email-header">
+          <div><span class="subject">URGENT: Account Security Alert</span><br>From: "Security Alert" &lt;no-reply@secure-verify2738.xyz&gt;</div>
+          <div style="color:#ef4444;font-size:11px;font-weight:600">⚠ Suspicious</div>
+        </div>
+        <div style="color:#64748b;font-size:12px;line-height:1.7;margin-bottom:12px">
+          Dear Valued Customer,<br><br>
+          We detected unusual activity on your account from an unrecognized device in Russia.<br><br>
+          To prevent account suspension, please verify your identity immediately:<br>
+          <span style="color:#3b82f6">https://secure-verify2738.xyz/account/verify?token=29a8f1b3</span>
+        </div>
+        <div class="result">
+          <div>
+            <div class="score">87<span style="font-size:.8rem;color:#94a3b8">/100</span></div>
+            <div class="label">Risk Score</div>
+          </div>
+          <div>
+            <div class="badge">CRITICAL</div>
+            <div class="label" style="margin-top:2px">Severity</div>
+          </div>
+          <div style="flex:1"></div>
+          <div style="text-align:right">
+            <div style="color:#f0f6ff;font-weight:600;font-size:13px">3 URLs Found</div>
+            <div style="color:#94a3b8;font-size:11px">2 suspicious · 8 keyword hits</div>
+          </div>
+        </div>
+      </div>
+      <br>
+      <a href="https://huggingface.co/spaces/phishguard" class="btn btn-primary">🚀 Run a Live Demo</a>
+    </div>
+  </div>
+
+  <!-- HOW IT WORKS -->
+  <section class="how-it-works" id="how-it-works">
+    <div class="container">
+      <div class="label">// How It Works</div>
+      <h2>Three seconds. Three steps. Complete protection.</h2>
+      <div class="steps">
+        <div class="step">
+          <div class="num">01</div>
+          <div class="icon">📋</div>
+          <h3>Paste the Email</h3>
+          <p>Copy the suspicious email — headers, body, and all — into PhishGuard. No configuration needed.</p>
+        </div>
+        <div class="step">
+          <div class="num">02</div>
+          <div class="icon">🤖</div>
+          <h3>AI Multi-Engine Scan</h3>
+          <p>Six engines analyze the email in parallel: heuristics, URL patterns, header forensics, and social engineering detection.</p>
+        </div>
+        <div class="step">
+          <div class="num">03</div>
+          <div class="icon">📊</div>
+          <h3>Get Your Report</h3>
+          <p>Clear risk score, severity classification, threat indicators, and recommended actions — all in under 3 seconds.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FEATURES -->
+  <section class="features" id="features">
+    <div class="container">
+      <div class="label">// Capabilities</div>
+      <h2>Everything you need to defend your inbox</h2>
+      <div class="feature-grid">
+        <div class="feature-card">
+          <div class="icon">🔍</div>
+          <h3>AI Threat Detection</h3>
+          <p>Multi-layer analysis combining keyword heuristics, URL pattern matching, header forensics, and social engineering detection.</p>
+        </div>
+        <div class="feature-card">
+          <div class="icon">🕵️</div>
+          <h3>URL & Domain Analysis</h3>
+          <p>Every URL checked against known phishing patterns. Suspicious domains flagged with WHOIS, age, and registrar data.</p>
+        </div>
+        <div class="feature-card">
+          <div class="icon">📊</div>
+          <h3>Risk Scoring</h3>
+          <p>Weighted 0-100 risk score with severity classification. Visual gauge, keyword breakdown, and verdict in one view.</p>
+        </div>
+        <div class="feature-card">
+          <div class="icon">🧠</div>
+          <h3>Social Engineering Analysis</h3>
+          <p>Detects urgency language, authority exploitation, and psychological manipulation tactics used in modern phishing.</p>
+        </div>
+        <div class="feature-card">
+          <div class="icon">📄</div>
+          <h3>PDF Security Reports</h3>
+          <p>One-click export of full threat reports — shareable with IT teams, management, or compliance auditors.</p>
+        </div>
+        <div class="feature-card">
+          <div class="icon">🔒</div>
+          <h3>No Data Stored</h3>
+          <p>Demo scans are ephemeral — no data is stored or shared. Your privacy is built into the product.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PRICING -->
+  <section class="pricing" id="pricing">
+    <div class="container">
+      <div class="label">// Pricing</div>
+      <h2>Simple, transparent pricing</h2>
+      <p class="subtitle">Start free. Upgrade when you need more scans.</p>
+      <div class="plan-grid">
+        <div class="plan">
+          <div class="name">FREE</div>
+          <div class="price">$0</div>
+          <div class="period">forever</div>
+          <ul>
+            <li>10 analyses / month</li>
+            <li>URL scanning</li>
+            <li>Risk scoring</li>
+            <li>PDF export</li>
+            <li>Community support</li>
+          </ul>
+          <a href="https://huggingface.co/spaces/phishguard" class="btn btn-secondary">Get Started</a>
+        </div>
+        <div class="plan featured">
+          <div class="badge">Most Popular</div>
+          <div class="name">STARTER</div>
+          <div class="price">$29</div>
+          <div class="period">/ month</div>
+          <ul>
+            <li>100 analyses / month</li>
+            <li>VirusTotal integration</li>
+            <li>OSINT investigation</li>
+            <li>AI security reports</li>
+            <li>Email support</li>
+          </ul>
+          <a href="https://huggingface.co/spaces/phishguard" class="btn btn-primary">Subscribe</a>
+        </div>
+        <div class="plan">
+          <div class="name">BUSINESS</div>
+          <div class="price">$99</div>
+          <div class="period">/ month</div>
+          <ul>
+            <li>500 analyses / month</li>
+            <li>Everything in Starter</li>
+            <li>Priority support</li>
+            <li>Team access (3 seats)</li>
+            <li>API access</li>
+          </ul>
+          <a href="https://huggingface.co/spaces/phishguard" class="btn btn-secondary">Subscribe</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section class="faq" id="faq">
+    <div class="container">
+      <div class="label">// FAQ</div>
+      <details open>
+        <summary>Do I need to install anything?</summary>
+        <p>No. PhishGuard runs entirely in your browser. Paste an email, get results. No downloads, no plugins, no configuration.</p>
+      </details>
+      <details>
+        <summary>How accurate is the detection?</summary>
+        <p>PhishGuard uses a multi-engine approach combining heuristic analysis, URL pattern matching, header forensics, and social engineering detection. Our detection accuracy is competitive with commercial solutions for common phishing tactics.</p>
+      </details>
+      <details>
+        <summary>Is my data secure?</summary>
+        <p>Demo scans are ephemeral — no data is stored server-side. For registered users, analysis data is encrypted at rest with AES-256. We never sell or share your data.</p>
+      </details>
+      <details>
+        <summary>Can I scan my Microsoft 365 or Gmail inbox?</summary>
+        <p>Yes. PhishGuard supports IMAP-based inbox scanning for Gmail (app passwords) and Microsoft 365. OAuth-based Microsoft Graph integration is coming soon for a zero-config experience.</p>
+      </details>
+      <details>
+        <summary>Can I cancel my subscription?</summary>
+        <p>Yes. You can cancel anytime from your billing dashboard. There are no long-term contracts or cancellation fees.</p>
+      </details>
+    </div>
+  </section>
+
+  <!-- TRUST & SECURITY -->
+  <div class="container">
+    <div class="trust-section">
+      <div class="label">// Security & Trust</div>
+      <h2>Built for security, by security engineers</h2>
+      <div class="trust-grid">
+        <div class="trust-item">
+          <div class="header"><span class="ti">🔒</span><h4>256-bit Encryption</h4></div>
+          <p>All data encrypted at rest and in transit with AES-256 and TLS 1.3.</p>
+        </div>
+        <div class="trust-item">
+          <div class="header"><span class="ti">🔍</span><h4>Open Source</h4></div>
+          <p>Our core detection engine is open source. Transparent, auditable, and community-reviewed.</p>
+        </div>
+        <div class="trust-item">
+          <div class="header"><span class="ti">🌍</span><h4>GDPR Compliant</h4></div>
+          <p>Data processing compliant with GDPR. Right to erasure included.</p>
+        </div>
+        <div class="trust-item">
+          <div class="header"><span class="ti">📋</span><h4>Audit Trail</h4></div>
+          <p>Every analysis and action logged for compliance and incident response.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CTA -->
+  <section class="cta-section">
+    <div class="container">
+      <h2>Try PhishGuard Free</h2>
+      <p>No credit card required. No installation. Paste an email and see the results in 3 seconds.</p>
+      <a href="https://huggingface.co/spaces/phishguard" class="btn btn-primary btn-lg">🚀 Try Demo Now</a>
+    </div>
+  </section>
+
+  <footer>
+    <div class="container">
+      <p>🛡 PhishGuard AI — Open source phishing detection for small and medium businesses.</p>
+      <p style="margin-top:8px"><a href="https://github.com/phishguard">GitHub</a> · <a href="#">Privacy Policy</a> · <a href="#">Terms of Service</a></p>
+    </div>
+  </footer>
+</body>
+</html>
