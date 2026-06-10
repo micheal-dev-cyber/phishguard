@@ -5,8 +5,8 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse
 
 FLASK_PORT = 8080
-STREAMLIT_PORT = 8501
-PROXY_PORT = int(os.environ.get("PORT", 7860))
+STREAMLIT_PORT = 8502
+PROXY_PORT = int(os.environ.get("PORT", 8501))
 
 
 class ProxyHandler(BaseHTTPRequestHandler):
