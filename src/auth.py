@@ -109,8 +109,21 @@ def _landing_page():
 
 
 def _signup_form():
-    # If signup just completed, show clean success page instead of form
+    # ── Entry button shown after signup ────────────────────────────────────
     if st.session_state.get("_signup_done"):
+        # Render the button BEFORE any success content so we can capture clicks
+        # before committing heavy page DOM.
+        btn = st.button("→ Start Using PhishGuard", use_container_width=True, type="primary",
+                        key="signup_entry")
+        if btn:
+            st.session_state["authenticated"] = True
+            st.session_state.pop("_signup_done", None)
+            st.session_state.pop("show_signup", None)
+        # If authenticated (either from button click above or from a prior run),
+        # skip success content — let check_password() catch it and return True.
+        if st.session_state.get("authenticated"):
+            return
+        # First visit to success page: show full success content
         st.markdown("<div style='padding:60px 0'>", unsafe_allow_html=True)
         st.markdown("<div class='auth-card' style='text-align:center'>", unsafe_allow_html=True)
         st.markdown("<div style='font-size:3rem;margin-bottom:16px'>🎉</div>", unsafe_allow_html=True)
@@ -118,12 +131,6 @@ def _signup_form():
                     "margin-bottom:4px'>Welcome to PhishGuard!</h2>", unsafe_allow_html=True)
         st.markdown("<p style='color:#94a3b8;font-size:14px;margin-bottom:24px'>"
                     "Your account is ready. Let's run your first scan.</p>", unsafe_allow_html=True)
-        if st.button("→ Start Using PhishGuard", use_container_width=True, type="primary"):
-            st.session_state["authenticated"] = True
-            st.session_state.pop("_signup_done", None)
-            st.session_state.pop("show_signup", None)
-            st.rerun()
-            st.stop()
         st.markdown("</div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
         return
@@ -1346,6 +1353,10 @@ def check_password() -> bool:
         _demo_scan_page()
     else:
         _landing_page()
+    # Catch signup-just-completed: _landing_page → _signup_form → button handler
+    # sets authenticated=True on this same run. Return True so app.py renders the app.
+    if st.session_state.get("authenticated"):
+        return True
     return False
 
 
