@@ -146,7 +146,14 @@ def _signup_form():
             if not success:
                 st.error("An account with that email or username already exists. Try logging in instead.")
             else:
-                st.success("🎉 Account created!")
+                # Set session state FIRST so it survives any downstream failures
+                st.session_state["authenticated"] = True
+                st.session_state["username"] = auto_username
+                st.session_state["plan"] = "trial"
+                st.session_state["is_admin"] = False
+                st.session_state["email"] = new_email.strip()
+                st.session_state.pop("show_signup", None)
+                # Side-effects (email, analytics) — failures don't block login
                 try:
                     from src.analytics import track_signup
                     track_signup(auto_username, email=new_email.strip(), plan="trial")
@@ -170,17 +177,11 @@ def _signup_form():
                     send_welcome_email(new_email.strip(), auto_username, _wq, ENV.APP_URL or "https://phishguard.ai")
                 except Exception:
                     pass
-                # Auto-login after signup — force clean page reload
-                st.session_state["authenticated"] = True
-                st.session_state["username"] = auto_username
-                st.session_state["plan"] = "trial"
-                st.session_state["is_admin"] = False
-                st.session_state["email"] = new_email.strip()
-                st.session_state.pop("show_signup", None)
-                st.markdown(
-                    '<script>window.location.href = window.location.href.split("?")[0];</script>',
-                    unsafe_allow_html=True
-                )
+                try:
+                    st.toast("🎉 Account created! Welcome to PhishGuard.")
+                except Exception:
+                    pass
+                st.rerun()
                 st.stop()
 
     st.markdown("<br><div style='text-align:center'>"
