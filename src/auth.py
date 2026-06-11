@@ -170,14 +170,18 @@ def _signup_form():
                     send_welcome_email(new_email.strip(), auto_username, _wq, ENV.APP_URL or "https://phishguard.ai")
                 except Exception:
                     pass
-                # Auto-login after signup
+                # Auto-login after signup — force clean page reload
                 st.session_state["authenticated"] = True
                 st.session_state["username"] = auto_username
                 st.session_state["plan"] = "trial"
                 st.session_state["is_admin"] = False
                 st.session_state["email"] = new_email.strip()
                 st.session_state.pop("show_signup", None)
-                st.rerun()
+                st.markdown(
+                    '<script>window.location.href = window.location.href.split("?")[0];</script>',
+                    unsafe_allow_html=True
+                )
+                st.stop()
 
     st.markdown("<br><div style='text-align:center'>"
                 "<span style='color:#475569;font-size:13px'>Already have an account? </span>",
@@ -652,52 +656,118 @@ def _show_demo_results(results):
 
 
 def _hero_page():
-    # ═════════════════════════════════════════════════════════════════════
-    # HERO — 5-second value proposition
-    # ═════════════════════════════════════════════════════════════════════
-    st.markdown("<div style='padding:70px 20px 40px;text-align:center;"
-                "background:#020818;position:relative;overflow:hidden'>"
-                "<div style='position:absolute;inset:0;background-image:"
-                "linear-gradient(rgba(37,99,235,0.06) 1px,transparent 1px),"
-                "linear-gradient(90deg,rgba(37,99,235,0.06) 1px,transparent 1px);"
-                "background-size:60px 60px;"
-                "mask-image:radial-gradient(ellipse 80% 80% at 50% 50%,black 20%,transparent 100%)'>"
-                "</div>", unsafe_allow_html=True)
+    # ── Detect outreach traffic (from email links with ?ref=outreach) ──
+    outreach_mode = st.query_params.get("ref", "") == "outreach"
+    if outreach_mode and not st.session_state.get("_outreach_tracked", False):
+        st.session_state["_outreach_tracked"] = True
+        try:
+            from src.analytics import track_event
+            track_event("outreach_visit")
+        except Exception:
+            pass
 
-    st.markdown("<span style='color:#3b82f6;font-size:11px;font-weight:500;"
-                "letter-spacing:.15em;text-transform:uppercase;"
-                "background:rgba(37,99,235,0.1);border:1px solid rgba(59,130,246,0.25);"
-                "border-radius:100px;padding:6px 16px;display:inline-block;"
-                 "margin-bottom:20px'>⬡ Phishing Email Analyzer</span>",
-                unsafe_allow_html=True)
+    if outreach_mode:
+        # ═════════════════════════════════════════════════════════════════
+        # OUTREACH HERO — matches email promise (M365 risk review)
+        # ═════════════════════════════════════════════════════════════════
+        st.markdown("<div style='padding:70px 20px 40px;text-align:center;"
+                    "background:#020818;position:relative;overflow:hidden'>"
+                    "<div style='position:absolute;inset:0;background-image:"
+                    "linear-gradient(rgba(34,197,94,0.06) 1px,transparent 1px),"
+                    "linear-gradient(90deg,rgba(34,197,94,0.06) 1px,transparent 1px);"
+                    "background-size:60px 60px;"
+                    "mask-image:radial-gradient(ellipse 80% 80% at 50% 50%,black 20%,transparent 100%)'>"
+                    "</div>", unsafe_allow_html=True)
 
-    st.markdown("<h1 style='font-size:clamp(2rem,4vw,3.5rem);font-weight:800;"
-                "line-height:1.1;color:#f0f6ff;margin:0 auto 14px;"
-                "max-width:700px;letter-spacing:-.02em'>"
-                "Paste any email. Instantly know<br>"
-                "<span style='background:linear-gradient(135deg,#3b82f6,#60a5fa,#93c5fd);"
-                "-webkit-background-clip:text;-webkit-text-fill-color:transparent;"
-                "background-clip:text'>if it's a phishing attack.</span></h1>",
-                unsafe_allow_html=True)
+        st.markdown("<span style='color:#22c55e;font-size:11px;font-weight:500;"
+                    "letter-spacing:.15em;text-transform:uppercase;"
+                    "background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.25);"
+                    "border-radius:100px;padding:6px 16px;display:inline-block;"
+                     "margin-bottom:20px'>⬡ Free Microsoft 365 Risk Review</span>",
+                    unsafe_allow_html=True)
 
-    st.markdown("<p style='color:#64748b;max-width:520px;margin:0 auto 28px;"
-                "line-height:1.7;font-size:14px'>"
-                "PhishGuard analyzes emails in seconds — detecting malicious URLs, "
-                "spoofed headers, and social engineering with multi-engine AI. "
-                 "Built for teams that need fast, accurate email analysis.</p>",
-                unsafe_allow_html=True)
+        st.markdown("<h1 style='font-size:clamp(2rem,4vw,3.5rem);font-weight:800;"
+                    "line-height:1.1;color:#f0f6ff;margin:0 auto 14px;"
+                    "max-width:720px;letter-spacing:-.02em'>"
+                    "See what phishing attacks are slipping past<br>"
+                    "<span style='background:linear-gradient(135deg,#22c55e,#4ade80,#86efac);"
+                    "-webkit-background-clip:text;-webkit-text-fill-color:transparent;"
+                    "background-clip:text'>your Microsoft 365 defenses</span></h1>",
+                    unsafe_allow_html=True)
 
-    col_btn1, col_btn2, col_empty = st.columns([1.2, 1, 1])
-    with col_btn1:
-        if st.button("→ Try It Free — No Credit Card", use_container_width=True, type="primary"):
-            st.session_state["show_signup"] = True
-            st.rerun()
-    with col_btn2:
-        if st.button("🔬 Try Demo Free", use_container_width=True, type="secondary"):
-            st.session_state["show_demo"] = True
-            st.rerun()
+        st.markdown("<p style='color:#64748b;max-width:600px;margin:0 auto 20px;"
+                    "line-height:1.7;font-size:14px'>"
+                    "Microsoft 365's built-in protection catches known threats. PhishGuard catches "
+                    "the AI-generated, socially engineered attacks designed to bypass them. "
+                    "Paste an email from your Outlook or Exchange inbox — see what your current "
+                    "filters missed.</p>",
+                    unsafe_allow_html=True)
 
-    st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown("<div style='display:flex;justify-content:center;gap:16px;"
+                    "flex-wrap:wrap;margin-bottom:20px'>"
+                    "<span style='color:#475569;font-size:12px'>✓ No config changes</span>"
+                    "<span style='color:#475569;font-size:12px'>✓ Works with M365</span>"
+                    "<span style='color:#475569;font-size:12px'>✓ 30-second setup</span>"
+                    "</div>", unsafe_allow_html=True)
+
+        col_btn1, col_btn2, col_empty = st.columns([1.2, 1, 1])
+        with col_btn1:
+            if st.button("→ Start Free M365 Risk Review", use_container_width=True, type="primary"):
+                st.session_state["show_signup"] = True
+                st.rerun()
+        with col_btn2:
+            if st.button("🔬 Analyze an Email", use_container_width=True, type="secondary"):
+                st.session_state["show_demo"] = True
+                st.rerun()
+
+        st.markdown("</div>", unsafe_allow_html=True)
+    else:
+        # ═════════════════════════════════════════════════════════════════
+        # DEFAULT HERO — 5-second value proposition
+        # ═════════════════════════════════════════════════════════════════
+        st.markdown("<div style='padding:70px 20px 40px;text-align:center;"
+                    "background:#020818;position:relative;overflow:hidden'>"
+                    "<div style='position:absolute;inset:0;background-image:"
+                    "linear-gradient(rgba(37,99,235,0.06) 1px,transparent 1px),"
+                    "linear-gradient(90deg,rgba(37,99,235,0.06) 1px,transparent 1px);"
+                    "background-size:60px 60px;"
+                    "mask-image:radial-gradient(ellipse 80% 80% at 50% 50%,black 20%,transparent 100%)'>"
+                    "</div>", unsafe_allow_html=True)
+
+        st.markdown("<span style='color:#3b82f6;font-size:11px;font-weight:500;"
+                    "letter-spacing:.15em;text-transform:uppercase;"
+                    "background:rgba(37,99,235,0.1);border:1px solid rgba(59,130,246,0.25);"
+                    "border-radius:100px;padding:6px 16px;display:inline-block;"
+                     "margin-bottom:20px'>⬡ Phishing Email Analyzer</span>",
+                    unsafe_allow_html=True)
+
+        st.markdown("<h1 style='font-size:clamp(2rem,4vw,3.5rem);font-weight:800;"
+                    "line-height:1.1;color:#f0f6ff;margin:0 auto 14px;"
+                    "max-width:700px;letter-spacing:-.02em'>"
+                    "Paste any email. Instantly know<br>"
+                    "<span style='background:linear-gradient(135deg,#3b82f6,#60a5fa,#93c5fd);"
+                    "-webkit-background-clip:text;-webkit-text-fill-color:transparent;"
+                    "background-clip:text'>if it's a phishing attack.</span></h1>",
+                    unsafe_allow_html=True)
+
+        st.markdown("<p style='color:#64748b;max-width:520px;margin:0 auto 28px;"
+                    "line-height:1.7;font-size:14px'>"
+                    "PhishGuard analyzes emails in seconds — detecting malicious URLs, "
+                    "spoofed headers, and social engineering with multi-engine AI. "
+                     "Built for teams that need fast, accurate email analysis.</p>",
+                    unsafe_allow_html=True)
+
+        col_btn1, col_btn2, col_empty = st.columns([1.2, 1, 1])
+        with col_btn1:
+            if st.button("→ Try It Free — No Credit Card", use_container_width=True, type="primary"):
+                st.session_state["show_signup"] = True
+                st.rerun()
+        with col_btn2:
+            if st.button("🔬 Try Demo Free", use_container_width=True, type="secondary"):
+                st.session_state["show_demo"] = True
+                st.rerun()
+
+        st.markdown("</div>", unsafe_allow_html=True)
 
     # ═════════════════════════════════════════════════════════════════════
     # EMAIL CAPTURE (for retargeting + launch announcements)
