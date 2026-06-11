@@ -109,6 +109,25 @@ def _landing_page():
 
 
 def _signup_form():
+    # If signup just completed, show clean success page instead of form
+    if st.session_state.get("_signup_done"):
+        st.markdown("<div style='padding:60px 0'>", unsafe_allow_html=True)
+        st.markdown("<div class='auth-card' style='text-align:center'>", unsafe_allow_html=True)
+        st.markdown("<div style='font-size:3rem;margin-bottom:16px'>🎉</div>", unsafe_allow_html=True)
+        st.markdown("<h2 style='font-size:1.8rem;font-weight:800;color:#f0f6ff;"
+                    "margin-bottom:4px'>Welcome to PhishGuard!</h2>", unsafe_allow_html=True)
+        st.markdown("<p style='color:#94a3b8;font-size:14px;margin-bottom:24px'>"
+                    "Your account is ready. Let's run your first scan.</p>", unsafe_allow_html=True)
+        if st.button("→ Start Using PhishGuard", use_container_width=True, type="primary"):
+            st.session_state["authenticated"] = True
+            st.session_state.pop("_signup_done", None)
+            st.session_state.pop("show_signup", None)
+            st.rerun()
+            st.stop()
+        st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+        return
+
     st.markdown("<div style='padding:60px 0'>", unsafe_allow_html=True)
     st.markdown("<div class='auth-card'>", unsafe_allow_html=True)
     st.markdown("<h2 style='font-size:1.8rem;font-weight:800;color:#f0f6ff;"
@@ -147,12 +166,10 @@ def _signup_form():
                 st.error("An account with that email or username already exists. Try logging in instead.")
             else:
                 # Set session state FIRST so it survives any downstream failures
-                st.session_state["authenticated"] = True
                 st.session_state["username"] = auto_username
                 st.session_state["plan"] = "trial"
                 st.session_state["is_admin"] = False
                 st.session_state["email"] = new_email.strip()
-                st.session_state.pop("show_signup", None)
                 # Side-effects (email, analytics) — failures don't block login
                 try:
                     from src.analytics import track_signup
@@ -177,10 +194,8 @@ def _signup_form():
                     send_welcome_email(new_email.strip(), auto_username, _wq, ENV.APP_URL or "https://phishguard.ai")
                 except Exception:
                     pass
-                try:
-                    st.toast("🎉 Account created! Welcome to PhishGuard.")
-                except Exception:
-                    pass
+                # Don't auto-login yet — show success page, let user start app cleanly
+                st.session_state["_signup_done"] = True
                 st.rerun()
                 st.stop()
 
