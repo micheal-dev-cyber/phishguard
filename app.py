@@ -13,6 +13,12 @@ import streamlit as st
 st.set_page_config(page_title="PhishGuard AI", page_icon="🛡",
                    layout="wide", initial_sidebar_state="collapsed")
 
+# ── Plausible Analytics ─────────────────────────────────────────────────────
+st.markdown(
+    '<script defer data-domain="sabersouihi-phishguard-ai.hf.space" src="https://plausible.io/js/script.js"></script>',
+    unsafe_allow_html=True,
+)
+
 # ── PWA Manifest ────────────────────────────────────────────────────────────
 st.markdown(
     '<link rel="manifest" href="/static/manifest.json">'
