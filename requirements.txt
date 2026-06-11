@@ -61,6 +61,6 @@ psycopg2-binary>=2.9.0,<3.0.0     # PostgreSQL support
 #   easyocr          → pulls pytorch (~800 MB, build timeout)
 #   pytesseract      → requires system tesseract-ocr binary
 #   lxml             → C extension (safe but heavy; bs4 + html.parser is enough)
-flask
-gunicorn
+#   flask            → not used by the Streamlit app; only needed by backend/app.py separately
+#   gunicorn         → not used by the Streamlit app; only needed by backend/app.py separately
 # ──────────────────────────────────────────────────────────────────────────────

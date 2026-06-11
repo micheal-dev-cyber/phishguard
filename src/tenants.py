@@ -9,14 +9,14 @@ from src.db import get_connection
 logger = logging.getLogger(__name__)
 
 PLANS = {
-    "free":       {"analyses_per_month": 5,     "label": "Free",       "price": "Free",
+    "free":       {"analyses_per_month": 50,    "label": "Free",       "price": "Free",
                    "price_monthly": 0, "price_yearly": 0, "price_id": "",
-                   "features": ["basic_scan", "pdf_export"],
-                   "concurrent_sessions": 1, "rate_per_minute": 5},
-    "trial":      {"analyses_per_month": 10,    "label": "Trial",      "price": "Free",
+                   "features": ["basic_scan", "pdf_export", "url_analysis"],
+                   "concurrent_sessions": 1, "rate_per_minute": 10},
+    "trial":      {"analyses_per_month": 50,    "label": "Trial",      "price": "Free",
                    "price_monthly": 0, "price_yearly": 0, "price_id": "",
-                   "features": ["basic_scan", "pdf_export"],
-                   "concurrent_sessions": 1, "rate_per_minute": 5},
+                   "features": ["basic_scan", "pdf_export", "url_analysis"],
+                   "concurrent_sessions": 1, "rate_per_minute": 10},
     "starter":    {"analyses_per_month": 100,   "label": "Starter",    "price": "$29/mo",
                    "price_monthly": 29, "price_yearly": 290, "price_id": "",
                    "features": ["basic_scan", "threat_intel", "osint", "ai_report", "pdf_export", "email_alerts"],

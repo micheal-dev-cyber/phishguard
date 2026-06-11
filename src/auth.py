@@ -117,19 +117,11 @@ def _signup_form():
                 "font-size:13px'>Start protecting your inbox in under a minute.</p>",
                 unsafe_allow_html=True)
 
-    col1, col2 = st.columns(2)
-    with col1:
-        new_username = st.text_input("Username", placeholder="you",
-                                     label_visibility="collapsed", key="signup_user")
-    with col2:
-        new_email = st.text_input("Email", placeholder="you@company.com",
-                                  label_visibility="collapsed", key="signup_email")
+    new_email = st.text_input("Email", placeholder="you@company.com",
+                              label_visibility="collapsed", key="signup_email")
     new_password = st.text_input("Password", type="password",
-                                 placeholder="Create a strong password (min 8 characters)",
+                                 placeholder="Password (min 8 characters)",
                                  label_visibility="collapsed", key="signup_pass")
-    new_password2 = st.text_input("Confirm Password", type="password",
-                                  placeholder="Repeat your password",
-                                  label_visibility="collapsed", key="signup_pass2")
 
     st.markdown("<p style='color:#475569;font-size:11px;margin-top:12px'>"
                 "By creating an account, you agree to our "
@@ -139,50 +131,51 @@ def _signup_form():
 
     if st.button("→ Create Free Account", use_container_width=True, type="primary", key="signup_submit"):
         errors = []
-        if not new_username or len(new_username.strip()) < 3:
-            errors.append("Pick a username that's at least 3 characters long.")
         if not new_email or "@" not in new_email or "." not in new_email:
             errors.append("Enter a valid email address so we can send you verification and updates.")
         if not new_password or len(new_password) < 8:
             errors.append("Choose a password with at least 8 characters to keep your account secure.")
-        if new_password != new_password2:
-            errors.append("The passwords you entered don't match. Please try again.")
-        if any(c in new_username for c in "/\\!@#$%^&*()=+, "):
-            errors.append("Your username can only include letters, numbers, hyphens, and underscores.")
 
         if errors:
             for e in errors:
                 st.error(e)
         else:
-            from src.email_verify import create_verification, send_verification_email
-            from src.env import ENV
-            from src.smtp_validation import smtp_configured
+            auto_username = new_email.strip().split("@")[0].replace(".", "_").replace("-", "_").lower()[:20]
             from src.tenants import create_tenant
-            success = create_tenant(new_username.strip(), new_password, email=new_email.strip(), plan="trial")
+            success = create_tenant(auto_username, new_password, email=new_email.strip(), plan="trial")
             if not success:
-                st.error("That username is already taken. Try a different one.")
+                st.error("An account with that email or username already exists. Try logging in instead.")
             else:
                 st.success("🎉 Account created!")
                 try:
                     from src.analytics import track_signup
-                    track_signup(new_username.strip(), email=new_email.strip(), plan="trial")
+                    track_signup(auto_username, email=new_email.strip(), plan="trial")
                 except Exception:
                     pass
-                _smtp_ok = smtp_configured()
-                if _smtp_ok:
-                    try:
-                        v = create_verification(new_username.strip(), new_email.strip())
-                        base_url = ENV.APP_URL or "http://localhost:8501"
-                        verify_url = f"{base_url}/?verify={v['token']}"
-                        send_verification_email(new_email.strip(), verify_url)
-                        st.info("📧 Verification email sent! Check your inbox (and spam folder).")
-                    except Exception as e:
-                        logger.warning("auth: Failed to send verification email for %s: %s", new_email.strip(), e)
-                        st.warning("Could not send verification email. You can still log in, but some features may be limited.")
-                else:
-                    st.info("📧 SMTP not configured — email verification is disabled. You can log in directly.")
-                st.session_state["pending_verification_user"] = new_username.strip()
-                st.session_state["show_login"] = True
+                try:
+                    from src.notifications import push_notification
+                    push_notification(auto_username, "Welcome to PhishGuard 🛡",
+                                      "Your account is ready. Go to the Scan tab to analyze your first email.",
+                                      severity="success", link="?tab=scan")
+                except Exception:
+                    pass
+                try:
+                    from src.email_verify import create_verification, send_verification_email, send_welcome_email
+                    from src.env import ENV
+                    from src.tenants import PLANS
+                    _v = create_verification(auto_username, new_email.strip())
+                    _verify_url = f"{ENV.APP_URL or 'https://sabersouihi-phishguard-ai.hf.space'}/?verify={_v['token']}"
+                    send_verification_email(new_email.strip(), _verify_url)
+                    _wq = PLANS.get("trial", {}).get("analyses_per_month", 50)
+                    send_welcome_email(new_email.strip(), auto_username, _wq, ENV.APP_URL or "https://phishguard.ai")
+                except Exception:
+                    pass
+                # Auto-login after signup
+                st.session_state["authenticated"] = True
+                st.session_state["username"] = auto_username
+                st.session_state["plan"] = "trial"
+                st.session_state["is_admin"] = False
+                st.session_state["email"] = new_email.strip()
                 st.session_state.pop("show_signup", None)
                 st.rerun()
 
@@ -423,8 +416,11 @@ def _reset_form():
                     result = create_reset_token(username, reset_email)
                     base_url = ENV.APP_URL or "http://localhost:8501"
                     reset_url = f"{base_url}/?reset={result['token']}"
-                    send_reset_email(reset_email, reset_url)
-                    st.success("If that email is in our system, a password reset link is on its way. Check your inbox (and spam folder).")
+                    _r = send_reset_email(reset_email, reset_url)
+                    if _r.get("success"):
+                        st.success("Password reset link sent. Check your inbox (and spam folder).")
+                    else:
+                        st.error(f"Failed to send reset email: {_r.get('error', 'unknown error')}. SMTP may not be configured.")
                 else:
                     st.success("If that email is in our system, a password reset link is on its way. Check your inbox (and spam folder).")
         else:
@@ -691,27 +687,62 @@ def _hero_page():
                  "Built for teams that need fast, accurate email analysis.</p>",
                 unsafe_allow_html=True)
 
-    col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 1])
+    col_btn1, col_btn2, col_empty = st.columns([1.2, 1, 1])
     with col_btn1:
-        if st.button("→ Start Free Trial", use_container_width=True, type="primary"):
+        if st.button("→ Try It Free — No Credit Card", use_container_width=True, type="primary"):
             st.session_state["show_signup"] = True
             st.rerun()
     with col_btn2:
-        if st.button("🔬 Try Demo — No Account Needed", use_container_width=True, type="secondary"):
+        if st.button("🔬 Try Demo Free", use_container_width=True, type="secondary"):
             st.session_state["show_demo"] = True
             st.rerun()
 
     st.markdown("</div>", unsafe_allow_html=True)
 
     # ═════════════════════════════════════════════════════════════════════
+    # EMAIL CAPTURE (for retargeting + launch announcements)
+    # ═════════════════════════════════════════════════════════════════════
+    with st.container():
+        st.markdown("<div style='background:linear-gradient(145deg,#0a0f1a,#0f1a2a);"
+                    "border:1px solid #1e293b;border-radius:20px;padding:28px 24px;"
+                    "text-align:center;margin-bottom:32px'>"
+                    "<p style='color:#e2e8f0;font-size:14px;font-weight:600;margin:0 0 12px'>"
+                    "📬 Get notified about new features and security research</p>"
+                    "<div style='display:flex;justify-content:center;gap:8px;flex-wrap:wrap'>"
+                    "</div></div>", unsafe_allow_html=True)
+        col_e1, col_e2, col_e3 = st.columns([1, 2, 1])
+        with col_e2:
+            email_capture = st.text_input("Email for updates", placeholder="you@company.com",
+                                          label_visibility="collapsed", key="hero_email_capture")
+            if st.button("→ Stay Updated", use_container_width=True, type="secondary", key="hero_email_btn"):
+                if email_capture and "@" in email_capture:
+                    st.success("Thanks! We'll keep you posted.")
+                    try:
+                        from src.db import get_connection
+                        _ec = get_connection()
+                        _ec.execute("CREATE TABLE IF NOT EXISTS email_subscribers (email TEXT PRIMARY KEY, created_at TEXT DEFAULT (datetime('now')))")
+                        _ec.execute("INSERT OR IGNORE INTO email_subscribers (email) VALUES (?)", (email_capture,))
+                        _ec.commit()
+                        _ec.close()
+                    except Exception:
+                        pass
+                    try:
+                        from src.analytics import track_event
+                        track_event("email_capture", {"email": email_capture})
+                    except Exception:
+                        pass
+                else:
+                    st.warning("Please enter a valid email address.")
+
+    # ═════════════════════════════════════════════════════════════════════
     # EARLY ACCESS STATUS
     # ═════════════════════════════════════════════════════════════════════
-    st.markdown("<div style='text-align:center;padding:16px 0 32px'>"
+    st.markdown("<div style='text-align:center;padding:8px 0 24px'>"
                 "<span style='color:#3b82f6;font-size:10px;letter-spacing:.12em;"
                 "text-transform:uppercase'>⚡ Early Access — Now in open beta</span>"
                 "<p style='color:#475569;font-size:12px;margin-top:6px'>"
                 "PhishGuard is new. Your feedback shapes the roadmap. "
-                "<a href='?page=contact' style='color:#3b82f6'>Join the early users →</a></p></div>",
+                "<a href='?page=contact' style='color:#3b82f6'>Send feedback →</a></p></div>",
                 unsafe_allow_html=True)
 
     # ═════════════════════════════════════════════════════════════════════
@@ -847,9 +878,10 @@ def _hero_page():
                 unsafe_allow_html=True)
 
     trust_items = [
-        ("🔒", "256-bit Encryption", "All data encrypted at rest and in transit with AES-256 and TLS 1.3."),
-        ("🌍", "GDPR Compliant", "Data processing compliant with GDPR. Right to erasure included."),
-        ("📋", "Audit Trail", "Every analysis and action logged for compliance and incident response."),
+        ("🔒", "256-bit Encryption", "All data encrypted at rest and in transit with AES-256 and TLS 1.3. Email content analyzed in memory, never persisted by default."),
+        ("🚫", "No Training on Your Data", "We never use your email content to train AI models. Your data is yours. Full right to erasure under GDPR."),
+        ("🌍", "GDPR Compliant", "Data processing compliant with GDPR Article 28. Right to erasure and data portability included."),
+        ("📋", "Audit Log", "Every analysis, access, and action logged for compliance and incident response. Retention configurable via your policy."),
     ]
     for icon, title, desc in trust_items:
         st.markdown(
@@ -879,11 +911,12 @@ def _hero_page():
 
     plans = [
         ("Free", "$0", "forever",
-         ["10 analyses / month", "URL scanning", "Risk scoring", "PDF export"],
+         ["50 analyses / month", "AI risk analysis", "URL & domain scanning",
+          "Risk scoring & severity", "PDF export"],
          False),
         ("Starter", "$29", "/ month",
-         ["100 analyses / month", "VirusTotal integration", "OSINT investigation",
-          "AI security reports", "Email support"],
+         ["100 analyses / month", "VirusTotal integration", "OSINT enrichment",
+          "AI security narrative", "Email support"],
          True),
         ("Business", "$99", "/ month",
          ["500 analyses / month", "Everything in Starter", "Priority support",
@@ -1011,7 +1044,7 @@ def _hero_page():
 
     st.markdown("<div style='display:flex;justify-content:center;gap:24px;margin-top:16px;flex-wrap:wrap'>"
                 "<span style='color:#475569;font-size:11px'>✓ No credit card required</span>"
-                "<span style='color:#475569;font-size:11px'>✓ 10 free analyses</span>"
+                "<span style='color:#475569;font-size:11px'>✓ 50 free analyses</span>"
                 "<span style='color:#475569;font-size:11px'>✓ Cancel anytime</span>"
                 "</div></div>", unsafe_allow_html=True)
 
@@ -1179,7 +1212,7 @@ def check_password() -> bool:
                                      placeholder="confirm password",
                                      label_visibility="collapsed")
             if st.button("Update Password", use_container_width=True, type="primary"):
-                if new_pw and new_pw == new_pw2 and len(new_pw) >= 6:
+                if new_pw and new_pw == new_pw2 and len(new_pw) >= 8:
                     from src.tenants import set_password
                     set_password(result["username"], new_pw)
                     mark_token_used(token)
@@ -1190,7 +1223,7 @@ def check_password() -> bool:
                 elif new_pw != new_pw2:
                     st.error("Passwords do not match.")
                 else:
-                    st.error("Password must be at least 6 characters.")
+                    st.error("Password must be at least 8 characters.")
             if st.button("← Back to login", use_container_width=True, key="reset_back"):
                 st.query_params.clear()
                 st.rerun()
@@ -1216,13 +1249,8 @@ def check_password() -> bool:
                 _vconn.close()
                 if _vrow:
                     _vuname, _vemail = _vrow
-                    from src.email_verify import send_welcome_email
-                    from src.env import ENV
-                    from src.tenants import PLANS
-                    _vquota = PLANS.get("trial", {}).get("analyses_per_month", 10)
-                    send_welcome_email(_vemail, _vuname, _vquota, ENV.APP_URL or "https://phishguard.ai")
-            except Exception as _ve:
-                logger.warning("auth: Welcome email failed for %s: %s", _vuname, _ve)
+            except Exception:
+                pass
             st.session_state["show_login"] = True
         else:
             st.toast("Verification link expired or invalid.")

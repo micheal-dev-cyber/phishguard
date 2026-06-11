@@ -181,14 +181,12 @@ class GumroadProvider(BillingProvider):
         return False
 
     def verify_webhook_signature(self, raw_body: bytes, signature_header: str) -> bool:
-        """Gumroad does not sign webhook payloads.
-
-        We rely on the access-token-authenticated Resource Subscriptions API
-        to ensure webhooks come from Gumroad.  Signature verification always
-        returns True; security is enforced at the subscription registration
-        layer and by validating known event payloads.
-        """
-        return True
+        secret = ENV.GUMROAD_WEBHOOK_SECRET or ""
+        if not secret:
+            logger.warning("GUMROAD_WEBHOOK_SECRET not set — webhook auth disabled")
+            return True
+        import hmac
+        return hmac.compare_digest(signature_header.strip(), secret.strip())
 
 
 # ── Helper ──────────────────────────────────────────────────────────────

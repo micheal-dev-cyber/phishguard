@@ -305,6 +305,13 @@ try:
 except Exception:
     _HAS_URL_SANDBOX = False
 
+# ── Initialize analytics tables on startup ─────────────────────────────────
+try:
+    from src.analytics import init_analytics_db
+    init_analytics_db()
+except Exception:
+    pass
+
 # ── Paddle Webhook endpoint (mounted on Streamlit's Tornado server) ───────
 try:
     import tornado.web
@@ -343,9 +350,42 @@ try:
                 self.set_status(500)
                 self.finish({"error": str(e)})
 
+    class _SubscribeHandler(tornado.web.RequestHandler):
+        def prepare(self):
+            if self.request.method != "POST":
+                self.set_status(405)
+                self.finish({"error": "Method not allowed"})
+                return
+            import sqlite3
+            email = self.get_body_argument("email", "")
+            if not email or "@" not in email:
+                self.set_status(400)
+                self.finish({"error": "Invalid email"})
+                return
+            try:
+                db = sqlite3.connect("data/phishguard.db")
+                db.execute("CREATE TABLE IF NOT EXISTS email_subscribers (email TEXT PRIMARY KEY, created_at TEXT DEFAULT (datetime('now')))")
+                db.execute("INSERT OR IGNORE INTO email_subscribers (email) VALUES (?)", (email,))
+                db.commit()
+                db.close()
+            except Exception:
+                pass
+            self.set_header("Access-Control-Allow-Origin", "*")
+            self.set_header("Access-Control-Allow-Headers", "Content-Type")
+            self.set_header("Access-Control-Allow-Methods", "POST, OPTIONS")
+            self.write({"status": "ok"})
+        def options(self):
+            self.set_header("Access-Control-Allow-Origin", "*")
+            self.set_header("Access-Control-Allow-Headers", "Content-Type")
+            self.set_header("Access-Control-Allow-Methods", "POST, OPTIONS")
+            self.finish()
+
     _orig_start = Server.start
     def _patched_start(self, *args, **kwargs):
-        self._tornado.add_handlers(r".*", [(r"/webhook", _PaddleWebhookHandler)])
+        self._tornado.add_handlers(r".*", [
+            (r"/webhook", _PaddleWebhookHandler),
+            (r"/subscribe", _SubscribeHandler),
+        ])
         return _orig_start(self, *args, **kwargs)
     Server.start = _patched_start
 except Exception:

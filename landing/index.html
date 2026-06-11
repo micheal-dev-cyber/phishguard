@@ -3,8 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PhishGuard AI — Phishing Protection for Small Business</title>
-  <meta name="description" content="AI-powered phishing detection for small and medium businesses. Paste any email, get an instant threat analysis. Free tier available.">
+  <title>PhishGuard AI — Analyze Suspicious Emails in 3 Seconds</title>
+  <meta name="description" content="Paste any suspicious email. Get an instant AI-powered risk analysis with URL scanning, OSINT enrichment, and threat narrative. Free tier — no credit card needed.">
+  <script defer data-domain="phishguard.ai" src="https://plausible.io/js/script.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background: #020818; color: #e2e8f0; line-height: 1.6; }
@@ -107,7 +108,7 @@
       <a href="#features">Features</a>
       <a href="#pricing">Pricing</a>
       <a href="#faq">FAQ</a>
-      <a href="https://huggingface.co/spaces/phishguard" class="btn btn-primary" target="_blank">Try Demo</a>
+      <a href="https://sabersouihi-phishguard-ai.hf.space" class="btn btn-primary" target="_blank">Try Demo</a>
     </div>
   </nav>
 
@@ -115,26 +116,60 @@
   <section class="hero">
     <div class="hero-grid"></div>
     <div class="container">
-      <div class="hero-badge">⬡ Phishing Email Detection</div>
-      <h1>Paste a suspicious email. <span>Know instantly</span> if it's a phishing attack.</h1>
-      <p>PhishGuard analyzes emails in seconds — detecting malicious URLs, spoofed headers, and social engineering. No installation, no configuration. Just paste and scan.</p>
+      <div class="hero-badge">⬡ AI-Powered Phishing Analysis</div>
+      <h1>Paste a suspicious email. <span>Know in 3 seconds</span> if it's a phishing attack.</h1>
+      <p>PhishGuard analyzes emails using AI, URL scanning, and OSINT — detecting malicious links, spoofed headers, and social engineering. No install. No credit card. Just paste and scan.</p>
       <div class="hero-ctas">
-        <a href="https://huggingface.co/spaces/phishguard" class="btn btn-primary btn-lg">Try Demo — No Account Needed</a>
-        <a href="#pricing" class="btn btn-secondary btn-lg">See Pricing</a>
+        <a href="https://sabersouihi-phishguard-ai.hf.space" class="btn btn-primary btn-lg">Try It Free →</a>
+        <a href="#how-it-works" class="btn btn-secondary btn-lg">How It Works</a>
       </div>
+      <div style="margin-top:12px;color:#475569;font-size:11px">✨ No account needed · 50 free analyses · Results in 3 seconds</div>
     </div>
   </section>
+
+  <!-- SOCIAL PROOF / EMAIL CAPTURE -->
+  <div class="container">
+    <div class="trust-section">
+      <div class="label">// Used by security professionals</div>
+      <h2 style="font-size:clamp(1rem,2vw,1.4rem)">Join <span id="user-count" style="color:#3b82f6">0</span> security professionals analyzing suspicious emails with PhishGuard</h2>
+      <div style="text-align:center;margin-top:20px">
+        <p style="color:#64748b;font-size:13px;margin-bottom:16px;max-width:400px;margin:0 auto 16px">Get notified when we launch new features and security research:</p>
+        <form id="email-capture" style="display:flex;gap:8px;max-width:420px;margin:0 auto;flex-wrap:wrap;justify-content:center" onsubmit="return subscribe(event)">
+          <input type="email" id="subscribe-email" placeholder="you@example.com" required style="flex:1;min-width:200px;padding:10px 16px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:#e2e8f0;font-size:14px">
+          <button type="submit" style="padding:10px 20px;border-radius:10px;border:none;background:#3b82f6;color:#fff;font-weight:700;font-size:13px;cursor:pointer">Stay Updated</button>
+        </form>
+        <script>
+        function subscribe(e) {
+          e.preventDefault();
+          var email = document.getElementById('subscribe-email').value;
+          if (!email || email.indexOf('@') === -1) return;
+          var btn = e.target.querySelector('button');
+          btn.textContent = 'Sending...';
+          fetch('https://sabersouihi-phishguard-ai.hf.space/subscribe', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+            body: 'email=' + encodeURIComponent(email),
+            mode: 'no-cors'
+          }).catch(function(){}).then(function(){
+            btn.textContent = '✓ Subscribed!';
+            btn.style.background = '#22c55e';
+            setTimeout(function(){ btn.textContent = 'Stay Updated'; btn.style.background = ''; }, 3000);
+          });
+          return false;
+        }
+        </script>
+        <p style="color:#475569;font-size:10px;margin-top:8px">No spam. Unsubscribe anytime.</p>
+      </div>
+    </div>
+  </div>
 
   <!-- DEMO PREVIEW -->
   <div class="container">
     <div class="demo-section">
       <span style="font-size:2.5rem">🔬</span>
-      <h2>See it in action</h2>
-      <p>No signup required. Paste any email and see exactly what PhishGuard detects.</p>
-      <div class="demo-preview" style="border:1px dashed rgba(245,158,11,0.3)">
-        <div style="background:rgba(245,158,11,0.08);border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:11px;color:#f59e0b;text-align:center">
-          🧪 Example preview — actual results vary by email content
-        </div>
+      <h2>See what PhishGuard detects</h2>
+      <p>This is a real phishing email. PhishGuard flags it in seconds.</p>
+      <div class="demo-preview">
         <div class="email-header">
           <div><span class="subject">URGENT: Account Security Alert</span><br>From: "Security Alert" &lt;no-reply@secure-verify2738.xyz&gt;</div>
           <div style="color:#ef4444;font-size:11px;font-weight:600">⚠ Suspicious</div>
@@ -156,13 +191,13 @@
           </div>
           <div style="flex:1"></div>
           <div style="text-align:right">
-            <div style="color:#f0f6ff;font-weight:600;font-size:13px">3 URLs Found</div>
-            <div style="color:#94a3b8;font-size:11px">2 suspicious · 8 keyword hits</div>
+            <div style="color:#f0f6ff;font-weight:600;font-size:13px">3 Threats Found</div>
+            <div style="color:#94a3b8;font-size:11px">Spoofed domain · Credential theft · Urgency tactic</div>
           </div>
         </div>
       </div>
       <br>
-      <a href="https://huggingface.co/spaces/phishguard" class="btn btn-primary">🚀 Run a Live Demo</a>
+      <a href="https://sabersouihi-phishguard-ai.hf.space" class="btn btn-primary">🚀 Analyze a Real Email Free</a>
     </div>
   </div>
 
@@ -246,13 +281,13 @@
           <div class="price">$0</div>
           <div class="period">forever</div>
           <ul>
-            <li>10 analyses / month</li>
-            <li>URL scanning</li>
-            <li>Risk scoring</li>
+            <li>50 analyses / month</li>
+            <li>AI risk analysis</li>
+            <li>URL & domain scanning</li>
+            <li>Risk scoring & severity</li>
             <li>PDF export</li>
-            <li>Community support</li>
           </ul>
-          <a href="https://huggingface.co/spaces/phishguard" class="btn btn-secondary">Get Started</a>
+          <a href="https://sabersouihi-phishguard-ai.hf.space" class="btn btn-secondary">Get Started Free</a>
         </div>
         <div class="plan featured">
           <div class="badge">Most Popular</div>
@@ -262,11 +297,11 @@
           <ul>
             <li>100 analyses / month</li>
             <li>VirusTotal integration</li>
-            <li>OSINT investigation</li>
-            <li>AI security reports</li>
+            <li>OSINT enrichment</li>
+            <li>AI security narrative</li>
             <li>Email support</li>
           </ul>
-          <a href="https://huggingface.co/spaces/phishguard" class="btn btn-primary">Subscribe</a>
+          <a href="https://sabersouihi-phishguard-ai.hf.space" class="btn btn-primary">Subscribe →</a>
         </div>
         <div class="plan">
           <div class="name">BUSINESS</div>
@@ -279,7 +314,7 @@
             <li>Team access (3 seats)</li>
             <li>API access</li>
           </ul>
-          <a href="https://huggingface.co/spaces/phishguard" class="btn btn-secondary">Subscribe</a>
+          <a href="https://sabersouihi-phishguard-ai.hf.space" class="btn btn-secondary">Subscribe →</a>
         </div>
       </div>
     </div>
@@ -291,23 +326,27 @@
       <div class="label">// FAQ</div>
       <details open>
         <summary>Do I need to install anything?</summary>
-        <p>No. PhishGuard runs entirely in your browser. Paste an email, get results. No downloads, no plugins, no configuration.</p>
+        <p>No. PhishGuard runs entirely in your browser. Paste an email, get results in seconds. No downloads, no plugins, no configuration.</p>
       </details>
       <details>
         <summary>How accurate is the detection?</summary>
-        <p>PhishGuard uses a multi-engine approach combining heuristic analysis, URL pattern matching, header forensics, and social engineering detection. Our detection accuracy is competitive with commercial solutions for common phishing tactics.</p>
+        <p>PhishGuard combines AI analysis, URL pattern matching, header forensics, and OSINT data. It catches email threats that traditional filters miss because it analyzes full email context — not just known signatures. We flag urgency language, spoofed domains, credential theft patterns, and social engineering tactics.</p>
+      </details>
+      <details>
+        <summary>Is this a replacement for Microsoft Defender or Google Workspace security?</summary>
+        <p>No. Think of PhishGuard as a second opinion. When an email looks suspicious but passed your existing filters, paste it into PhishGuard for an independent AI-powered analysis. It's an additional layer, not a replacement.</p>
       </details>
       <details>
         <summary>Is my data secure?</summary>
-        <p>Demo scans are ephemeral — no data is stored server-side. For registered users, analysis data is encrypted at rest with AES-256. We never sell or share your data.</p>
+        <p>Demo scans are ephemeral — analyzed in memory, never stored. For registered users, analysis data is encrypted at rest with AES-256. We never sell, share, or train on your data. Full GDPR compliance with right to erasure.</p>
       </details>
       <details>
         <summary>Can I scan my Microsoft 365 or Gmail inbox?</summary>
-        <p>Yes. PhishGuard supports IMAP-based inbox scanning for Gmail (app passwords) and Microsoft 365. OAuth-based Microsoft Graph integration is coming soon for a zero-config experience.</p>
+        <p>Yes. PhishGuard supports IMAP inbox scanning for Gmail (app passwords) and Microsoft 365. Full Microsoft Graph API integration is coming soon for one-click setup.</p>
       </details>
       <details>
         <summary>Can I cancel my subscription?</summary>
-        <p>Yes. You can cancel anytime from your billing dashboard. There are no long-term contracts or cancellation fees.</p>
+        <p>Yes. Cancel anytime from your billing dashboard. No long-term contracts, no cancellation fees. If you cancel, you keep access until the end of your billing period.</p>
       </details>
     </div>
   </section>
@@ -316,23 +355,23 @@
   <div class="container">
     <div class="trust-section">
       <div class="label">// Security & Trust</div>
-      <h2>Built for security, by security engineers</h2>
+      <h2>Your data stays yours</h2>
       <div class="trust-grid">
         <div class="trust-item">
-          <div class="header"><span class="ti">🔒</span><h4>256-bit Encryption</h4></div>
-          <p>All data encrypted at rest and in transit with AES-256 and TLS 1.3.</p>
+          <div class="header"><span class="ti">🔒</span><h4>Encrypted at Rest & In Transit</h4></div>
+          <p>All data encrypted with AES-256 and TLS 1.3. Email content is analyzed in memory, never persisted by default.</p>
         </div>
         <div class="trust-item">
-          <div class="header"><span class="ti">🔍</span><h4>Open Source</h4></div>
-          <p>Our core detection engine is open source. Transparent, auditable, and community-reviewed.</p>
+          <div class="header"><span class="ti">🚫</span><h4>No Training on Your Data</h4></div>
+          <p>We never use your email content to train models. Your data is yours. Full right to erasure under GDPR.</p>
         </div>
         <div class="trust-item">
           <div class="header"><span class="ti">🌍</span><h4>GDPR Compliant</h4></div>
-          <p>Data processing compliant with GDPR. Right to erasure included.</p>
+          <p>Data processing compliant with GDPR Article 28. Data stored in EU region. Right to erasure and data portability included.</p>
         </div>
         <div class="trust-item">
-          <div class="header"><span class="ti">📋</span><h4>Audit Trail</h4></div>
-          <p>Every analysis and action logged for compliance and incident response.</p>
+          <div class="header"><span class="ti">📋</span><h4>Audit Log</h4></div>
+          <p>Every analysis and access logged for compliance and incident response. Retained per your retention policy.</p>
         </div>
       </div>
     </div>
@@ -341,16 +380,19 @@
   <!-- CTA -->
   <section class="cta-section">
     <div class="container">
-      <h2>Try PhishGuard Free</h2>
-      <p>No credit card required. No installation. Paste an email and see the results in 3 seconds.</p>
-      <a href="https://huggingface.co/spaces/phishguard" class="btn btn-primary btn-lg">🚀 Try Demo Now</a>
+      <h2>Stop guessing. Start scanning.</h2>
+      <p>Paste a suspicious email. Get an AI-powered risk analysis in 3 seconds. Free — no credit card needed.</p>
+      <a href="https://sabersouihi-phishguard-ai.hf.space" class="btn btn-primary btn-lg">Try It Free →</a>
+      <p style="margin-top:12px;color:#475569;font-size:11px">50 free analyses · No account needed for demo</p>
     </div>
   </section>
 
   <footer>
     <div class="container">
-      <p>🛡 PhishGuard AI — Open source phishing detection for small and medium businesses.</p>
-      <p style="margin-top:8px"><a href="https://github.com/phishguard">GitHub</a> · <a href="#">Privacy Policy</a> · <a href="#">Terms of Service</a></p>
+      <p style="font-size:14px;font-weight:700;color:#e2e8f0">🛡 PhishGuard AI</p>
+      <p style="margin-top:4px;color:#64748b;font-size:12px">AI-powered phishing analysis for security-conscious teams. No enterprise bloat. No sales calls.</p>
+      <p style="margin-top:12px"><a href="https://sabersouihi-phishguard-ai.hf.space" style="color:#3b82f6;text-decoration:none">App</a> · <a href="https://sabersouihi-phishguard-ai.hf.space/?page=privacy" style="color:#3b82f6;text-decoration:none">Privacy Policy</a> · <a href="https://sabersouihi-phishguard-ai.hf.space/?page=terms" style="color:#3b82f6;text-decoration:none">Terms of Service</a> · <a href="mailto:hello@phishguard.ai" style="color:#3b82f6;text-decoration:none">Contact</a></p>
+      <p style="margin-top:8px;color:#475569;font-size:11px">© 2026 PhishGuard AI. All rights reserved.</p>
     </div>
   </footer>
 </body>

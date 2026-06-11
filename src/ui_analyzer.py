@@ -88,25 +88,22 @@ def render_analyzer_tab(username: str, plan: str):
         )
         st.stop()
 
-    # Quick-start for first-time users
+    # Quick-start for first-time users — auto-load example email
     if not st.session_state.get("checklist_first_scan", False):
+        if not st.session_state.get("email_input"):
+            st.session_state["email_input"] = _EXAMPLE_EMAIL
         st.markdown(
             "<div style='background:linear-gradient(135deg,#0a1a2a,#0f1a2a);"
             "border:1px solid rgba(59,130,246,0.3);border-radius:14px;padding:20px 24px;margin-bottom:20px'>"
             "<div style='display:flex;align-items:center;gap:12px;flex-wrap:wrap'>"
             "<span style='font-size:2rem'>🚀</span>"
             "<div style='flex:1'>"
-            "<div style='font-weight:700;color:#f0f6ff;font-size:1rem'>Quick Start — Scan your first email</div>"
-            "<div style='color:#94a3b8;font-size:13px'>Not sure what to paste? Load an example phishing email to see what PhishGuard detects.</div>"
+            "<div style='font-weight:700;color:#f0f6ff;font-size:1rem'>🚀 Ready to scan — example email loaded below</div>"
+            '<div style="color:#94a3b8;font-size:13px">Click <strong>Analyze Email</strong> to see PhishGuard multi-engine detection in action on this sample phishing email.</div>'
             "</div>"
-            "<button onclick='document.querySelector(\"textarea\").value = `From: \"Security Alert\" <no-reply@secure-verify2738.xyz>\nSubject: URGENT: Account Security Alert\n\nDear Customer,\n\nWe detected unusual activity on your account.\nClick here to verify: https://secure-verify2738.xyz/verify`' "
-            "style='background:#3b82f6;color:white;border:none;border-radius:8px;padding:8px 20px;font-weight:600;cursor:pointer'>📋 Load Example</button>"
             "</div></div>",
             unsafe_allow_html=True,
         )
-        if st.button("📋 Load & Scan Example Email", use_container_width=True, type="primary", key="quickstart_load"):
-            st.session_state["email_input"] = _EXAMPLE_EMAIL
-            st.rerun()
 
     col_left, col_right = st.columns([2, 1])
 
