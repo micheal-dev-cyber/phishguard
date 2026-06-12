@@ -386,11 +386,54 @@ try:
             self.set_header("Access-Control-Allow-Methods", "POST, OPTIONS")
             self.finish()
 
+    # ════════════════════════════════════════════════════════════════
+    # EMAIL OPEN TRACKING PIXEL
+    # ════════════════════════════════════════════════════════════════
+    TRACKING_GIF = (
+        b"GIF89a\x01\x00\x01\x00\x80\x01\x00\x00\x00\x00\xff\xff\xff"
+        b"!\xf9\x04\x01\x0a\x00\x01\x00\x44\x00\x00"
+    )
+
+    class _TrackingHandler(tornado.web.RequestHandler):
+        def get(self, email_id):
+            try:
+                import sqlite3
+                from datetime import datetime, timezone
+                db = sqlite3.connect("data/phishguard.db")
+                db.execute("CREATE TABLE IF NOT EXISTS outreach (id INTEGER PRIMARY KEY, opened_at TEXT)")
+                now = datetime.now(timezone.utc).isoformat()
+                ip = self.request.remote_ip
+                ua = self.request.headers.get("User-Agent", "")
+                db.execute(
+                    "UPDATE outreach SET opened_at = COALESCE(opened_at, ?) WHERE id = ?",
+                    (now, int(email_id))
+                )
+                if db.total_changes == 0:
+                    db.execute("INSERT OR IGNORE INTO outreach (id, opened_at) VALUES (?, ?)", (int(email_id), now))
+                db.commit()
+                db.close()
+                print(f"[track] email_id={email_id} ip={ip} ua={ua[:50]}")
+            except Exception as e:
+                print(f"[track] Error: {e}")
+            self.set_header("Content-Type", "image/gif")
+            self.set_header("Content-Length", str(len(TRACKING_GIF)))
+            self.set_header("Cache-Control", "no-store, no-cache, must-revalidate")
+            self.set_header("Pragma", "no-cache")
+            self.set_header("Access-Control-Allow-Origin", "*")
+            self.write(TRACKING_GIF)
+
+    class _HealthHandler(tornado.web.RequestHandler):
+        def get(self):
+            self.set_header("Content-Type", "application/json")
+            self.write({"status": "ok", "service": "phishguard"})
+
     _orig_start = Server.start
     def _patched_start(self, *args, **kwargs):
         self._tornado.add_handlers(r".*", [
             (r"/webhook", _PaddleWebhookHandler),
             (r"/subscribe", _SubscribeHandler),
+            (r"/track/([0-9]+)", _TrackingHandler),
+            (r"/health", _HealthHandler),
         ])
         return _orig_start(self, *args, **kwargs)
     Server.start = _patched_start
