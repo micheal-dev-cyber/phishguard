@@ -828,6 +828,38 @@ def _hero_page():
                     st.warning("Please enter a valid email address.")
 
     # ═════════════════════════════════════════════════════════════════════
+    # SOCIAL PROOF — LIVE STATS FROM PRODUCT DB
+    # ═════════════════════════════════════════════════════════════════════
+    try:
+        import sqlite3
+        _sconn = sqlite3.connect(r"C:\Users\banan\phishguard\data\phishguard.db")
+        _stenants = _sconn.execute("SELECT COUNT(*) FROM tenants").fetchone()[0]
+        _sanalyses = _sconn.execute("SELECT COUNT(*) FROM analyses").fetchone()[0]
+        _spaid = _sconn.execute("SELECT COUNT(*) FROM billing_subscriptions WHERE status='active'").fetchone()[0]
+        _sconn.close()
+    except Exception:
+        _stenants = 0
+        _sanalyses = 0
+        _spaid = 0
+
+    st.markdown("""
+    <div style='display:flex;justify-content:center;gap:20px;flex-wrap:wrap;margin:40px auto;max-width:700px'>
+        <div class='stat-box' style='flex:1;min-width:120px'>
+            <div style='font-size:1.5rem;font-weight:800;color:#f0f6ff'>""" + str(_stenants) + """</div>
+            <div style='color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:.05em;margin-top:4px'>Companies Protected</div>
+        </div>
+        <div class='stat-box' style='flex:1;min-width:120px'>
+            <div style='font-size:1.5rem;font-weight:800;color:#f0f6ff'>""" + str(_sanalyses) + """</div>
+            <div style='color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:.05em;margin-top:4px'>Emails Analyzed</div>
+        </div>
+        <div class='stat-box' style='flex:1;min-width:120px'>
+            <div style='font-size:1.5rem;font-weight:800;color:#22c55e'>""" + str(_spaid) + """</div>
+            <div style='color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:.05em;margin-top:4px'>Paying Teams</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ═════════════════════════════════════════════════════════════════════
     # EARLY ACCESS STATUS
     # ═════════════════════════════════════════════════════════════════════
     st.markdown("<div style='text-align:center;padding:8px 0 24px'>"

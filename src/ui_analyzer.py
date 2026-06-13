@@ -781,15 +781,207 @@ def render_analyzer_tab(username: str, plan: str):
                 st.warning("⚠ " + finding)
 
         st.divider()
-        st.markdown(section_title("Security Verdict"), unsafe_allow_html=True)
-        if score >= 75:
-            st.error("🔴 **CRITICAL THREAT** — Strong phishing indicators detected. Do not click any links.")
-        elif score >= 50:
-            st.error("🟠 **HIGH RISK** — Multiple phishing indicators found. Treat with extreme caution.")
-        elif score >= 25:
-            st.warning("🟡 **MEDIUM RISK** — Suspicious elements detected. Verify before acting.")
+
+        # ── BEGINNER MODE TOGGLE ─────────────────────────────────────────────
+        beginner_mode = st.checkbox("👶 Explain Like I'm New — simple language", value=False,
+                                     key="beginner_mode", help="Simplifies all explanations for non-security users")
+
+        # ── THREAT EXPLANATION ENGINE (Feature 1) ────────────────────────────
+        from src.threat_explainer import build_explanation, build_beginner_explanation
+
+        if beginner_mode:
+            beginner_text = build_beginner_explanation(results)
+            st.markdown("### 👶 Simple Explanation")
+            st.info(beginner_text)
         else:
-            st.success("🟢 **LOW RISK** — No major phishing indicators found. Stay vigilant.")
+            explanation = build_explanation(results, xai_result=xai_result)
+            st.markdown(section_title("Threat Explanation Engine"), unsafe_allow_html=True)
+            st.markdown(f"### {explanation['verdict']['icon']} {explanation['verdict']['label']}")
+            st.markdown(f"**Risk Score: {score}/100** — *{explanation['confidence'].upper()} confidence*")
+            st.caption(explanation['verdict']['detail'])
+
+            with st.expander("📋 What triggered this detection", expanded=score >= 50):
+                for trigger in explanation.get("triggers", []):
+                    st.markdown(f"- {trigger}")
+
+            if explanation.get("techniques"):
+                st.markdown("**Phishing techniques identified:**")
+                for tech in explanation["techniques"]:
+                    if tech != "none":
+                        st.markdown(f"- {tech}")
+
+        # ── EMAIL RED FLAGS SECTION (Feature 4) ──────────────────────────────
+        from src.red_flags import detect_red_flags, get_red_flag_summary
+
+        red_flags = detect_red_flags(results, header_auth, xai_result, st.session_state.get("perplexity_result"))
+        if red_flags:
+            flag_summary = get_red_flag_summary(red_flags)
+            st.markdown(section_title("🚩 Email Red Flags"), unsafe_allow_html=True)
+            severity_colors = {"critical": "#ef4444", "high": "#f97316", "medium": "#eab308", "low": "#94a3b8"}
+            st.caption(flag_summary["display"])
+            cols = st.columns(2)
+            for i, flag in enumerate(red_flags[:8]):
+                sev = flag.get("severity", "low")
+                fc = severity_colors.get(sev, "#94a3b8")
+                with cols[i % 2]:
+                    st.markdown(
+                        f"<div style='background:#111827;border-left:3px solid {fc};"
+                        f"border-radius:6px;padding:8px 12px;margin:4px 0'>"
+                        f"<span style='color:{fc};font-weight:700'>{flag['icon']} {flag['label']}</span><br>"
+                        f"<span style='color:#94a3b8;font-size:12px'>{flag['description']}</span>"
+                        f"</div>",
+                        unsafe_allow_html=True,
+                    )
+
+        # ── BEC DETECTION (Feature 5) ────────────────────────────────────────
+        from src.bec_detector import detect_bec
+
+        bec_result = detect_bec(email_text_saved, results)
+        if bec_result.get("bec_detected"):
+            st.markdown(section_title("💰 Business Email Compromise Analysis"), unsafe_allow_html=True)
+            bec_conf = bec_result.get("confidence", 0)
+            bec_color = "#ef4444" if bec_conf >= 70 else "#f97316" if bec_conf >= 40 else "#eab308"
+            st.markdown(
+                f"<div style='background:#111827;border:1px solid {bec_color}44;"
+                f"border-radius:10px;padding:12px 16px;margin:6px 0'>"
+                f"<span style='color:{bec_color};font-weight:700'>🔍 BEC Detected — {bec_result.get('bec_type','').replace('_',' ').title()}</span>"
+                f"<br><span style='color:#94a3b8'>Confidence: {bec_conf}% | "
+                f"Patterns: {', '.join(bec_result.get('patterns_found', []))}</span>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+            for detail in bec_result.get("details", []):
+                st.warning(detail)
+
+        # ── PHISHING TACTIC CLASSIFIER (Feature 10) ──────────────────────────
+        from src.tactic_classifier import classify_tactics, get_primary_tactic
+
+        tactics = classify_tactics(email_text_saved, results)
+        if tactics:
+            primary = get_primary_tactic(tactics)
+            st.markdown(section_title("🎯 Phishing Tactic Classification"), unsafe_allow_html=True)
+            if primary:
+                st.markdown(
+                    f"<div style='background:#111827;border:1px solid {primary.get('color','#3b82f6')}44;"
+                    f"border-radius:10px;padding:12px 16px;margin:6px 0'>"
+                    f"<span style='font-size:1.3rem'>{primary.get('icon','')}</span> "
+                    f"<span style='color:{primary.get('color','#3b82f6')};font-weight:700'>{primary.get('label','')}</span>"
+                    f"<span style='color:#94a3b8;margin-left:8px'>— {primary.get('confidence',0)}% match</span>"
+                    f"<br><span style='color:#94a3b8'>{primary.get('description','')}</span>"
+                    f"</div>",
+                    unsafe_allow_html=True,
+                )
+            with st.expander(f"All classifications ({len(tactics)} tactic(s))"):
+                for t in tactics:
+                    tc = t.get("color", "#3b82f6")
+                    st.markdown(
+                        f"<div style='border-left:3px solid {tc};padding:6px 12px;margin:4px 0'>"
+                        f"<span style='color:{tc}'>{t.get('icon','')} <strong>{t.get('label','')}</strong>"
+                        f" — {t.get('confidence',0)}%</span>"
+                        f"<br><span style='color:#94a3b8;font-size:12px'>{t.get('description','')}</span>"
+                        f"</div>",
+                        unsafe_allow_html=True,
+                    )
+
+        # ── WHAT SHOULD I DO? (Feature 2) ────────────────────────────────────
+        from src.recommendations import get_recommendations, render_recommendations_text, get_recommendation_summary
+
+        ctx = {
+            "clicked_link": st.session_state.get("clicked_link", False),
+            "credentials_entered": st.session_state.get("credentials_entered", False),
+            "file_downloaded": st.session_state.get("file_downloaded", False),
+        }
+        recommendations = get_recommendations(results, ctx)
+        if recommendations:
+            st.markdown(section_title("📋 What Should I Do?"), unsafe_allow_html=True)
+            rec_summary = get_recommendation_summary(recommendations)
+            st.caption(rec_summary)
+            priority_icons = {"critical": "🔴", "high": "🟠", "medium": "🟡", "low": "🟢"}
+            for rec in recommendations[:6]:
+                pi = priority_icons.get(rec.get("priority", "low"), "⚪")
+                st.markdown(
+                    f"<div style='background:#111827;border:1px solid #1e293b;"
+                    f"border-radius:8px;padding:8px 14px;margin:4px 0'>"
+                    f"{pi} <strong>{rec['icon']} {rec['action']}</strong>"
+                    f"<br><span style='color:#94a3b8;font-size:12px;margin-left:22px'>{rec.get('reason','')}</span>"
+                    f"</div>",
+                    unsafe_allow_html=True,
+                )
+            with st.expander("📋 View all recommendations"):
+                st.markdown(render_recommendations_text(recommendations))
+
+        # ── CLICKED LINK RESPONSE MODE (Feature 3) ───────────────────────────
+        if score >= 25:
+            st.markdown(section_title("🖱️ Clicked Link Response Mode"), unsafe_allow_html=True)
+            st.caption("Did you interact with this email? Select what happened for a personalized risk assessment.")
+            with st.expander("🔍 What happened after receiving this email?", expanded=False):
+                col_c1, col_c2 = st.columns(2)
+                with col_c1:
+                    if st.button("🔗 I clicked a link (no credentials)", use_container_width=True, key="click_link"):
+                        st.session_state["clicked_link"] = True
+                        st.session_state["interaction_type"] = "link_only"
+                        st.rerun()
+                    if st.button("🔑 I entered my credentials", use_container_width=True, key="click_creds"):
+                        st.session_state["clicked_link"] = True
+                        st.session_state["credentials_entered"] = True
+                        st.session_state["interaction_type"] = "credentials_given"
+                        st.rerun()
+                with col_c2:
+                    if st.button("📎 I downloaded/opened a file", use_container_width=True, key="click_file"):
+                        st.session_state["clicked_link"] = True
+                        st.session_state["file_downloaded"] = True
+                        st.session_state["interaction_type"] = "file_downloaded"
+                        st.rerun()
+                    if st.button("❌ I did nothing (safe)", use_container_width=True, key="click_none"):
+                        st.session_state["interaction_type"] = "no_interaction"
+                        st.rerun()
+
+                work_account = st.checkbox("🏢 This is a work/business account", key="work_account",
+                                            help="Corporate accounts require additional steps")
+
+                from src.clicked_link_handler import assess_post_click_risk
+
+                interaction_type = st.session_state.get("interaction_type", "")
+                if interaction_type:
+                    assessment = assess_post_click_risk(results, interaction_type, work_account)
+                    risk_color = "#ef4444" if assessment.get("risk") in ("Critical", "High") else "#eab308" if assessment.get("risk") == "Medium" else "#22c55e"
+                    st.markdown(
+                        f"<div style='background:#111827;border:2px solid {risk_color};"
+                        f"border-radius:12px;padding:16px;margin:8px 0'>"
+                        f"<div style='color:{risk_color};font-weight:700;font-size:1.1rem'>{assessment.get('priority','')} {assessment.get('title','')}</div>"
+                        f"<div style='color:#94a3b8;font-size:13px;margin:8px 0'>Risk: <span style='color:{risk_color}'>{assessment.get('risk','')}</span>"
+                        f" | Urgency: {assessment.get('urgency','')}</div>"
+                        f"</div>",
+                        unsafe_allow_html=True,
+                    )
+                    st.markdown(f"**What may have happened:** {assessment.get('what_happened','')}")
+                    st.markdown("**What to do next:**")
+                    for step in assessment.get("next_steps", []):
+                        st.markdown(f"- {step}")
+
+                    if st.button("✕ Clear interaction assessment", key="clear_interaction"):
+                        for k in ["clicked_link", "credentials_entered", "file_downloaded", "interaction_type"]:
+                            st.session_state.pop(k, None)
+                        st.rerun()
+
+        # ── EDUCATIONAL MODE (Feature 7) ─────────────────────────────────────
+        from src.educational_content import get_educational_content
+
+        edu_modules = get_educational_content(results, tactics)
+        if edu_modules:
+            st.markdown(section_title("🎓 How to Spot This Attack in the Future"), unsafe_allow_html=True)
+            st.caption("Learn to recognize similar threats independently")
+            tabs_edu = st.tabs([m["icon"] + " " + m["title"] for m in edu_modules[:4]])
+            for i, tab in enumerate(tabs_edu):
+                with tab:
+                    if i < len(edu_modules):
+                        st.markdown(edu_modules[i]["content"])
+            if len(edu_modules) > 4:
+                with st.expander(f"📚 More educational topics ({len(edu_modules)-4} more)"):
+                    for m in edu_modules[4:]:
+                        st.markdown(f"**{m['icon']} {m['title']}**")
+                        st.markdown(m["content"])
+                        st.divider()
 
         jury_result = st.session_state.get("jury_result")
         if jury_result and "final_score" in jury_result:

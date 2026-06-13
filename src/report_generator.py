@@ -294,31 +294,35 @@ def generate_pdf_report(results: dict, email_text: str,
     pdf.info_row("Attachments Detected:", "Yes" if results.get("has_attachments") else "No")
     pdf.ln(3)
 
-    # Security verdict explanation
+    # Security verdict explanation (Threat Explanation Engine)
     pdf.section_title("SECURITY VERDICT")
-    verdicts = {
-        "CRITICAL": (
-            "This email exhibits strong indicators of a phishing attack. "
-            "Do not click any links, do not download attachments, and do not reply. "
-            "Report immediately to your IT security team and delete the email."
-        ),
-        "HIGH": (
-            "This email contains several suspicious elements consistent with phishing. "
-            "Exercise extreme caution. Verify the sender through official channels "
-            "before taking any action."
-        ),
-        "MEDIUM": (
-            "This email contains some suspicious elements. Verify the sender identity "
-            "before clicking any links or providing any information."
-        ),
-        "LOW": (
-            "No major phishing indicators detected. However, always remain vigilant "
-            "and verify unexpected emails."
-        ),
-    }
-    pdf.set_font("Helvetica", "", 9)
-    pdf.set_text_color(226, 232, 240)
-    pdf.multi_cell(0, 5, verdicts.get(severity, ""))
+    try:
+        from src.threat_explainer import build_explanation
+        explanation = build_explanation(results)
+        pdf.set_font("Helvetica", "", 9)
+        pdf.set_text_color(226, 232, 240)
+        pdf.multi_cell(0, 5, clean_text(explanation["verdict"]["detail"]))
+        pdf.ln(2)
+        if explanation.get("triggers"):
+            pdf.set_font("Helvetica", "B", 8)
+            pdf.set_text_color(56, 132, 255)
+            pdf.cell(0, 6, "  WHAT TRIGGERED THIS DETECTION:", ln=True)
+            pdf.set_font("Helvetica", "", 8)
+            pdf.set_text_color(226, 232, 240)
+            for trigger in explanation["triggers"][:6]:
+                clean_trig = clean_text(trigger.replace("**", "").replace("—", "-"))
+                pdf.bullet(clean_trig[:120])
+            pdf.ln(2)
+    except Exception:
+        verdicts = {
+            "CRITICAL": "Strong phishing indicators. Do not interact.",
+            "HIGH": "Multiple suspicious elements. Exercise extreme caution.",
+            "MEDIUM": "Some suspicious elements. Verify before acting.",
+            "LOW": "No major indicators. Standard vigilance advised.",
+        }
+        pdf.set_font("Helvetica", "", 9)
+        pdf.set_text_color(226, 232, 240)
+        pdf.multi_cell(0, 5, verdicts.get(severity, ""))
     pdf.ln(4)
 
     # Risk matrix
@@ -329,6 +333,58 @@ def generate_pdf_report(results: dict, email_text: str,
 
     # Linguistic breakdown
     _add_linguistic_breakdown(pdf, results)
+
+    # BEC Detection (add to PDF)
+    try:
+        from src.bec_detector import detect_bec
+        bec_result = detect_bec("", results)
+        if bec_result.get("bec_detected"):
+            pdf.section_title("BUSINESS EMAIL COMPROMISE ANALYSIS")
+            pdf.info_row("BEC Type:", bec_result.get("bec_type", "").replace("_", " ").title())
+            pdf.info_row("Confidence:", f"{bec_result.get('confidence',0)}%")
+            for detail in bec_result.get("details", []):
+                pdf.bullet(clean_text(detail.replace("**", "")))
+            pdf.ln(2)
+    except Exception:
+        pass
+
+    # Red Flags Section
+    try:
+        from src.red_flags import detect_red_flags
+        red_flags = detect_red_flags(results)
+        if red_flags:
+            pdf.section_title("EMAIL RED FLAGS IDENTIFIED")
+            for flag in red_flags[:6]:
+                sev = flag.get("severity", "low")
+                label = f"{flag['icon']} {flag['label']} ({sev.upper()})"
+                pdf.set_font("Helvetica", "B", 8)
+                pdf.set_text_color({"critical": (220,38,38), "high": (249,115,22), "medium": (234,179,8), "low": (148,163,184)}.get(sev, (148,163,184)))
+                pdf.cell(0, 6, clean_text(label), ln=True)
+                pdf.set_font("Helvetica", "", 8)
+                pdf.set_text_color(226, 232, 240)
+                pdf.set_x(20)
+                pdf.multi_cell(0, 5, clean_text(flag.get("description", "")))
+                pdf.ln(1)
+            pdf.ln(2)
+    except Exception:
+        pass
+
+    # Tactic Classification
+    try:
+        from src.tactic_classifier import classify_tactics, get_primary_tactic
+        tactics = classify_tactics("", results)
+        if tactics:
+            primary = get_primary_tactic(tactics)
+            pdf.section_title("PHISHING TACTIC CLASSIFICATION")
+            if primary:
+                pdf.info_row("Primary Tactic:", f"{primary.get('icon','')} {primary.get('label','')} ({primary.get('confidence',0)}% match)")
+                pdf.info_row("Description:", primary.get("description", ""))
+            if len(tactics) > 1:
+                others = [f"{t.get('label','')} ({t.get('confidence',0)}%)" for t in tactics[1:4]]
+                pdf.info_row("Other Tactics:", ", ".join(others))
+            pdf.ln(2)
+    except Exception:
+        pass
 
     # Phishing indicators (keywords)
     if results.get("keyword_matches"):
@@ -369,6 +425,26 @@ def generate_pdf_report(results: dict, email_text: str,
 
     # Mitigation & remediation
     _add_recommendations(pdf, severity)
+
+    # Educational content
+    try:
+        from src.educational_content import get_educational_content
+        edu_modules = get_educational_content(results, [])
+        if edu_modules:
+            pdf.add_page()
+            pdf.section_title("EDUCATIONAL: HOW TO SPOT THIS ATTACK")
+            for mod in edu_modules[:3]:
+                pdf.set_font("Helvetica", "B", 8)
+                pdf.set_text_color(56, 132, 255)
+                pdf.cell(0, 6, f"  {mod['icon']} {mod['title']}", ln=True)
+                pdf.set_font("Helvetica", "", 7)
+                pdf.set_text_color(226, 232, 240)
+                content_clean = clean_text(mod['content'].replace("**", "").replace("###", "").replace("##", ""))
+                pdf.set_x(14)
+                pdf.multi_cell(176, 4, content_clean[:600])
+                pdf.ln(3)
+    except Exception:
+        pass
 
     # Full email content
     _add_email_preview(pdf, email_text)

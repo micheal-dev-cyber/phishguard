@@ -823,11 +823,13 @@ with st.sidebar:
     )
     st.markdown("<hr style='border-color:#1e293b;margin:8px 0'>", unsafe_allow_html=True)
     st.markdown("<div style='font-size:0.65rem;color:#475569;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px'>Analysis</div>", unsafe_allow_html=True)
-    st.markdown("→ <span style='color:#94a3b8'>Scan</span> · <span style='color:#94a3b8'>Dashboard</span> · <span style='color:#94a3b8'>Copilot</span>", unsafe_allow_html=True)
+    st.markdown("→ <span style='color:#94a3b8'>Scan</span> · <span style='color:#94a3b8'>Compare</span> · <span style='color:#94a3b8'>Dashboard</span> · <span style='color:#94a3b8'>Copilot</span>", unsafe_allow_html=True)
     st.markdown("<div style='font-size:0.65rem;color:#475569;text-transform:uppercase;letter-spacing:0.05em;margin-top:10px;margin-bottom:4px'>Intelligence</div>", unsafe_allow_html=True)
     st.markdown("→ <span style='color:#94a3b8'>Threat Intel</span> · <span style='color:#94a3b8'>Campaigns</span>", unsafe_allow_html=True)
     st.markdown("<div style='font-size:0.65rem;color:#475569;text-transform:uppercase;letter-spacing:0.05em;margin-top:10px;margin-bottom:4px'>Education</div>", unsafe_allow_html=True)
     st.markdown("→ <span style='color:#94a3b8'>Training</span> · <span style='color:#94a3b8'>Leaderboard</span>", unsafe_allow_html=True)
+    st.markdown("<div style='font-size:0.65rem;color:#475569;text-transform:uppercase;letter-spacing:0.05em;margin-top:10px;margin-bottom:4px'>Investigation</div>", unsafe_allow_html=True)
+    st.markdown("→ <span style='color:#94a3b8'>PDF Report</span> · <span style='color:#94a3b8'>STIX Export</span>", unsafe_allow_html=True)
     st.markdown("<div style='font-size:0.65rem;color:#475569;text-transform:uppercase;letter-spacing:0.05em;margin-top:10px;margin-bottom:4px'>Developers</div>", unsafe_allow_html=True)
     st.markdown("→ <span style='color:#94a3b8'>API</span> · <span style='color:#94a3b8'>Webhooks</span>", unsafe_allow_html=True)
     st.markdown("<div style='font-size:0.65rem;color:#475569;text-transform:uppercase;letter-spacing:0.05em;margin-top:10px;margin-bottom:4px'>Account</div>", unsafe_allow_html=True)
@@ -880,7 +882,7 @@ if is_admin:
 
 # ── Sub-navigation radio groups for composite tabs ──────────────────────────
 with tab_scan:
-    st.radio("", ["Email Text", "Inbox Scanner"], key="scan_mode", horizontal=True, label_visibility="collapsed")
+    st.radio("", ["Email Text", "Inbox Scanner", "Compare Emails"], key="scan_mode", horizontal=True, label_visibility="collapsed")
 with tab_dash:
     st.radio("", ["Overview", "History", "SOC", "Timeline"], key="dash_mode", horizontal=True, label_visibility="collapsed")
 with tab_threat:
@@ -1015,7 +1017,115 @@ if st.session_state.get("scan_mode", "Email Text") == "Inbox Scanner":
             st.info("Connect and fetch emails to begin scanning.")
 
     # ═════════════════════════════════════════════════════════════════════════════
-if st.session_state.get("scan_mode", "Email Text") == "Email Text":
+if st.session_state.get("scan_mode", "Email Text") == "Compare Emails":
+    with tab1:
+        st.markdown("## 🔄 Compare Emails Side-by-Side")
+        st.markdown(
+            "<p style='color:#64748b;margin-top:-8px'>Paste two emails to compare their "
+            "phishing risk levels and understand which is more suspicious.</p>",
+            unsafe_allow_html=True
+        )
+        st.divider()
+
+        col_a, col_b = st.columns(2)
+        with col_a:
+            st.markdown("##### 📧 Email A")
+            email_a = st.text_area("Paste email A content", height=200,
+                                    label_visibility="collapsed", key="email_a_input",
+                                    placeholder="Paste the first email here...")
+            st.checkbox("🔬 Show technical details for Email A", value=False, key="show_tech_a")
+        with col_b:
+            st.markdown("##### 📧 Email B")
+            email_b = st.text_area("Paste email B content", height=200,
+                                    label_visibility="collapsed", key="email_b_input",
+                                    placeholder="Paste the second email here...")
+            st.checkbox("🔬 Show technical details for Email B", value=False, key="show_tech_b")
+
+        col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 1])
+        with col_btn2:
+            compare_btn = st.button("🔄 Compare Emails", use_container_width=True, type="primary")
+
+        if compare_btn:
+            if not email_a.strip() or not email_b.strip():
+                st.warning("Please paste both emails before comparing.")
+            else:
+                with st.spinner("Analyzing both emails..."):
+                    from src.detector import analyze_email
+                    result_a = analyze_email(email_a)
+                    result_b = analyze_email(email_b)
+
+                from src.compare_emails import compare_email_analyses, get_verdict_text
+                comparison = compare_email_analyses(result_a, result_b)
+
+                st.divider()
+                st.markdown("## 🔄 Comparison Results")
+
+                verdict = get_verdict_text(comparison)
+                more = comparison["differences"]["more_suspicious"]
+                if more == "similar":
+                    st.info(verdict)
+                elif more == "A":
+                    st.error(verdict)
+                else:
+                    st.error(verdict)
+
+                col_s1, col_s2, col_s3 = st.columns(3)
+                a_data = comparison["email_a"]
+                b_data = comparison["email_b"]
+                with col_s1:
+                    st.metric("Email A Risk Score", f"{a_data['score']}/100",
+                              delta=f"{a_data['score'] - b_data['score']:+d} vs B")
+                with col_s2:
+                    st.metric("Email B Risk Score", f"{b_data['score']}/100",
+                              delta=f"{b_data['score'] - a_data['score']:+d} vs A")
+                with col_s3:
+                    st.metric("Score Difference", f"{comparison['differences']['score_diff']} pts")
+
+                st.divider()
+
+                with st.expander("📊 Detailed Comparison", expanded=True):
+                    for reason in comparison["differences"]["reasons"]:
+                        st.markdown(f"- {reason}")
+
+                st.divider()
+
+                col_c1, col_c2 = st.columns(2)
+                with col_c1:
+                    a_color = a_data.get("severity_color", "#94a3b8")
+                    st.markdown(
+                        f"<div style='background:#111827;border:1px solid {a_color}44;"
+                        f"border-radius:10px;padding:12px 16px'>"
+                        f"<div style='color:{a_color};font-weight:700;font-size:1.1rem'>Email A — {a_data['severity']}</div>"
+                        f"<div style='color:#94a3b8;font-size:13px'>"
+                        f"Keywords: {a_data['keyword_hits']} | "
+                        f"Suspicious URLs: {a_data['suspicious_urls']} | "
+                        f"URLs: {a_data['url_count']} | "
+                        f"Attachments: {'Yes' if a_data['has_attachments'] else 'No'}"
+                        f"</div>"
+                        f"</div>",
+                        unsafe_allow_html=True,
+                    )
+                with col_c2:
+                    b_color = b_data.get("severity_color", "#94a3b8")
+                    st.markdown(
+                        f"<div style='background:#111827;border:1px solid {b_color}44;"
+                        f"border-radius:10px;padding:12px 16px'>"
+                        f"<div style='color:{b_color};font-weight:700;font-size:1.1rem'>Email B — {b_data['severity']}</div>"
+                        f"<div style='color:#94a3b8;font-size:13px'>"
+                        f"Keywords: {b_data['keyword_hits']} | "
+                        f"Suspicious URLs: {b_data['suspicious_urls']} | "
+                        f"URLs: {b_data['url_count']} | "
+                        f"Attachments: {'Yes' if b_data['has_attachments'] else 'No'}"
+                        f"</div>"
+                        f"</div>",
+                        unsafe_allow_html=True,
+                    )
+
+                st.session_state["compare_a"] = result_a
+                st.session_state["compare_b"] = result_b
+                st.session_state["compare_results"] = comparison
+
+elif st.session_state.get("scan_mode", "Email Text") == "Email Text":
     with tab1:
         from src.ui_analyzer import render_analyzer_tab
         render_analyzer_tab(username, plan)

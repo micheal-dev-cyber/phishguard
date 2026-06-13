@@ -8,6 +8,7 @@ reports/*.pdf
 .streamlit/secrets.toml
 data/*.db
 data/test/
+*.db
 backups/
 .git-rewrite/
 t.py
