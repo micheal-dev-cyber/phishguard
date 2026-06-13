@@ -1228,7 +1228,7 @@ if st.session_state.get("dash_mode", "Overview") == "Overview":
             f"<span style='color:#94a3b8;font-size:0.8rem;font-weight:600;min-width:50px'>{plan_label}</span>"
             f"<div style='flex:1;height:6px;background:#1e293b;border-radius:100px;overflow:hidden'>"
             f"<div style='width:{min(q['pct'],100)}%;height:100%;background:{bar_color};border-radius:100px'></div></div>"
-            f"<span style='color:{bar_color};font-size:0.75rem;font-weight:600;min-width:80px'>{q['used']} / {limit_display}</span>"
+            f"<span style='color:{bar_color};font-size:0.75rem;font-weight:600;min-width:80px'>{q['usage']} / {limit_display}</span>"
             + ("<a href='#' onclick='alert(\"switch to billing tab\")' style='color:#f59e0b;font-size:0.75rem;text-decoration:none;font-weight:600' onclick=''>⬆ Upgrade</a>" if q['pct'] >= 70 else "") +
             "</div>", unsafe_allow_html=True
         )
