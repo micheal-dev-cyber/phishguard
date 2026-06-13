@@ -119,13 +119,14 @@ class _PgCursor:
 
         # Strip PRAGMA statements (PostgreSQL doesn't support them)
         if re.match(r"^\s*PRAGMA\b", sql, re.IGNORECASE):
-            return
+            return self
 
         try:
-            return self._c.execute(sql, params)
+            self._c.execute(sql, params)
         except Exception as e:
             logger.warning("PG query failed: %s — SQL: %.200s", e, sql)
             raise
+        return self
 
     def executemany(self, sql, seq_of_params):
         if seq_of_params:
