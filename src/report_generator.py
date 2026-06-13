@@ -426,6 +426,42 @@ def generate_pdf_report(results: dict, email_text: str,
     # Mitigation & remediation
     _add_recommendations(pdf, severity)
 
+    # Security Action Center
+    try:
+        from src.security_action_center import get_security_actions, get_action_summary
+        sac_actions = get_security_actions(results)
+        if sac_actions:
+            pdf.add_page()
+            pdf.section_title("SECURITY ACTION CENTER")
+            summary = get_action_summary(sac_actions)
+            pdf.set_font("Helvetica", "I", 7)
+            pdf.set_text_color(148, 163, 184)
+            pdf.multi_cell(0, 4, clean_text(summary))
+            pdf.ln(2)
+            cat_order = ["immediate", "containment", "investigation", "prevention", "reporting"]
+            cat_labels = {"immediate": "IMMEDIATE ACTIONS", "containment": "CONTAINMENT",
+                          "investigation": "INVESTIGATION", "prevention": "PREVENTION",
+                          "reporting": "REPORTING"}
+            for cat in cat_order:
+                cat_actions = [a for a in sac_actions if a.get("category") == cat]
+                if not cat_actions:
+                    continue
+                pdf.set_font("Helvetica", "B", 8)
+                pdf.set_text_color(56, 132, 255)
+                pdf.cell(0, 6, f"  {cat_labels.get(cat, cat)}", ln=True)
+                for a in cat_actions[:4]:
+                    pdf.set_font("Helvetica", "", 7)
+                    pdf.set_text_color(226, 232, 240)
+                    pdf.set_x(14)
+                    pdf.multi_cell(176, 4, f"{a.get('icon','')} [{a.get('priority','').upper()}] {clean_text(a.get('title',''))}")
+                    pdf.set_font("Helvetica", "I", 6)
+                    pdf.set_text_color(148, 163, 184)
+                    pdf.set_x(14)
+                    pdf.multi_cell(176, 3, clean_text(a.get('instructions', ''))[:200])
+                    pdf.ln(1)
+    except Exception:
+        pass
+
     # Educational content
     try:
         from src.educational_content import get_educational_content

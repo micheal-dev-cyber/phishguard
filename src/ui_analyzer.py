@@ -43,6 +43,9 @@ from src.threat_scorer import compute_combined_threat_score
 from src.ui_design_system import section_title, stat_card, url_box
 from src.webhook_gateway import send_alert
 from src.xai_analyzer import analyze_psychological_triggers, format_xai_report
+from src.screenshot_analyzer import analyze_screenshot_image
+from src.url_intelligence import analyze_url
+from src.security_action_center import get_security_actions, get_action_summary
 
 logger = logging.getLogger("ui-analyzer")
 
@@ -910,6 +913,35 @@ def render_analyzer_tab(username: str, plan: str):
             with st.expander("📋 View all recommendations"):
                 st.markdown(render_recommendations_text(recommendations))
 
+        # ── SECURITY ACTION CENTER ────────────────────────────────────────────
+        sac_actions = get_security_actions(results, ctx)
+        if sac_actions:
+            st.markdown(section_title("🛡️ Security Action Center"), unsafe_allow_html=True)
+            sac_summary = get_action_summary(sac_actions)
+            st.caption(sac_summary)
+            sac_categories = {}
+            for a in sac_actions:
+                sac_categories.setdefault(a["category"], []).append(a)
+            cat_labels = {"immediate": ("🔴 Immediate Actions", "critical"),
+                          "containment": ("🟠 Containment", "high"),
+                          "investigation": ("🟡 Investigation", "medium"),
+                          "prevention": ("🟢 Prevention", "low"),
+                          "reporting": ("🔵 Reporting", "medium")}
+            for cat_key, cat_actions in sac_categories.items():
+                cat_display, _ = cat_labels.get(cat_key, (cat_key.title(), "low"))
+                with st.expander(f"{cat_display} ({len(cat_actions)})", expanded=cat_key == "immediate"):
+                    for a in cat_actions:
+                        prio_icon = {"critical": "🔴", "high": "🟠", "medium": "🟡", "low": "🟢"}.get(a["priority"], "⚪")
+                        st.markdown(
+                            f"<div style='background:#111827;border:1px solid #1e293b;"
+                            f"border-radius:8px;padding:10px 14px;margin:4px 0'>"
+                            f"{prio_icon} <strong>{a['icon']} {a['title']}</strong>"
+                            f"<br><span style='color:#94a3b8;font-size:12px;margin-left:22px'>{a['description']}</span>"
+                            f"<br><span style='color:#64748b;font-size:11px;margin-left:22px'>→ {a['instructions'][:120]}</span>"
+                            f"</div>",
+                            unsafe_allow_html=True,
+                        )
+
         # ── CLICKED LINK RESPONSE MODE (Feature 3) ───────────────────────────
         if score >= 25:
             st.markdown(section_title("🖱️ Clicked Link Response Mode"), unsafe_allow_html=True)
@@ -1101,3 +1133,201 @@ def render_analyzer_tab(username: str, plan: str):
                     unsafe_allow_html=True,
                 )
             st.session_state["_guidance_shown"] = True
+
+
+def render_screenshot_analysis():
+    """Screenshot analysis mode — upload image, extract text, run phishing analysis."""
+    st.markdown("## 📷 Screenshot Analysis")
+    st.markdown(
+        "<p style='color:#64748b;margin-top:-8px'>Upload a screenshot of an email "
+        "(PNG, JPG, JPEG) and PhishGuard will extract text and run a full "
+        "phishing analysis.</p>",
+        unsafe_allow_html=True,
+    )
+    st.divider()
+
+    col_left, col_right = st.columns([2, 1])
+    with col_left:
+        screenshot_file = st.file_uploader(
+            "Upload screenshot",
+            type=["png", "jpg", "jpeg"],
+            label_visibility="collapsed",
+            key="screenshot_uploader",
+        )
+        if screenshot_file:
+            st.image(screenshot_file, use_container_width=True, caption="Uploaded screenshot")
+
+    with col_right:
+        st.markdown("#### ⚙ Options")
+        st.markdown("")
+        analyze_btn = st.button("🔍 Analyze Screenshot", use_container_width=True, type="primary")
+
+    if analyze_btn and screenshot_file:
+        with st.spinner("Analyzing screenshot for phishing indicators..."):
+            image_bytes = screenshot_file.getvalue()
+            mime_type = screenshot_file.type or "image/png"
+            result = analyze_screenshot_image(image_bytes, mime_type)
+
+        if not result.get("success"):
+            st.error(f"Analysis failed: {result.get('error', 'Unknown error')}")
+            return
+
+        # Risk score + severity
+        score = result["risk_score"]
+        sev = result["severity"]
+        sev_color = {"CRITICAL": "#ef4444", "HIGH": "#f59e0b", "MEDIUM": "#3b82f6", "LOW": "#22c55e"}.get(sev, "#64748b")
+        st.markdown(f"""
+        <div style='background:linear-gradient(135deg,#0a1a2a,#0f1a2a);
+             border:1px solid {sev_color}44;border-radius:14px;padding:20px;margin:20px 0'>
+            <div style='display:flex;justify-content:space-between;align-items:center'>
+                <div>
+                    <div style='color:{sev_color};font-size:14px;font-weight:700;text-transform:uppercase'>{sev}</div>
+                    <div style='font-size:2rem;font-weight:800;color:#f0f6ff'>{score}/100</div>
+                    <div style='color:#94a3b8;font-size:13px'>Risk Score</div>
+                </div>
+                <div style='font-size:3rem'>{'🔴' if score >= 70 else '🟠' if score >= 45 else '🟡' if score >= 20 else '🟢'}</div>
+            </div>
+        </div>""", unsafe_allow_html=True)
+
+        # Threat explanation
+        st.markdown("#### 🔍 Threat Explanation")
+        st.info(result.get("explanation", "No explanation available."))
+
+        # Key findings
+        st.markdown("#### 📋 Key Findings")
+        reasons = result.get("risk_reasons", [])
+        if reasons:
+            for r in reasons:
+                st.markdown(f"- {r}")
+        else:
+            st.markdown("No significant findings.")
+
+        # Extracted text
+        if result.get("extracted_text"):
+            with st.expander("📝 Extracted Text"):
+                st.text(result["extracted_text"])
+
+        # URLs found
+        if result.get("urls_found"):
+            with st.expander(f"🔗 URLs Found ({len(result['urls_found'])})"):
+                for u in result["urls_found"]:
+                    suspicious = any(ua["suspicious"] for ua in result.get("url_analysis", []) if ua["url"] == u)
+                    icon = "⚠️" if suspicious else "🔗"
+                    st.markdown(f"{icon} `{u}`")
+
+        # Recommendations
+        st.markdown("#### 🛡️ Recommendations")
+        recs = result.get("recommendations", [])
+        for r in recs:
+            st.markdown(f"- ✅ {r}")
+
+    elif analyze_btn and not screenshot_file:
+        st.warning("⚠️ Please upload a screenshot image first.")
+
+
+def render_url_intelligence():
+    """URL Intelligence mode — standalone deep-dive URL analysis."""
+    st.markdown("## 🔗 URL Intelligence")
+    st.markdown(
+        "<p style='color:#64748b;margin-top:-8px'>Paste a URL to analyze it for phishing indicators — "
+        "domain risk, TLD analysis, suspicious keywords, homograph attacks, "
+        "brand impersonation, and redirect chain inspection.</p>",
+        unsafe_allow_html=True,
+    )
+    st.divider()
+
+    url_input = st.text_input(
+        "Enter URL to analyze",
+        placeholder="https://example.com/login?ref=abc123",
+        key="url_intel_input",
+    )
+
+    analyze_btn = st.button("🔍 Analyze URL", type="primary", use_container_width=True)
+
+    if analyze_btn and url_input:
+        with st.spinner("Running URL intelligence analysis..."):
+            result = analyze_url(url_input)
+
+        score = result["risk_score"]
+        verdict = result["verdict"]
+        verdict_color = {"Malicious": "#ef4444", "Suspicious": "#f59e0b", "Safe": "#22c55e"}.get(verdict, "#64748b")
+        verdict_icon = {"Malicious": "🔴", "Suspicious": "🟠", "Safe": "🟢"}.get(verdict, "⚪")
+
+        # Verdict card
+        st.markdown(f"""
+        <div style='background:linear-gradient(135deg,#0a1a2a,#0f1a2a);
+             border:1px solid {verdict_color}44;border-radius:14px;padding:20px;margin:20px 0'>
+            <div style='display:flex;justify-content:space-between;align-items:center'>
+                <div>
+                    <div style='color:{verdict_color};font-size:14px;font-weight:700;text-transform:uppercase'>{verdict}</div>
+                    <div style='font-size:2rem;font-weight:800;color:#f0f6ff'>{score}/100</div>
+                    <div style='color:#94a3b8;font-size:13px'>Risk Score</div>
+                </div>
+                <div style='font-size:3rem'>{verdict_icon}</div>
+            </div>
+        </div>""", unsafe_allow_html=True)
+
+        # URL breakdown
+        parsed = result.get("parsed", {})
+        st.markdown("#### 🌐 URL Breakdown")
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("Domain", parsed.get("domain", "N/A"))
+        with col2:
+            st.metric("TLD", f".{parsed.get('tld', 'N/A')}")
+        with col3:
+            st.metric("HTTPS", "Yes" if parsed.get("has_https") else "No")
+        with col4:
+            st.metric("Path Length", str(len(parsed.get("path", ""))))
+
+        # Findings
+        findings = result.get("findings", [])
+        if findings:
+            st.markdown("#### 🚩 Findings")
+            for f in findings:
+                risk_tag = f"`+{f['risk']}`" if f.get("risk", 0) > 0 else ""
+                st.markdown(f"- {f['detail']} {risk_tag}")
+
+        # Suspicious keywords
+        kw = result.get("suspicious_keywords", [])
+        if kw:
+            st.markdown("#### ⚠️ Suspicious Keywords Found")
+            st.markdown(f"`{'`, `'.join(kw)}`")
+
+        # Brand matches
+        brand_matches = result.get("brand_matches", [])
+        if brand_matches:
+            st.markdown("#### 🏭 Brand Analysis")
+            for bm in brand_matches:
+                icon = "✅" if bm.get("is_legitimate") else "⚠️"
+                st.markdown(f"- {icon} {bm['detail']}")
+
+        # Homograph attacks
+        homograph = result.get("homograph_attacks", [])
+        if homograph:
+            st.markdown("#### 🔤 Homograph / Confusable Detection")
+            for h in homograph:
+                st.markdown(f"- ⚠️ {h['detail']}")
+
+        # Redirect chain
+        redirect = result.get("redirect_analysis", {})
+        if redirect.get("success"):
+            if redirect.get("redirects"):
+                st.markdown("#### 🔄 Redirect Chain")
+                st.markdown(f"- **{redirect['redirect_count']} redirect(s)** → final: `{redirect.get('final_url', 'N/A')[:80]}`")
+                with st.expander("View full redirect chain"):
+                    for i, rurl in enumerate(redirect.get("redirect_chain", [])):
+                        st.markdown(f"`{i}: {rurl}`")
+            elif redirect.get("ssl_error"):
+                st.markdown("#### 🔒 SSL Error")
+                st.warning("SSL certificate error when connecting — this is suspicious.")
+        elif redirect.get("error"):
+            with st.expander("⚠️ Redirect check failed"):
+                st.caption(redirect["error"])
+
+        # Explanation text
+        with st.expander("📖 Full Investigation Report"):
+            st.markdown(result.get("explanation_text", "No report available."))
+
+    elif analyze_btn and not url_input:
+        st.warning("⚠️ Please enter a URL to analyze.")

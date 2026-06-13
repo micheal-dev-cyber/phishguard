@@ -882,7 +882,7 @@ if is_admin:
 
 # ── Sub-navigation radio groups for composite tabs ──────────────────────────
 with tab_scan:
-    st.radio("", ["Email Text", "Inbox Scanner", "Compare Emails"], key="scan_mode", horizontal=True, label_visibility="collapsed")
+    st.radio("", ["Email Text", "Screenshot Analysis", "URL Intelligence", "Inbox Scanner", "Compare Emails"], key="scan_mode", horizontal=True, label_visibility="collapsed")
 with tab_dash:
     st.radio("", ["Overview", "History", "SOC", "Timeline"], key="dash_mode", horizontal=True, label_visibility="collapsed")
 with tab_threat:
@@ -1124,6 +1124,16 @@ if st.session_state.get("scan_mode", "Email Text") == "Compare Emails":
                 st.session_state["compare_a"] = result_a
                 st.session_state["compare_b"] = result_b
                 st.session_state["compare_results"] = comparison
+
+if st.session_state.get("scan_mode") == "Screenshot Analysis":
+    with tab1:
+        from src.ui_analyzer import render_screenshot_analysis
+        render_screenshot_analysis()
+
+if st.session_state.get("scan_mode") == "URL Intelligence":
+    with tab1:
+        from src.ui_analyzer import render_url_intelligence
+        render_url_intelligence()
 
 elif st.session_state.get("scan_mode", "Email Text") == "Email Text":
     with tab1:

@@ -117,6 +117,58 @@ def test_compare_emails():
     print("OK test_compare_emails")
 
 
+def test_screenshot_analyzer():
+    from src.screenshot_analyzer import analyze_screenshot_image
+    # Test with invalid image bytes — should return error, not crash
+    result = analyze_screenshot_image(b"not a real image")
+    assert result is not None
+    assert "success" in result
+    # Test with empty bytes
+    result = analyze_screenshot_image(b"")
+    assert result is not None
+    print(f"OK test_screenshot_analyzer (handles invalid input: success={result.get('success')})")
+
+
+def test_url_intelligence():
+    from src.url_intelligence import analyze_url
+    # Test malicious URL
+    r1 = analyze_url("https://secure-verify-paypal.tk/login")
+    assert r1["verdict"] == "Malicious"
+    assert r1["risk_score"] >= 60
+    # Test safe URL
+    r2 = analyze_url("https://www.google.com")
+    assert r2["verdict"] == "Safe"
+    # Test suspicious URL
+    r3 = analyze_url("http://bit.ly/test123")
+    assert r3["risk_score"] > 0
+    # Test URL without scheme
+    r4 = analyze_url("example.com")
+    assert r4["parsed"]["has_https"] is True
+    print("OK test_url_intelligence")
+
+
+def test_security_action_center():
+    from src.security_action_center import get_security_actions, get_action_summary, get_incident_plan
+    # Test with critical risk
+    r = get_security_actions({"risk_score": 85, "severity": "CRITICAL"})
+    assert len(r) > 0
+    summary = get_action_summary(r)
+    assert "critical" in summary.lower()
+    # Test with low risk
+    r2 = get_security_actions({"risk_score": 5, "severity": "LOW"})
+    summary2 = get_action_summary(r2)
+    assert len(summary2) > 0
+    # Test incident plan
+    plan = get_incident_plan({"risk_score": 85, "severity": "CRITICAL"})
+    assert len(plan) > 50
+    # Test with context (credentials entered)
+    r3 = get_security_actions({"risk_score": 85, "severity": "CRITICAL"},
+                               context={"credentials_entered": True})
+    has_change_pw = any("password" in a.get("title", "").lower() for a in r3)
+    assert has_change_pw
+    print("OK test_security_action_center")
+
+
 if __name__ == "__main__":
     test_threat_explainer()
     test_recommendations()
@@ -127,4 +179,7 @@ if __name__ == "__main__":
     test_beginner_mode()
     test_educational_content()
     test_compare_emails()
+    test_screenshot_analyzer()
+    test_url_intelligence()
+    test_security_action_center()
     print("\nALL NEW FEATURE TESTS PASSED")
